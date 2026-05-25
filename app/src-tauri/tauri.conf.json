@@ -1,0 +1,32 @@
+{
+  "$schema": "https://raw.githubusercontent.com/nicegui-org/nicegui/tauri-v2/nicegui/static/tauri/tauri.conf.json",
+  "identifier": "org.flaxandteal.greasan",
+  "productName": "Gréasán",
+  "version": "0.1.0",
+  "build": {
+    "devUrl": "http://localhost:5173",
+    "frontendDist": "../dist",
+    "beforeDevCommand": "npm run dev",
+    "beforeBuildCommand": "npm run build:mobile"
+  },
+  "app": {
+    "security": {
+      "csp": "default-src 'self'; script-src 'self' 'wasm-unsafe-eval' blob:; style-src 'self' 'unsafe-inline'; connect-src 'self' asset: ipc: http://ipc.localhost http://tauri.localhost http://pfzip.localhost http://rmindex.localhost http://asset.localhost https://asset.localhost https://*.wiktionary.org; img-src 'self' asset: http://asset.localhost",
+      "assetProtocol": {
+        "enable": true,
+        "scope": ["$APPDATA/**"]
+      }
+    },
+    "windows": [
+      {
+        "title": "Gréasán",
+        "width": 400,
+        "height": 800,
+        "resizable": true
+      }
+    ]
+  },
+  "plugins": {
+    "opener": {}
+  }
+}

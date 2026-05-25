@@ -1,0 +1,11 @@
+{
+  "source_url": "https://kaikki.org/dictionary/Manx/kaikki.org-dictionary-Manx.jsonl",
+  "dump_date": "2026-05-01",
+  "extract_date": "2026-05-06",
+  "wiktextract_commit": "f69e2051604e2ade3eb9c11cb64a3f67176c89d4",
+  "wikitextprocessor_commit": "9452535b95088345ce2ce7ae86a5f48bf693041c",
+  "file_sha256": "3533a3f2fcd77085ae5ef20cb2d28f5d986b9c0bca05e7ebef17f51d48282b59",
+  "output_path": "data/raw/kaikki.org-dictionary-Manx.jsonl",
+  "file_size_bytes": 5725816,
+  "fetch_timestamp": "2026-05-09T18:15:01.053348+00:00"
+}

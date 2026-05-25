@@ -1,29 +1,41 @@
 <script lang="ts">
   import type { ExternalExample } from '../lib/dictionary';
+  import { loadExample } from '../lib/dictionary';
+  import { currentExample } from '../lib/store';
 
   interface Props {
     examples: ExternalExample[];
   }
 
   let { examples }: Props = $props();
+  let loadingId: string | null = $state(null);
+
+  async function handleTap(ex: ExternalExample) {
+    if (!ex.resourceId || loadingId) return;
+    loadingId = ex.resourceId;
+    try {
+      const detail = await loadExample(ex.resourceId);
+      if (detail) {
+        currentExample.set(detail);
+      }
+    } catch (err) {
+      console.warn('[ExampleList] loadExample failed:', err);
+    } finally {
+      loadingId = null;
+    }
+  }
 
   function highlightText(text: string, highlights: [number, number][]): string {
     if (!highlights.length) return escapeHtml(text);
 
-    // Sort highlights by start position (descending) to insert from end
-    const sorted = [...highlights].sort((a, b) => b[0] - a[0]);
-    let result = escapeHtml(text);
-
-    // Adjust offsets for HTML escaping: we need to map original offsets to escaped string
-    // Simpler approach: build from parts using original offsets on original text
     const parts: string[] = [];
     let lastEnd = 0;
     const ascending = [...highlights].sort((a, b) => a[0] - b[0]);
 
     for (const [start, end] of ascending) {
-      if (start < lastEnd) continue; // skip overlapping
+      if (start < lastEnd) continue;
       parts.push(escapeHtml(text.slice(lastEnd, start)));
-      parts.push(`<mark class="bg-yellow-200 rounded px-0.5">${escapeHtml(text.slice(start, end))}</mark>`);
+      parts.push(`<mark class="ge-mark">${escapeHtml(text.slice(start, end))}</mark>`);
       lastEnd = end;
     }
     parts.push(escapeHtml(text.slice(lastEnd)));
@@ -39,7 +51,7 @@
   }
 
   function sourceLabel(src: string): string {
-    return src === 'tatoeba' ? 'T' : 'L';
+    return src === 'tatoeba' ? 'T' : 'G';
   }
 
   function sourceTitle(src: string): string {
@@ -47,25 +59,35 @@
   }
 </script>
 
-<ul class="space-y-3 px-4">
+<div class="ge-list">
   {#each examples as ex}
-    <li class="border-l-2 border-gray-200 pl-3">
-      <div class="flex items-start gap-2">
-        <span
-          class="inline-flex items-center justify-center w-5 h-5 rounded-full text-xs font-bold text-white flex-shrink-0 mt-0.5"
-          class:bg-blue-500={ex.src === 'tatoeba'}
-          class:bg-green-600={ex.src === 'gaois'}
-          title={sourceTitle(ex.src)}
-        >
-          {sourceLabel(ex.src)}
-        </span>
-        <div class="min-w-0">
-          <p class="text-sm leading-snug">
-            {@html highlightText(ex.ga, ex.hl)}
-          </p>
-          <p class="text-xs text-gray-500 mt-0.5">{ex.en}</p>
+    <button
+      class="ge-list-row ge-example-row"
+      style="align-items:flex-start;text-align:left;width:100%;background:transparent;border:0;cursor:pointer;font:inherit;color:inherit;"
+      onclick={() => handleTap(ex)}
+      disabled={!!loadingId}
+    >
+      <span
+        class="ge-srcbadge"
+        class:tatoeba={ex.src === 'tatoeba'}
+        class:gaois={ex.src === 'gaois'}
+        title={sourceTitle(ex.src)}
+      >
+        {sourceLabel(ex.src)}
+      </span>
+      <div class="row-main">
+        <div class="ge-list-title" style="font-weight:400;line-height:1.45;">
+          {@html highlightText(ex.ga, ex.hl)}
         </div>
+        <div class="ge-list-subtitle" style="margin-top:2px;">{ex.en}</div>
       </div>
-    </li>
+      {#if loadingId === ex.resourceId}
+        <span class="row-after" style="font-size:12px;color:var(--fg-soft);">...</span>
+      {:else}
+        <svg class="row-after" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--fg-soft)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;">
+          <path d="M9 18l6-6-6-6"/>
+        </svg>
+      {/if}
+    </button>
   {/each}
-</ul>
+</div>

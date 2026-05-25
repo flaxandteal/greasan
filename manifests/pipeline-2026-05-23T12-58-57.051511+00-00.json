@@ -1,0 +1,98 @@
+{
+  "timestamp": "2026-05-23T12:58:57.051616+00:00",
+  "fixture": false,
+  "languages": [
+    "ga",
+    "gd",
+    "gv"
+  ],
+  "elapsed_seconds": 371.56,
+  "stages": [
+    {
+      "stage": "filter",
+      "input_paths": [
+        "data/raw/kaikki.org-dictionary-Irish.jsonl",
+        "data/raw/kaikki.org-dictionary-Scottish_Gaelic.jsonl",
+        "data/raw/kaikki.org-dictionary-Manx.jsonl"
+      ],
+      "output_path": "data/interim/lemmas.jsonl",
+      "total": 59836,
+      "kept": 40747,
+      "dropped_form_of": 19089,
+      "dropped_lang": 0
+    },
+    {
+      "stage": "normalise",
+      "input_path": "data/interim/lemmas.jsonl",
+      "output_path": "data/interim/normalised.jsonl",
+      "total": 40747,
+      "unmapped_tags": [
+        "Aran",
+        "Classical",
+        "Cois-Fharraige",
+        "Connacht",
+        "Connemara",
+        "Cork",
+        "East",
+        "Galway",
+        "Internet",
+        "Kerry",
+        "Lewis",
+        "Mayo",
+        "Munster",
+        "North",
+        "Ulster",
+        "Waterford",
+        "abbreviation",
+        "active",
+        "addressee-singular",
+        "adjective",
+        "affirmative",
+        "also",
+        "alternative",
+        "analytic",
+        "apocopic",
+        "archaic",
+        "before-lenited-fh",
+        "before-vowel",
+        "broadly",
+        "canonical",
+        "class",
+        "colloquial",
+        "contraction",
+        "dated",
+        "dependent",
+        "determiner",
+        "dialectal",
+        "diminutive",
+        "emphatic",
+        "error-unknown-tag",
+        "error-unrecognized-form",
+        "especially",
+        "familiar",
+        "habitual",
+        "historic",
+        "impersonal",
+        "in-certain-phrases",
+        "in-compounds",
+        "independent",
+        "inflection-template"
+      ],
+      "unmapped_tag_count": 85
+    },
+    {
+      "stage": "ontolex",
+      "input_path": "data/interim/normalised.jsonl",
+      "output_path": "data/interim/shaped.jsonl",
+      "total": 40747,
+      "duplicate_ids_resolved": 1051
+    },
+    {
+      "stage": "arches",
+      "input_path": "data/interim/shaped.jsonl",
+      "output_path": "data/processed/lexical_entry_data.csv",
+      "total_entries": 40747,
+      "total_rows": 616238
+    }
+  ]
+}

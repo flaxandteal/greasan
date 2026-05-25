@@ -1,0 +1,11 @@
+{
+  "source_url": "https://kaikki.org/dictionary/Irish/kaikki.org-dictionary-Irish.jsonl",
+  "dump_date": "2026-05-01",
+  "extract_date": "2026-05-06",
+  "wiktextract_commit": "f69e2051604e2ade3eb9c11cb64a3f67176c89d4",
+  "wikitextprocessor_commit": "9452535b95088345ce2ce7ae86a5f48bf693041c",
+  "file_sha256": "bc1f211e0cc78a2255e7e1182eba6438ad2580490d43e31198d9bf2acac77db4",
+  "output_path": "data/raw/kaikki.org-dictionary-Irish.jsonl",
+  "file_size_bytes": 117548474,
+  "fetch_timestamp": "2026-05-09T18:05:02.294683+00:00"
+}

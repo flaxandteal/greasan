@@ -12,13 +12,16 @@ dist
 dist-ssr
 *.local
 
-# Capacitor native projects
-android/
-ios/
+# Tauri
+src-tauri/target/
+src-tauri/gen/
 
-# Index data (populated by pipeline)
-public/index/*
-!public/index/.gitkeep
+# Generated core metadata bundle (output of build-core.mjs)
+public/core-goidelic/
+
+# Legacy index directories
+public/index-goidelic/
+public/index-scots/
 
 # Editor directories and files
 .vscode/*

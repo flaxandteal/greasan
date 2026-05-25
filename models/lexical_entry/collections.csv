@@ -1,0 +1,123 @@
+collection_name,concept_label,parent_label,sort_order
+Parts of Speech,noun,,1
+Parts of Speech,verb,,2
+Parts of Speech,adjective,,3
+Parts of Speech,adverb,,4
+Parts of Speech,pronoun,,5
+Parts of Speech,preposition,,6
+Parts of Speech,conjunction,,7
+Parts of Speech,interjection,,8
+Parts of Speech,numeral,,9
+Parts of Speech,particle,,10
+Parts of Speech,determiner,,11
+Parts of Speech,prefix,,12
+Parts of Speech,suffix,,13
+Parts of Speech,phrase,,14
+Parts of Speech,contraction,,15
+Parts of Speech,proper noun,,16
+Parts of Speech,article,,17
+Parts of Speech,character,,18
+Grammatical Features,nominative,,1
+Grammatical Features,genitive,,2
+Grammatical Features,dative,,3
+Grammatical Features,vocative,,4
+Grammatical Features,accusative,,5
+Grammatical Features,singular,,6
+Grammatical Features,plural,,7
+Grammatical Features,masculine,,8
+Grammatical Features,feminine,,9
+Grammatical Features,present,,10
+Grammatical Features,past,,11
+Grammatical Features,future,,12
+Grammatical Features,conditional,,13
+Grammatical Features,imperative,,14
+Grammatical Features,subjunctive,,15
+Grammatical Features,indicative,,16
+Grammatical Features,first-person,,17
+Grammatical Features,second-person,,18
+Grammatical Features,third-person,,19
+Grammatical Features,autonomous,,20
+Grammatical Features,verbal-noun,,21
+Grammatical Features,verbal-adjective,,22
+Grammatical Features,definite,,23
+Grammatical Features,indefinite,,24
+Grammatical Features,lenited,,25
+Grammatical Features,eclipsed,,26
+Grammatical Features,comparative,,27
+Grammatical Features,superlative,,28
+Dialects,Irish,,1
+Dialects,Irish (General),Irish,2
+Dialects,Connacht Irish,Irish,3
+Dialects,Ulster Irish,Irish,4
+Dialects,Munster Irish,Irish,5
+Dialects,Donegal Irish,Ulster Irish,6
+Dialects,Connemara Irish,Connacht Irish,7
+Dialects,Kerry Irish,Munster Irish,8
+Dialects,Waterford Irish,Munster Irish,9
+Dialects,Scottish Gaelic,,10
+Dialects,Scottish Gaelic (General),Scottish Gaelic,11
+Dialects,Highland Gaelic,Scottish Gaelic,12
+Dialects,Hebridean Gaelic,Scottish Gaelic,13
+Dialects,Argyll Gaelic,Scottish Gaelic,14
+Dialects,Manx,,15
+Dialects,Manx (General),Manx,16
+Subject Fields,Agriculture,,1
+Subject Fields,Architecture,,2
+Subject Fields,Art,,3
+Subject Fields,Biology,,4
+Subject Fields,Building industry,,5
+Subject Fields,Chemistry,,6
+Subject Fields,Communication,,7
+Subject Fields,Defence,,8
+Subject Fields,Earth sciences,,9
+Subject Fields,Economics,,10
+Subject Fields,Education,,11
+Subject Fields,Energy,,12
+Subject Fields,Engineering,,13
+Subject Fields,Environment,,14
+Subject Fields,Financial management,,15
+Subject Fields,Fishery industry,,16
+Subject Fields,Forestry,,17
+Subject Fields,Geography,,18
+Subject Fields,Government,,19
+Subject Fields,Health,,20
+Subject Fields,History,,21
+Subject Fields,Industry,,22
+Subject Fields,Information technology,,23
+Subject Fields,Insurance,,24
+Subject Fields,Legal systems,,25
+Subject Fields,Leisure,,26
+Subject Fields,Library science,,27
+Subject Fields,Linguistics,,28
+Subject Fields,Mathematics,,29
+Subject Fields,Mechanical engineering,,30
+Subject Fields,Medical sciences,,31
+Subject Fields,Meteorology,,32
+Subject Fields,Mining,,33
+Subject Fields,Nutrition,,34
+Subject Fields,Performing arts,,35
+Subject Fields,Philosophy,,36
+Subject Fields,Physics,,37
+Subject Fields,Political science,,38
+Subject Fields,Printing,,39
+Subject Fields,Psychology,,40
+Subject Fields,Public administration,,41
+Subject Fields,Religion,,42
+Subject Fields,Social sciences,,43
+Subject Fields,Sociology,,44
+Subject Fields,Statistics,,45
+Subject Fields,Telecommunication,,46
+Subject Fields,Textile industry,,47
+Subject Fields,Tourism,,48
+Subject Fields,Trade,,49
+Subject Fields,Transport,,50
+Subject Fields,Urban planning,,51
+Subject Fields,Veterinary medicine,,52
+Subject Fields,Visual arts,,53
+Subject Fields,Zoology,,54
+Subject Fields,Calendar,,55
+Subject Fields,Colours,,56
+Subject Fields,Culinary arts,,57
+Subject Fields,Home economics,,58
+Subject Fields,Names,,59
+Subject Fields,Signage,,60

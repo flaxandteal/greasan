@@ -1,4 +1,9 @@
-import { describe, it, expect, vi, beforeAll } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
+
+// Provide window global for ensureStore's debug exposure
+if (typeof globalThis.window === 'undefined') {
+  (globalThis as any).window = globalThis;
+}
 
 // Mock WASM/alizarin modules that dictionary.ts imports at top level
 vi.mock('alizarin', () => ({
@@ -11,62 +16,74 @@ vi.mock('alizarin', () => ({
   staticStore: { archesClient: null },
   RDM: { archesClient: null },
 }));
-vi.mock('ros-madair', () => ({
-  SparqlStore: vi.fn(),
-}));
+vi.mock('ros-madair-alizarin', () => {
+  function SparqlStore() { this.addLayer = vi.fn(); this.loadSummary = vi.fn(); }
+  return {
+    SparqlStore,
+    connect_tile_source: vi.fn(),
+    prefetch_tiles_for_resource: vi.fn(),
+    disconnect_tile_source: vi.fn(),
+  };
+});
 vi.mock('./wasm', () => ({
   ready: Promise.resolve(),
 }));
+vi.mock('./tauri-builder', () => ({
+  checkLocalIndex: vi.fn().mockResolvedValue(null),
+  assetUrl: vi.fn((p: string) => p),
+}));
 
-import { search } from './dictionary';
+const mockSearch = vi.fn();
+const mockFilters = vi.fn().mockResolvedValue({});
+vi.mock('./pagefind', () => ({
+  getPagefind: vi.fn(() => Promise.resolve({ search: mockSearch, filters: mockFilters })),
+  resetPagefind: vi.fn(),
+}));
+
+import { search, addDynamicLayer } from './dictionary';
 
 describe('search', () => {
-  // search uses loadResourceIndex which fetches resource_names.json
-  // We mock fetch to provide test data
-  const mockNames: Record<string, string> = {
-    'uuid-cat': 'cat',
-    'uuid-cait': 'cait',
-    'uuid-cathal': 'Cathal',
-    'uuid-bean': 'bean',
-    'uuid-scat': 'scat',
-  };
-
-  beforeAll(() => {
-    globalThis.fetch = vi.fn().mockResolvedValue({
-      ok: true,
-      json: () => Promise.resolve(mockNames),
-    }) as any;
+  beforeEach(async () => {
+    mockSearch.mockReset();
+    mockFilters.mockReset().mockResolvedValue({});
+    // Register a mock layer so search doesn't bail on empty layers
+    await addDynamicLayer('/mock-layer/', 'mock', '/mock-layer/pagefind-ga');
   });
 
   it('returns empty for blank query', async () => {
     expect(await search('')).toEqual([]);
     expect(await search('   ')).toEqual([]);
+    expect(mockSearch).not.toHaveBeenCalled();
   });
 
-  it('finds prefix matches', async () => {
+  it('maps pagefind results to EntrySummary', async () => {
+    mockSearch.mockResolvedValue({
+      results: [
+        { data: () => Promise.resolve({ url: 'uuid-cat', meta: { title: 'cat' }, excerpt: '' }) },
+        { data: () => Promise.resolve({ url: 'uuid-bean', meta: { title: 'bean' }, excerpt: '' }) },
+      ],
+    });
+
     const results = await search('cat');
-    const headwords = results.map(r => r.headword);
-    expect(headwords[0]).toBe('cat');
+    expect(results).toEqual([
+      { uri: 'uuid-cat', headword: 'cat', pos: '' },
+      { uri: 'uuid-bean', headword: 'bean', pos: '' },
+    ]);
   });
 
-  it('prefix matches come before substring matches', async () => {
-    const results = await search('cat');
-    const headwords = results.map(r => r.headword);
-    // "cat" and "Cathal" are prefix matches; "scat" is substring
-    const catIdx = headwords.indexOf('cat');
-    const scatIdx = headwords.indexOf('scat');
-    expect(catIdx).toBeLessThan(scatIdx);
+  it('limits results to 50', async () => {
+    const manyResults = Array.from({ length: 80 }, (_, i) => ({
+      data: () => Promise.resolve({ url: `uuid-${i}`, meta: { title: `word${i}` }, excerpt: '' }),
+    }));
+    mockSearch.mockResolvedValue({ results: manyResults });
+
+    const results = await search('word');
+    expect(results).toHaveLength(50);
   });
 
-  it('is case insensitive', async () => {
-    const results = await search('CAT');
-    const headwords = results.map(r => r.headword);
-    expect(headwords).toContain('cat');
-    expect(headwords).toContain('Cathal');
-  });
-
-  it('returns no results for unmatched query', async () => {
-    const results = await search('zzzzz');
+  it('returns empty on pagefind error', async () => {
+    mockSearch.mockRejectedValue(new Error('network'));
+    const results = await search('test');
     expect(results).toEqual([]);
   });
 });

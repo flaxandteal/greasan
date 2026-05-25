@@ -1,0 +1,367 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE martif SYSTEM "TBXcoreStructV02.dtd">
+<martif type="TBX" xml:lang="en">
+  <martifHeader>
+    <fileDesc>
+      <sourceDesc><p>Téarma.ie test fixture</p></sourceDesc>
+    </fileDesc>
+  </martifHeader>
+  <text>
+    <body>
+
+      <!-- 1. Basic noun with masculine gender (fir1) -->
+      <termEntry id="t1">
+        <descrip type="subjectField">Law</descrip>
+        <langSet xml:lang="en">
+          <tig><term>occupier</term></tig>
+          <descrip type="definition">A person in actual possession of land or property</descrip>
+        </langSet>
+        <langSet xml:lang="ga">
+          <ntig>
+            <termGrp>
+              <term>áititheoir</term>
+              <termNote type="partOfSpeech">fir3</termNote>
+            </termGrp>
+          </ntig>
+        </langSet>
+      </termEntry>
+
+      <!-- 2. Multiple synonyms (3 ntig → 3 records) -->
+      <termEntry id="t2">
+        <descrip type="subjectField">Computers, Computer Science</descrip>
+        <langSet xml:lang="en">
+          <tig><term>software</term></tig>
+          <descrip type="definition">Computer programs and related data</descrip>
+        </langSet>
+        <langSet xml:lang="ga">
+          <ntig>
+            <termGrp>
+              <term>bogearraí</term>
+              <termNote type="partOfSpeech">bain2</termNote>
+            </termGrp>
+          </ntig>
+          <ntig>
+            <termGrp>
+              <term>earraí boga</term>
+              <termNote type="partOfSpeech">bain2</termNote>
+            </termGrp>
+          </ntig>
+          <ntig>
+            <termGrp>
+              <term>ríomhchlár</term>
+              <termNote type="partOfSpeech">fir1</termNote>
+            </termGrp>
+          </ntig>
+        </langSet>
+      </termEntry>
+
+      <!-- 3. Deprecated term (dímholta → should be skipped) -->
+      <termEntry id="t3">
+        <descrip type="subjectField">Law</descrip>
+        <langSet xml:lang="en">
+          <tig><term>statute</term></tig>
+          <descrip type="definition">A written law passed by a legislative body</descrip>
+        </langSet>
+        <langSet xml:lang="ga">
+          <ntig>
+            <termGrp>
+              <term>reacht</term>
+              <termNote type="partOfSpeech">fir3</termNote>
+            </termGrp>
+          </ntig>
+          <ntig>
+            <termGrp>
+              <term>staitúid</term>
+              <termNote type="partOfSpeech">bain2</termNote>
+            </termGrp>
+            <termNote type="normativeAuthorization">dímholta</termNote>
+          </ntig>
+        </langSet>
+      </termEntry>
+
+      <!-- 4. Verb with Irish POS tag -->
+      <termEntry id="t4">
+        <descrip type="subjectField">Education</descrip>
+        <langSet xml:lang="en">
+          <tig><term>educate</term></tig>
+          <descrip type="definition">To give intellectual or moral instruction</descrip>
+        </langSet>
+        <langSet xml:lang="ga">
+          <ntig>
+            <termGrp>
+              <term>oideachasaigh</term>
+              <termNote type="partOfSpeech">br</termNote>
+            </termGrp>
+          </ntig>
+        </langSet>
+      </termEntry>
+
+      <!-- 5. Adjective -->
+      <termEntry id="t5">
+        <descrip type="subjectField">Medicine, Medical</descrip>
+        <langSet xml:lang="en">
+          <tig><term>clinical</term></tig>
+          <descrip type="definition">Relating to the observation and treatment of actual patients</descrip>
+        </langSet>
+        <langSet xml:lang="ga">
+          <ntig>
+            <termGrp>
+              <term>cliniciúil</term>
+              <termNote type="partOfSpeech">a1</termNote>
+            </termGrp>
+          </ntig>
+        </langSet>
+      </termEntry>
+
+      <!-- 6. Phrase -->
+      <termEntry id="t6">
+        <descrip type="subjectField">Law</descrip>
+        <langSet xml:lang="en">
+          <tig><term>rule of law</term></tig>
+          <descrip type="definition">The principle that all people and institutions are accountable to law</descrip>
+        </langSet>
+        <langSet xml:lang="ga">
+          <ntig>
+            <termGrp>
+              <term>smacht an dlí</term>
+              <termNote type="partOfSpeech">frása</termNote>
+            </termGrp>
+          </ntig>
+        </langSet>
+      </termEntry>
+
+      <!-- 7. Multiple domains -->
+      <termEntry id="t7">
+        <descrip type="subjectField">Biology</descrip>
+        <descrip type="subjectField">Medicine, Medical</descrip>
+        <langSet xml:lang="en">
+          <tig><term>cell</term></tig>
+          <descrip type="definition">The smallest structural and functional unit of an organism</descrip>
+        </langSet>
+        <langSet xml:lang="ga">
+          <ntig>
+            <termGrp>
+              <term>cill</term>
+              <termNote type="partOfSpeech">bain2</termNote>
+            </termGrp>
+          </ntig>
+        </langSet>
+      </termEntry>
+
+      <!-- 8. Duplicate word across different termEntries (merge test) -->
+      <termEntry id="t8">
+        <descrip type="subjectField">Economics</descrip>
+        <langSet xml:lang="en">
+          <tig><term>law (economics)</term></tig>
+          <descrip type="definition">A statement of a regularity in economics</descrip>
+        </langSet>
+        <langSet xml:lang="ga">
+          <ntig>
+            <termGrp>
+              <term>dlí</term>
+              <termNote type="partOfSpeech">fir4</termNote>
+            </termGrp>
+          </ntig>
+        </langSet>
+      </termEntry>
+
+      <!-- 9. Same word "dlí" in Law domain (should merge with t8) -->
+      <termEntry id="t9">
+        <descrip type="subjectField">Law</descrip>
+        <langSet xml:lang="en">
+          <tig><term>law</term></tig>
+          <descrip type="definition">The system of rules which a particular country or community recognizes</descrip>
+        </langSet>
+        <langSet xml:lang="ga">
+          <ntig>
+            <termGrp>
+              <term>dlí</term>
+              <termNote type="partOfSpeech">fir4</termNote>
+            </termGrp>
+          </ntig>
+        </langSet>
+      </termEntry>
+
+      <!-- 10. Abbreviation -->
+      <termEntry id="t10">
+        <descrip type="subjectField">Computers, Computer Science</descrip>
+        <langSet xml:lang="en">
+          <tig><term>URL</term></tig>
+          <descrip type="definition">Uniform Resource Locator</descrip>
+        </langSet>
+        <langSet xml:lang="ga">
+          <ntig>
+            <termGrp>
+              <term>URL</term>
+              <termNote type="partOfSpeech">gior</termNote>
+            </termGrp>
+          </ntig>
+        </langSet>
+      </termEntry>
+
+      <!-- 11. Proper noun -->
+      <termEntry id="t11">
+        <descrip type="subjectField">Geography</descrip>
+        <langSet xml:lang="en">
+          <tig><term>Ireland</term></tig>
+        </langSet>
+        <langSet xml:lang="ga">
+          <ntig>
+            <termGrp>
+              <term>Éire</term>
+              <termNote type="partOfSpeech">properNoun</termNote>
+            </termGrp>
+          </ntig>
+        </langSet>
+      </termEntry>
+
+      <!-- 12. Prefix -->
+      <termEntry id="t12">
+        <descrip type="subjectField">Language, Linguistics</descrip>
+        <langSet xml:lang="en">
+          <tig><term>re-</term></tig>
+          <descrip type="definition">A prefix meaning again or back</descrip>
+        </langSet>
+        <langSet xml:lang="ga">
+          <ntig>
+            <termGrp>
+              <term>ath-</term>
+              <termNote type="partOfSpeech">réimír</termNote>
+            </termGrp>
+          </ntig>
+        </langSet>
+      </termEntry>
+
+      <!-- 13. Entry with example -->
+      <termEntry id="t13">
+        <descrip type="subjectField">Education</descrip>
+        <langSet xml:lang="en">
+          <tig><term>school</term></tig>
+          <descrip type="definition">An institution for educating children</descrip>
+        </langSet>
+        <langSet xml:lang="ga">
+          <ntig>
+            <termGrp>
+              <term>scoil</term>
+              <termNote type="partOfSpeech">bain2</termNote>
+            </termGrp>
+          </ntig>
+          <descrip type="example">Tá an scoil dúnta inniu.</descrip>
+        </langSet>
+      </termEntry>
+
+      <!-- 14. Plural-only noun -->
+      <termEntry id="t14">
+        <descrip type="subjectField">Sports</descrip>
+        <langSet xml:lang="en">
+          <tig><term>athletics</term></tig>
+          <descrip type="definition">Physical sports and games of any kind</descrip>
+        </langSet>
+        <langSet xml:lang="ga">
+          <ntig>
+            <termGrp>
+              <term>lúthchleasaíocht</term>
+              <termNote type="partOfSpeech">bain3</termNote>
+            </termGrp>
+          </ntig>
+        </langSet>
+      </termEntry>
+
+      <!-- 15. English-style POS tags -->
+      <termEntry id="t15">
+        <descrip type="subjectField">Art</descrip>
+        <langSet xml:lang="en">
+          <tig><term>painting</term></tig>
+          <descrip type="definition">The process or art of using paint</descrip>
+        </langSet>
+        <langSet xml:lang="ga">
+          <ntig>
+            <termGrp>
+              <term>péintéireacht</term>
+              <termNote type="partOfSpeech">s</termNote>
+            </termGrp>
+          </ntig>
+        </langSet>
+      </termEntry>
+
+      <!-- 16. Entry with tig (not ntig) -->
+      <termEntry id="t16">
+        <descrip type="subjectField">Music</descrip>
+        <langSet xml:lang="en">
+          <tig><term>melody</term></tig>
+          <descrip type="definition">A sequence of single notes that is musically satisfying</descrip>
+        </langSet>
+        <langSet xml:lang="ga">
+          <tig>
+            <term>séis</term>
+            <termNote type="partOfSpeech">bain2</termNote>
+          </tig>
+        </langSet>
+      </termEntry>
+
+      <!-- 17. Entry with no POS (defaults to noun) -->
+      <termEntry id="t17">
+        <descrip type="subjectField">Fishery</descrip>
+        <langSet xml:lang="en">
+          <tig><term>salmon</term></tig>
+          <descrip type="definition">A large fish highly prized as game and food</descrip>
+        </langSet>
+        <langSet xml:lang="ga">
+          <ntig>
+            <termGrp>
+              <term>bradán</term>
+            </termGrp>
+          </ntig>
+        </langSet>
+      </termEntry>
+
+      <!-- 18. Entry with multi-level domain (» separator) -->
+      <termEntry id="t18">
+        <descrip type="subjectField">Law » Property Law</descrip>
+        <langSet xml:lang="en">
+          <tig><term>deed</term></tig>
+          <descrip type="definition">A legal document that transfers property rights</descrip>
+        </langSet>
+        <langSet xml:lang="ga">
+          <ntig>
+            <termGrp>
+              <term>gníomhas</term>
+              <termNote type="partOfSpeech">fir1</termNote>
+            </termGrp>
+          </ntig>
+        </langSet>
+      </termEntry>
+
+      <!-- 19. No English langSet (gloss falls back to headword) -->
+      <termEntry id="t19">
+        <descrip type="subjectField">Calendar</descrip>
+        <langSet xml:lang="ga">
+          <ntig>
+            <termGrp>
+              <term>Lá Fhéile Pádraig</term>
+              <termNote type="partOfSpeech">frása</termNote>
+            </termGrp>
+          </ntig>
+        </langSet>
+      </termEntry>
+
+      <!-- 20. Wiktionary overlap: "focal" (same URI as Wiktionary ga-focal-noun) -->
+      <termEntry id="t20">
+        <descrip type="subjectField">Language, Linguistics</descrip>
+        <langSet xml:lang="en">
+          <tig><term>word</term></tig>
+          <descrip type="definition">A single distinct meaningful element of speech or writing</descrip>
+        </langSet>
+        <langSet xml:lang="ga">
+          <ntig>
+            <termGrp>
+              <term>focal</term>
+              <termNote type="partOfSpeech">fir1</termNote>
+            </termGrp>
+          </ntig>
+        </langSet>
+      </termEntry>
+
+    </body>
+  </text>
+</martif>

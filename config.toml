@@ -1,0 +1,44 @@
+[languages]
+codes = ["ga", "gd", "gv"]
+
+[languages.ga]
+raw_input = "data/raw/kaikki.org-dictionary-Irish.jsonl"
+kaikki_name = "Irish"
+default_dialect = "Irish"
+
+[languages.gd]
+raw_input = "data/raw/kaikki.org-dictionary-Scottish_Gaelic.jsonl"
+kaikki_name = "Scottish Gaelic"
+default_dialect = "Scottish Gaelic"
+
+[languages.gv]
+raw_input = "data/raw/kaikki.org-dictionary-Manx.jsonl"
+kaikki_name = "Manx"
+default_dialect = "Manx"
+
+[paths]
+filtered = "data/interim/lemmas.jsonl"
+normalised = "data/interim/normalised.jsonl"
+shaped = "data/interim/shaped.jsonl"
+business_data = "data/processed/lexical_entry_data.csv"
+example_data = "data/processed/example_data.csv"
+
+[graphs]
+lexical_entry = "449c8695-253e-521b-8994-27701ce22305"
+external_example = "6d502e2e-7fe6-5414-99e4-ac981cebc493"
+
+[pipeline]
+stages = ["filter", "normalise", "ontolex", "arches", "examples"]
+
+[sources.tearma]
+url = "https://www.tearma.ie/api/tbx"
+tbx_path = "data/raw/25.10.01-tearma.ie-concepts.tbx"
+
+[fixture]
+max_entries = 50
+raw_input = "tests/fixtures/sample.jsonl"
+filtered = "data/interim/fixture_lemmas.jsonl"
+normalised = "data/interim/fixture_normalised.jsonl"
+shaped = "data/interim/fixture_shaped.jsonl"
+business_data = "data/processed/fixture_lexical_entry_data.csv"
+example_data = "data/processed/fixture_example_data.csv"

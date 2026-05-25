@@ -1,0 +1,25 @@
+[package]
+name = "greasan"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+name = "greasan_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = ["protocol-asset"] }
+tauri-plugin-opener = "2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+ros-madair-core = { path = "../../../magic/RosMadair/crates/ros-madair-core" }
+reqwest = { version = "0.12", features = ["rustls-tls"], default-features = false }
+uuid = { version = "1", features = ["v4"] }
+tokio = { version = "1", features = ["fs", "sync"] }
+flate2 = "1"
+tar = "0.4"
+zip = { version = "2", default-features = false, features = ["deflate"] }
+percent-encoding = "2"

@@ -1,0 +1,54 @@
+{
+  "timestamp": "2026-05-05T11:32:49.363278+00:00",
+  "fixture": true,
+  "elapsed_seconds": 0.06,
+  "stages": [
+    {
+      "stage": "filter",
+      "input_path": "tests/fixtures/sample.jsonl",
+      "output_path": "data/interim/fixture_lemmas.jsonl",
+      "total": 50,
+      "kept": 44,
+      "dropped_form_of": 6,
+      "dropped_lang": 0
+    },
+    {
+      "stage": "normalise",
+      "input_path": "data/interim/fixture_lemmas.jsonl",
+      "output_path": "data/interim/fixture_normalised.jsonl",
+      "total": 44,
+      "unmapped_tags": [
+        "Cois-Fharraige",
+        "alternative",
+        "analytic",
+        "before-vowel",
+        "canonical",
+        "emphatic",
+        "error-unrecognized-form",
+        "habitual",
+        "inflection-template",
+        "lowercase",
+        "noun-from-verb",
+        "participle",
+        "triggers-eclipsis",
+        "triggers-lenition",
+        "uppercase"
+      ],
+      "unmapped_tag_count": 15
+    },
+    {
+      "stage": "ontolex",
+      "input_path": "data/interim/fixture_normalised.jsonl",
+      "output_path": "data/interim/fixture_shaped.jsonl",
+      "total": 44,
+      "duplicate_ids_resolved": 5
+    },
+    {
+      "stage": "arches",
+      "input_path": "data/interim/fixture_shaped.jsonl",
+      "output_path": "data/processed/fixture_lexical_entry_data.csv",
+      "total_entries": 44,
+      "total_rows": 738
+    }
+  ]
+}

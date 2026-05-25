@@ -1,0 +1,15 @@
+parent_alias,alias,name,datatype,cardinality,ontology_class,parent_property,description,collection_name,required,searchable,exportable,sortorder
+,headword,Headword,string,1,http://www.w3.org/ns/lemon/ontolex#Form,http://www.w3.org/ns/lemon/ontolex#canonicalForm,Written representation of the canonical form,,true,true,true,1
+,part_of_speech,Part of Speech,concept,1,http://www.lexinfo.net/ontology/3.0/lexinfo#PartOfSpeech,http://www.lexinfo.net/ontology/3.0/lexinfo#partOfSpeech,Grammatical category,Parts of Speech,true,true,true,2
+,dialect,Dialect,concept,1,https://flaxandteal.org/ontology/goidelic#Dialect,https://flaxandteal.org/ontology/goidelic#hasDialect,Goidelic dialect of this entry,Dialects,true,true,true,0
+,pronunciation,Pronunciation,semantic,n,http://www.w3.org/ns/lemon/ontolex#Form,http://www.w3.org/ns/lemon/ontolex#lexicalForm,Phonetic representation,,,,true,3
+pronunciation,ipa_value,IPA Value,string,1,http://www.w3.org/ns/lemon/ontolex#Representation,http://www.w3.org/ns/lemon/ontolex#phoneticRep,IPA transcription,,false,true,true,1
+,senses,Senses,semantic,n,http://www.w3.org/ns/lemon/ontolex#LexicalSense,http://www.w3.org/ns/lemon/ontolex#sense,Word sense,,,,true,4
+senses,gloss,Gloss,string,1,http://www.w3.org/2004/02/skos/core#Definition,http://www.w3.org/2004/02/skos/core#definition,English definition,,true,true,true,1
+senses,example,Example,string,1,http://www.w3.org/ns/lemon/lexicog#UsageExample,http://www.w3.org/ns/lemon/lexicog#usageExample,Usage example,,false,true,true,2
+senses,source_label,Source Label,string,1,http://purl.org/dc/terms/source,http://purl.org/dc/terms/source,Layer source code,,false,false,true,3
+,forms,Forms,semantic,n,http://www.w3.org/ns/lemon/ontolex#Form,http://www.w3.org/ns/lemon/ontolex#otherForm,Inflected or variant forms,,,,true,5
+forms,written_rep,Written Form,string,1,http://www.w3.org/ns/lemon/ontolex#Representation,http://www.w3.org/ns/lemon/ontolex#writtenRep,Written representation,,false,true,true,1
+forms,gram_features,Grammatical Features,concept-list,1,http://www.lexinfo.net/ontology/3.0/lexinfo#MorphosyntacticProperty,http://www.lexinfo.net/ontology/3.0/lexinfo#morphosyntacticProperty,Morphosyntactic tags,Grammatical Features,false,true,true,2
+,domain,Domain,concept-list,n,http://purl.org/dc/terms/subject,http://purl.org/dc/terms/subject,Subject field(s),Subject Fields,false,true,true,7
+,external_examples,External Examples,resource-instance-list,n,http://www.w3.org/ns/lemon/lexicog#UsageExample,http://www.w3.org/ns/lemon/lexicog#usageExample,Related corpus examples,,false,false,true,8

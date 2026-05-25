@@ -1,0 +1,334 @@
+@prefix owl:     <http://www.w3.org/2002/07/owl#> .
+@prefix rdf:     <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs:    <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd:     <http://www.w3.org/2001/XMLSchema#> .
+@prefix skos:    <http://www.w3.org/2004/02/skos/core#> .
+@prefix dcterms: <http://purl.org/dc/terms/> .
+@prefix ontolex: <http://www.w3.org/ns/lemon/ontolex#> .
+@prefix lexicog: <http://www.w3.org/ns/lemon/lexicog#> .
+@prefix lexinfo: <http://www.lexinfo.net/ontology/3.0/lexinfo#> .
+# lemonEty namespace per Khan et al.; verify against the version we pin before publication.
+@prefix ety:     <http://lari-datasets.ilc.cnr.it/lemonEty#> .
+@prefix :        <https://flaxandteal.org/ontology/goidelic#> .
+
+#####################################################################
+# Ontology header
+#####################################################################
+
+<https://flaxandteal.org/ontology/goidelic>
+    a owl:Ontology ;
+    dcterms:title "Goidelic Wiktionary Lexicographic Extensions"@en ;
+    dcterms:description
+        "Local ontology extending OntoLex-Lemon with Goidelic-specific concepts not covered upstream: initial mutations as morphophonological processes, dialect classification across the Goidelic continuum, register (Caighdeán Oifigiúil and pre-Caighdeán), and orthographic/notational variants. Used as the ontological backbone for a Wiktionary-derived Goidelic dictionary delivered through Arches and Alizarin."@en ;
+    dcterms:creator "Flax & Teal Limited" ;
+    dcterms:license <https://creativecommons.org/licenses/by-sa/4.0/> ;
+    owl:versionInfo "0.2.0" ;
+    owl:imports
+        <http://www.w3.org/ns/lemon/ontolex> ,
+        <http://www.w3.org/ns/lemon/lexicog> ,
+        <http://www.lexinfo.net/ontology/3.0/lexinfo> ,
+        <http://lari-datasets.ilc.cnr.it/lemonEty> ;
+    rdfs:comment
+        "This ontology deliberately stays small. Anything that has a clean home in OntoLex-Lemon, Lexicog, lemonEty, or LexInfo is not redefined here. Add classes only when upstream lacks coverage and the missing concept is genuinely Goidelic-linguistic, not project-incidental."@en .
+
+
+#####################################################################
+# Morphophonological processes (initial mutations)
+#
+# Modelled as named individuals of MorphophonologicalProcess rather
+# than as classes, so a Form can simply assert :resultOfProcess :Lenition.
+# This avoids OWL-DL punning issues and parallels the Dialect/Register
+# pattern used below.
+#####################################################################
+
+:MorphophonologicalProcess
+    a owl:Class ;
+    rdfs:label "Morphophonological Process"@en ;
+    rdfs:comment
+        "A morphophonological process applied to a base form to produce a derived form. Covers Goidelic initial mutations (lenition, eclipsis, prothesis) and is extensible to other Goidelic / Brythonic processes if the corpus expands."@en ;
+    rdfs:isDefinedBy <https://flaxandteal.org/ontology/goidelic> .
+
+:Lenition
+    a :MorphophonologicalProcess ;
+    rdfs:label "Lenition"@en, "Séimhiú"@ga ;
+    rdfs:comment
+        "Initial consonant softening (séimhiú). Orthographically marked by an inserted 'h' after the consonant in modern usage, or traditionally by an overdot. Applies in both Irish and Scottish Gaelic, though triggering contexts differ."@en .
+
+:Eclipsis
+    a :MorphophonologicalProcess ;
+    rdfs:label "Eclipsis"@en, "Urú"@ga ;
+    rdfs:comment
+        "Initial consonant or vowel modification (urú). Orthographically marked by prefixing a letter that replaces the original sound: b→mb, c→gc, d→nd, f→bhf, g→ng, p→bp, t→dt, vowel→n+vowel. Productive in Irish; not present in Scottish Gaelic."@en .
+
+:HProthesis
+    a :MorphophonologicalProcess ;
+    rdfs:label "h-prothesis"@en, "réamhlitir h"@ga ;
+    rdfs:comment
+        "Insertion of 'h' before a vowel-initial word in specific grammatical contexts, e.g. after possessive 'a' meaning 'her' ('a hathair' = her father), or after 'na' before plural genitive vowels."@en .
+
+:TProthesis
+    a :MorphophonologicalProcess ;
+    rdfs:label "t-prothesis"@en, "réamhlitir t"@ga ;
+    rdfs:comment
+        "Insertion of 't' before a vowel-initial masculine noun in nominative singular after the definite article ('an t-éan'), or before 's' in the feminine nominative singular and masculine genitive singular ('an tsúil', 'an tsagairt')."@en .
+
+
+:resultOfProcess
+    a owl:ObjectProperty ;
+    rdfs:label "result of process"@en ;
+    rdfs:domain ontolex:Form ;
+    rdfs:range :MorphophonologicalProcess ;
+    rdfs:comment
+        "Indicates that the Form was produced by the named morphophonological process applied to a base. Use in conjunction with :hasBaseForm where the base is itself modelled."@en .
+
+:hasBaseForm
+    a owl:ObjectProperty ;
+    rdfs:label "has base form"@en ;
+    rdfs:domain ontolex:Form ;
+    rdfs:range ontolex:Form ;
+    rdfs:comment
+        "Links a derived Form (e.g. lenited or eclipsed) back to the Form from which it was produced. Distinct from ontolex:canonicalForm — a lenited Form's base may itself be a non-canonical Form (e.g. a plural that has then been eclipsed)."@en .
+
+
+#####################################################################
+# Language
+#
+# Organizational grouping of dialects. Not tagged on entries directly;
+# entries are tagged with Dialect. Language exists so the settings UI
+# can group dialects under language parents in a collection hierarchy.
+#####################################################################
+
+:Language
+    a owl:Class ;
+    rdfs:label "Language"@en ;
+    rdfs:comment
+        "An organizational grouping of dialects within the Goidelic continuum. Used for settings UI grouping, not as a data-level tag on entries. Entries are tagged with Dialect, not Language."@en .
+
+:Irish a :Language ;
+    rdfs:label "Irish"@en, "Gaeilge"@ga .
+
+:ScottishGaelic a :Language ;
+    rdfs:label "Scottish Gaelic"@en, "Gàidhlig"@gd .
+
+:Manx a :Language ;
+    rdfs:label "Manx"@en, "Gaelg"@gv .
+
+:hasLanguage
+    a owl:ObjectProperty ;
+    rdfs:domain :Dialect ;
+    rdfs:range :Language ;
+    rdfs:comment
+        "Groups a dialect under its language for settings UI and collection hierarchy. Every dialect belongs to exactly one language."@en .
+
+
+#####################################################################
+# Dialect classification
+#
+# Geographic. Distinct from Register, which is normative/stylistic.
+# Sub-dialects use skos:broader to express containment without
+# committing to strict hierarchical class semantics.
+# Dialect is the first-class concept for tagging entries. Every entry
+# must have at least one dialect.
+#####################################################################
+
+:Dialect
+    a owl:Class ;
+    rdfs:label "Dialect"@en, "Canúint"@ga ;
+    rdfs:comment
+        "A geographic or register-neutral variety within the Goidelic language continuum. The first-class concept for tagging entries. Every entry must have at least one dialect."@en .
+
+# --- General (catch-all) dialects ---
+
+:GeneralIrish a :Dialect ;
+    rdfs:label "Irish (General)"@en, "Gaeilge (Ginearálta)"@ga ;
+    :hasLanguage :Irish ;
+    rdfs:comment
+        "Catch-all dialect for Irish entries without specific dialect tagging in the source data. Most Wiktionary entries lack explicit dialect labels."@en .
+
+:GeneralScottishGaelic a :Dialect ;
+    rdfs:label "Scottish Gaelic (General)"@en, "Gàidhlig (Coitcheann)"@gd ;
+    :hasLanguage :ScottishGaelic .
+
+:GeneralManx a :Dialect ;
+    rdfs:label "Manx (General)"@en ;
+    :hasLanguage :Manx .
+
+# --- Irish dialects ---
+
+:ConnachtIrish a :Dialect ;
+    rdfs:label "Connacht Irish"@en, "Gaeilge Chonnacht"@ga ;
+    :hasLanguage :Irish ;
+    skos:broader :GeneralIrish .
+
+:UlsterIrish a :Dialect ;
+    rdfs:label "Ulster Irish"@en, "Gaeilge Uladh"@ga ;
+    :hasLanguage :Irish ;
+    skos:broader :GeneralIrish .
+
+:MunsterIrish a :Dialect ;
+    rdfs:label "Munster Irish"@en, "Gaeilge na Mumhan"@ga ;
+    :hasLanguage :Irish ;
+    skos:broader :GeneralIrish .
+
+:DonegalIrish a :Dialect ;
+    rdfs:label "Donegal Irish"@en, "Gaeilge Thír Chonaill"@ga ;
+    :hasLanguage :Irish ;
+    skos:broader :UlsterIrish .
+
+:ConnemaraIrish a :Dialect ;
+    rdfs:label "Connemara Irish"@en, "Gaeilge Chonamara"@ga ;
+    :hasLanguage :Irish ;
+    skos:broader :ConnachtIrish .
+
+:KerryIrish a :Dialect ;
+    rdfs:label "Kerry Irish"@en, "Gaeilge Chiarraí"@ga ;
+    :hasLanguage :Irish ;
+    skos:broader :MunsterIrish .
+
+:WaterfordIrish a :Dialect ;
+    rdfs:label "Waterford Irish"@en, "Gaeilge na nDéise"@ga ;
+    :hasLanguage :Irish ;
+    skos:broader :MunsterIrish .
+
+# --- Scottish Gaelic dialects ---
+
+:HighlandGaelic a :Dialect ;
+    rdfs:label "Highland Gaelic"@en ;
+    :hasLanguage :ScottishGaelic ;
+    skos:broader :GeneralScottishGaelic .
+
+:HebrideanGaelic a :Dialect ;
+    rdfs:label "Hebridean Gaelic"@en ;
+    :hasLanguage :ScottishGaelic ;
+    skos:broader :GeneralScottishGaelic .
+
+:ArgyllGaelic a :Dialect ;
+    rdfs:label "Argyll Gaelic"@en ;
+    :hasLanguage :ScottishGaelic ;
+    skos:broader :GeneralScottishGaelic .
+
+:hasDialect
+    a owl:ObjectProperty ;
+    rdfs:label "has dialect"@en ;
+    rdfs:range :Dialect ;
+    rdfs:comment
+        "Associates a Form, Sense, or Entry with a dialect. Source data is often partial; entries without explicit dialect tags receive a General dialect for their language."@en .
+
+
+#####################################################################
+# Register
+#####################################################################
+
+:Register
+    a owl:Class ;
+    rdfs:label "Register"@en ;
+    rdfs:comment
+        "A normative or stylistic variety of Irish. Distinct from dialect (geographic). Caighdeán vs pre-Caighdeán is the dominant distinction in modern lexicographic data."@en .
+
+:CaighdeanOifigiuil a :Register ;
+    rdfs:label "An Caighdeán Oifigiúil"@ga, "Official Standard"@en ;
+    rdfs:comment
+        "The Official Standard of Irish, established 1958 with revisions in 2012 and 2017. Used for official, educational, and most published Irish writing."@en .
+
+:PreCaighdean a :Register ;
+    rdfs:label "Réamh-Chaighdeán"@ga, "Pre-Caighdeán"@en ;
+    rdfs:comment
+        "Forms predating the Official Standard. Common in older literature and in some traditional dialect usage. Should not be collapsed into the standard form on ingest."@en .
+
+:hasRegister
+    a owl:ObjectProperty ;
+    rdfs:label "has register"@en ;
+    rdfs:range :Register .
+
+
+#####################################################################
+# Orthographic / notational variants
+#
+# Distinct from morphophonological processes: a notational variant
+# changes how a form is written, not which form it is.
+#####################################################################
+
+:NotationalVariant
+    a owl:Class ;
+    rdfs:label "Notational Variant"@en ;
+    rdfs:comment
+        "A variation in the written representation of a form that does not correspond to a phonological difference. Distinct from a morphophonological process: the spoken form is the same."@en .
+
+:DotAboveSeimhiu a :NotationalVariant ;
+    rdfs:label "Dot-above séimhiú"@en, "Buailte"@ga ;
+    rdfs:comment
+        "Traditional Gaelic typographic representation of lenition with an overdot (e.g. 'ḃ' for what is now written 'bh'). Used in pre-1950s typography and in some modern stylised contexts. Should be preserved as an alternative writtenRep, not normalised away."@en .
+
+:LenisHSeimhiu a :NotationalVariant ;
+    rdfs:label "lenis-h séimhiú"@en ;
+    rdfs:comment
+        "Modern representation of lenition by inserting an 'h' after the consonant (e.g. 'bh'). Standard in current Irish orthography and the default in An Caighdeán Oifigiúil."@en .
+
+:hasNotationalVariant
+    a owl:ObjectProperty ;
+    rdfs:label "has notational variant"@en ;
+    rdfs:domain ontolex:Form ;
+    rdfs:range :NotationalVariant ;
+    rdfs:comment
+        "Indicates which notational system a particular writtenRep belongs to. A single Form may have multiple writtenReps each with a different NotationalVariant."@en .
+
+
+#####################################################################
+# Provenance
+#
+# Per-entry attribution under CC BY-SA. Link to the page history;
+# do not enumerate contributor usernames.
+#####################################################################
+
+:WiktionarySource
+    a owl:Class ;
+    rdfs:subClassOf dcterms:BibliographicResource ;
+    rdfs:label "Wiktionary Source"@en ;
+    rdfs:comment
+        "Provenance record for a resource derived from a Wiktionary entry. Captures URL, dump date, license, and history link to satisfy CC BY-SA attribution requirements at per-entry granularity."@en .
+
+:wiktionaryUrl
+    a owl:DatatypeProperty ;
+    rdfs:domain :WiktionarySource ;
+    rdfs:range xsd:anyURI ;
+    rdfs:comment
+        "Canonical URL of the source entry, e.g. https://en.wiktionary.org/wiki/fear#Irish."@en .
+
+:historyUrl
+    a owl:DatatypeProperty ;
+    rdfs:domain :WiktionarySource ;
+    rdfs:range xsd:anyURI ;
+    rdfs:comment
+        "URL of the entry's revision history, satisfying contributor attribution under the 'reasonable to the medium' clause of CC BY-SA."@en .
+
+:dumpDate
+    a owl:DatatypeProperty ;
+    rdfs:domain :WiktionarySource ;
+    rdfs:range xsd:date ;
+    rdfs:comment
+        "Date of the enwiktionary XML dump from which the entry was extracted."@en .
+
+:kaikkiExtractDate
+    a owl:DatatypeProperty ;
+    rdfs:domain :WiktionarySource ;
+    rdfs:range xsd:date ;
+    rdfs:comment
+        "Date Kaikki.org's wiktextract pipeline produced the JSONL we ingested."@en .
+
+:wiktextractCommit
+    a owl:DatatypeProperty ;
+    rdfs:domain :WiktionarySource ;
+    rdfs:range xsd:string ;
+    rdfs:comment
+        "Wiktextract git commit hash recorded in the Kaikki extract metadata. Pinning this lets us reproduce exactly which extraction logic produced the JSONL."@en .
+
+
+#####################################################################
+# Convenience properties for common access patterns
+#####################################################################
+
+:isPartOfEtymologyGraph
+    a owl:DatatypeProperty ;
+    rdfs:range xsd:boolean ;
+    rdfs:comment
+        "Marker used by the bundle pipeline to flag resources that should be included in the etymology RDF subset shipped to Oxigraph WASM. Not part of the lexicographic model proper; consider moving to a delivery-side ontology if it accumulates more bundling concerns."@en .

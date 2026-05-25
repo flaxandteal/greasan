@@ -1,0 +1,37 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+build/
+
+# Environments
+.env/
+.venv/
+.nenv/
+
+# Data (all derived — raw downloads, interim, processed, prebuilds, indices, layers)
+data/
+
+# Node
+node_modules/
+
+# Notebooks
+notebooks/.ipynb_checkpoints/
+
+# IDE
+.idea/
+.vscode/
+
+# Test/cache
+.pytest_cache/
+
+# uv
+uv.lock
+
+# Build scripts — compiled binary (ros-madair-build is a checked-in binary, keep it;
+# but if you want to exclude it, uncomment the next line)
+# scripts/ros-madair-build
+
+# Claude design artifacts
+claude-design/
