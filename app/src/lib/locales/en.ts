@@ -24,6 +24,8 @@ const en: Record<string, string> = {
   'entry.senses': 'Senses',
   'entry.forms': 'Grammar forms',
   'entry.examples': 'Examples',
+  'entry.etymology': 'Etymology',
+  'entry.cognates': 'Related Words',
   'entry.star': 'Star',
   'entry.unstar': 'Unstar',
 
@@ -85,6 +87,7 @@ const en: Record<string, string> = {
   'settings.licenseSubtitle': 'Licensed under CC BY-SA 3.0 / 4.0 and GFDL.',
   'settings.licenseEntries': 'Dictionary entries \u2014 Wiktionary, licensed CC BY-SA 3.0/4.0 + GFDL. Extracted via Kaikki.org using Wiktextract (Ylonen 2022, LREC). Each entry links to its Wiktionary source page; contributors credited via page edit history.',
   'settings.licenseExamples': 'Example sentences \u2014 Tatoeba (CC BY 2.0 FR); Gaois Parallel Corpus of Legislation (Fiontar & Scoil na Gaeilge, DCU, CC BY 4.0).',
+  'settings.licenseMacbain': 'MacBain\'s Etymological Dictionary of the Gaelic Language (1911) \u2014 public domain. Attribution: Alexander MacBain, via Wikisource.',
   'settings.licenseFonts': 'Fonts \u2014 Kumbh Sans and League Gothic, both SIL Open Font License.',
   'settings.licenseShareAlike': 'This derived corpus inherits the Share-Alike obligation. Redistribution must preserve attribution and license terms.',
   'settings.licenseProvenance': 'Dump provenance, file hashes, and extract dates are recorded in the bundle manifest.',

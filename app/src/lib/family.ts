@@ -81,20 +81,26 @@ export const FAMILIES: Record<FamilyId, FamilyConfig> = {
     suggestedLayers: [
       {
         name: 'wiktionary-goidelic',
-        url: 'file:///home/philtweir/Cód/Oscailte/Gréasán/data/wiktionary-layer.tar.gz',
+        url: 'http://localhost:8080/wiktionary-layer.tar.gz',
         label: 'Wiktionary — Irish + Scottish Gaelic',
         format: 'built',
       },
       {
         name: 'wiktionary-fixture',
-        url: 'file:///home/philtweir/Cód/Oscailte/Gréasán/data/wiktionary-fixture-layer.tar.gz',
+        url: 'http://localhost:8080/wiktionary-fixture-layer.tar.gz',
         label: 'Wiktionary (fixture — ~60 lemmas)',
         format: 'built',
       },
       {
         name: 'tearma',
-        url: 'file:///home/philtweir/Cód/Oscailte/Gréasán/data/tearma-layer.tar.gz',
+        url: 'http://localhost:8080/tearma-layer.tar.gz',
         label: 'Téarma — Irish terminology',
+        format: 'built',
+      },
+      {
+        name: 'macbain',
+        url: 'http://localhost:8080/macbain-layer.tar.gz',
+        label: 'MacBain — Scottish Gaelic etymology (1911)',
         format: 'built',
       },
     ],

@@ -374,6 +374,7 @@
           <div class="license-detail">
             <p>{$t('settings.licenseEntries')}</p>
             <p>{$t('settings.licenseExamples')}</p>
+            <p>{$t('settings.licenseMacbain')}</p>
             <p>{$t('settings.licenseFonts')}</p>
             <p>{$t('settings.licenseShareAlike')}</p>
             <p style="margin-top:8px;font-size:var(--fs-micro);color:var(--fg-soft);">

@@ -22,6 +22,12 @@ COLUMNS = [
     "written_rep",
     "gram_features",
     "domain",
+    "etymology_text",
+    "etymology_source",
+    "cognate_headword",
+    "cognate_language",
+    "cognate_entry_id",
+    "related_entries",
 ]
 
 

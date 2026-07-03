@@ -31,9 +31,9 @@ dependencies = [
 
 [[package]]
 name = "alizarin-core"
-version = "2.0.0-alpha.103"
+version = "2.0.0-alpha.111"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b8be0a09664df75ce1b3b3515f4fb324e73095f85755fd498df2b9630036ea12"
+checksum = "e7886785ce9f4ae81dcacc39121dc1aef1567778577efe4cd0ac70a12e3091c0"
 dependencies = [
  "chrono",
  "csv",
@@ -3358,7 +3358,7 @@ dependencies = [
 
 [[package]]
 name = "ros-madair-core"
-version = "0.1.0-alpha.13"
+version = "0.1.0-alpha.15"
 dependencies = [
  "alizarin-core",
  "geojson",

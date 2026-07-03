@@ -40,6 +40,8 @@ export interface EntryDetail {
   senses: Array<{ gloss: string; examples: string[]; sourceLabel?: string }>;
   forms: Array<{ writtenRep: string; tags: string[] }>;
   ipa: string[];
+  etymologies: Array<{ text: string; sourceLabel?: string }>;
+  cognates: Array<{ headword: string; language: string; entryId?: string }>;
   externalExamples: ExternalExample[];
 }
 
@@ -317,6 +319,9 @@ async function searchOneInstance(
 
 export async function search(query: string, lang: SearchLang = 'ga', dialects?: string[]): Promise<EntrySummary[]> {
   if (!query.trim()) return [];
+  // Skip pagefind entirely for very short queries — single/two-char searches
+  // are expensive and return too many substring hits to be useful.
+  if (query.trim().length < 3) return [];
 
   try {
     await ensureStore();
@@ -347,7 +352,6 @@ export async function search(query: string, lang: SearchLang = 'ga', dialects?: 
       }
     }
 
-    // Sort: exact (with diacritics) > exact (without) > prefix (with) > prefix (without) > other
     const q = query.toLowerCase();
     const qNorm = normQuery.toLowerCase();
     merged.sort((a, b) => {
@@ -486,6 +490,92 @@ export async function loadEntry(uri: string, knownHeadword?: string): Promise<En
       }
     }
 
+    // Etymology — cardinality n, deduplicated across layers
+    const rawEtymologies: Array<{ text: string; sourceLabel?: string }> = [];
+    if (await instance.__has('etymology')) {
+      for (const e of await instance.etymology ?? []) {
+        const resolved = await e;
+        const text = String(await resolved?.etymology_text ?? '');
+        const sourceLabel = String(await resolved?.etymology_source ?? '');
+        if (text) rawEtymologies.push({ text, sourceLabel: sourceLabel || undefined });
+      }
+    }
+    // Deduplicate by text, merge source labels
+    const etymologies: EntryDetail['etymologies'] = [];
+    for (const etym of rawEtymologies) {
+      const existing = etymologies.find(e => e.text === etym.text);
+      if (existing && etym.sourceLabel) {
+        const labels = new Set((existing.sourceLabel ?? '').split('+').filter(Boolean));
+        labels.add(etym.sourceLabel);
+        existing.sourceLabel = [...labels].sort().join('+');
+      } else if (!existing) {
+        etymologies.push({ ...etym });
+      }
+    }
+
+    // Cognates — cardinality n
+    const cognates: EntryDetail['cognates'] = [];
+    if (await instance.__has('cognates')) {
+      for (const c of await instance.cognates ?? []) {
+        const resolved = await c;
+        const hw = String(await resolved?.cognate_headword ?? '');
+        const language = String(await resolved?.cognate_language ?? '');
+        // cognate_entry_id is resource-instance: ViewModel with .id, or null
+        const entryIdVm = await resolved?.cognate_entry_id;
+        const entryId = entryIdVm?.id || '';
+        if (hw) cognates.push({ headword: hw, language, entryId: entryId || undefined });
+      }
+    }
+
+    // Reverse cognate links via queryPatterns — find entries that cite THIS
+    // entry via cognate_entry_id (resource-instance). queryPatterns directly
+    // queries predicate blocks to find matching subjects, avoiding the
+    // page-level granularity problem of summaryToPage.
+    const REV_MAX = 10;
+    try {
+      const resourceUri = `${activeFamilyConfig.rdfBase}/resource/${uri}`;
+      const predUri = `${activeFamilyConfig.rdfBase}/node/cognate_entry_id`;
+      const patterns = JSON.stringify([{ s: '?x', p: predUri, o: resourceUri }]);
+      const citingUris: string[] = await withStoreMut(() => sparqlStore!.queryPatterns(patterns));
+      for (const srcUri of citingUris.slice(0, REV_MAX)) {
+        const srcId = srcUri.split('/resource/').pop() || '';
+        if (!srcId || srcId === uri) continue;
+        try {
+          const srcInstance = model.makeInstance(srcId, null, false, true);
+          await preloadTiles(sparqlStore!, srcUri, srcInstance);
+          await srcInstance.$.populate(false);
+          const srcHeadword = String(await srcInstance.headword ?? '');
+          const srcDialectVm = await srcInstance.dialect;
+          const srcDialect = srcDialectVm?.getDisplay ? await srcDialectVm.getDisplay() : '';
+          const srcLang = srcDialect?.includes('Scottish') ? 'Scottish Gaelic'
+            : srcDialect?.includes('Manx') ? 'Manx'
+            : srcDialect?.includes('Irish') || srcDialect?.includes('Connacht') || srcDialect?.includes('Ulster') || srcDialect?.includes('Munster') ? 'Irish'
+            : srcDialect || 'Unknown';
+          if (srcHeadword) {
+            const dedup = `${srcLang}:${srcHeadword}`;
+            if (!cognates.some(c => `${c.language}:${c.headword}` === dedup)) {
+              cognates.push({ headword: srcHeadword, language: srcLang, entryId: srcId });
+            }
+          }
+          // Surface etymology from the citing entry
+          if (await srcInstance.__has('etymology')) {
+            for (const e of await srcInstance.etymology ?? []) {
+              const resolved = await e;
+              const text = String(await resolved?.etymology_text ?? '');
+              const sourceLabel = String(await resolved?.etymology_source ?? '');
+              if (text && !etymologies.some(et => et.text === text)) {
+                etymologies.push({ text, sourceLabel: sourceLabel || undefined });
+              }
+            }
+          }
+        } catch (srcErr) {
+          console.warn('[dictionary] reverse src load failed:', srcId, srcErr);
+        }
+      }
+    } catch (revErr) {
+      console.warn('[dictionary] reverse cognate lookup (non-fatal):', revErr);
+    }
+
     // External examples — extract reference IDs from raw tile data (avoids
     // ResourceInstanceListViewModel which causes OOB via fire-and-forget promises),
     // then eagerly load each example resource to get sentence + translation text.
@@ -562,7 +652,7 @@ export async function loadEntry(uri: string, knownHeadword?: string): Promise<En
     // Use headword from: alizarin tile > caller > empty
     const displayHeadword = headword || knownHeadword || '';
 
-    return { uri, headword: displayHeadword, pos, dialect: dialect || undefined, senses, forms, ipa: ipaValues, externalExamples };
+    return { uri, headword: displayHeadword, pos, dialect: dialect || undefined, senses, forms, ipa: ipaValues, etymologies, cognates, externalExamples };
   } catch (err) {
     console.warn('[dictionary] loadEntry failed:', err);
     return null;

@@ -13,3 +13,11 @@ forms,written_rep,Written Form,string,1,http://www.w3.org/ns/lemon/ontolex#Repre
 forms,gram_features,Grammatical Features,concept-list,1,http://www.lexinfo.net/ontology/3.0/lexinfo#MorphosyntacticProperty,http://www.lexinfo.net/ontology/3.0/lexinfo#morphosyntacticProperty,Morphosyntactic tags,Grammatical Features,false,true,true,2
 ,domain,Domain,concept-list,n,http://purl.org/dc/terms/subject,http://purl.org/dc/terms/subject,Subject field(s),Subject Fields,false,true,true,7
 ,external_examples,External Examples,resource-instance-list,n,http://www.w3.org/ns/lemon/lexicog#UsageExample,http://www.w3.org/ns/lemon/lexicog#usageExample,Related corpus examples,,false,false,true,8
+,etymology,Etymology,semantic,n,http://lari-datasets.ilc.cnr.it/lemonEty#Etymology,http://lari-datasets.ilc.cnr.it/lemonEty#hasEtymology,Etymology prose,,,,true,9
+etymology,etymology_text,Etymology Text,string,1,https://flaxandteal.org/ontology/goidelic#etymologyText,https://flaxandteal.org/ontology/goidelic#etymologyText,Etymology prose text,,false,true,true,1
+etymology,etymology_source,Etymology Source,string,1,https://flaxandteal.org/ontology/goidelic#etymologySource,https://flaxandteal.org/ontology/goidelic#etymologySource,Source code,,false,false,true,2
+,cognates,Cognates,semantic,n,http://lari-datasets.ilc.cnr.it/lemonEty#Etymon,http://lari-datasets.ilc.cnr.it/lemonEty#hasEtymon,Related words in other languages,,,,true,10
+cognates,cognate_headword,Cognate Headword,string,1,https://flaxandteal.org/ontology/goidelic#cognateHeadword,https://flaxandteal.org/ontology/goidelic#cognateHeadword,Written form of cognate,,false,true,true,1
+cognates,cognate_language,Cognate Language,string,1,https://flaxandteal.org/ontology/goidelic#cognateLanguage,https://flaxandteal.org/ontology/goidelic#cognateLanguage,Language of cognate,,false,true,true,2
+cognates,cognate_entry_id,Cognate Entry ID,resource-instance,1,https://flaxandteal.org/ontology/goidelic#cognateEntryId,https://flaxandteal.org/ontology/goidelic#cognateEntryId,ResourceID of linked entry,,false,false,true,3
+,related_entries,Related Entries,resource-instance-list,n,http://lari-datasets.ilc.cnr.it/lemonEty#Etymon,http://lari-datasets.ilc.cnr.it/lemonEty#hasEtymon,Cross-linked cognate entries,,false,false,true,11

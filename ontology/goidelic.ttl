@@ -332,3 +332,52 @@
     rdfs:range xsd:boolean ;
     rdfs:comment
         "Marker used by the bundle pipeline to flag resources that should be included in the etymology RDF subset shipped to Oxigraph WASM. Not part of the lexicographic model proper; consider moving to a delivery-side ontology if it accumulates more bundling concerns."@en .
+
+
+#####################################################################
+# Etymology data properties
+#
+# Backing properties for the etymology and cognates nodegroups in the
+# LexicalEntry resource model. Used to store MacBain (and future
+# etymology source) prose and parsed cognate data.
+#####################################################################
+
+:etymologyText
+    a owl:DatatypeProperty ;
+    rdfs:label "etymology text"@en ;
+    rdfs:domain ety:Etymology ;
+    rdfs:range xsd:string ;
+    rdfs:comment
+        "Plain-text etymology prose, as extracted from the source (e.g. MacBain). HTML stripped, entities decoded."@en .
+
+:etymologySource
+    a owl:DatatypeProperty ;
+    rdfs:label "etymology source"@en ;
+    rdfs:domain ety:Etymology ;
+    rdfs:range xsd:string ;
+    rdfs:comment
+        "Short code identifying the etymology source layer, e.g. 'MB' for MacBain. Used for source badges in the UI."@en .
+
+:cognateHeadword
+    a owl:DatatypeProperty ;
+    rdfs:label "cognate headword"@en ;
+    rdfs:domain ety:Etymon ;
+    rdfs:range xsd:string ;
+    rdfs:comment
+        "Written form of a cognate word in another language, as cited in an etymology source."@en .
+
+:cognateLanguage
+    a owl:DatatypeProperty ;
+    rdfs:label "cognate language"@en ;
+    rdfs:domain ety:Etymon ;
+    rdfs:range xsd:string ;
+    rdfs:comment
+        "Language label for the cognate, e.g. 'Irish', 'Old Irish', 'Welsh', 'Latin'."@en .
+
+:cognateEntryId
+    a owl:DatatypeProperty ;
+    rdfs:label "cognate entry ID"@en ;
+    rdfs:domain ety:Etymon ;
+    rdfs:range xsd:string ;
+    rdfs:comment
+        "ResourceID of the linked LexicalEntry for this cognate, when one exists in the corpus. Used by the frontend to render clickable cross-references."@en .

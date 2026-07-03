@@ -218,8 +218,56 @@
   letter-spacing: 0.08em;
   text-transform: uppercase;
   flex-shrink: 0;
-  align-self: center;
+  align-self: flex-start;
+  margin-top: 2px;
   margin-left: 8px;
+}
+
+/* Etymology prose (full ink, readable) */
+.ge-etym-prose {
+  color: var(--fg-default);
+  font-size: 15px;
+  line-height: 1.6;
+  text-wrap: pretty;
+}
+
+/* Cognate rows inside ge-list card */
+.ge-cognate-lang {
+  color: var(--fg-muted);
+  font-size: var(--fs-small);
+  font-weight: 600;
+  min-width: 80px;
+  flex-shrink: 0;
+  font-variant: small-caps;
+  text-transform: lowercase;
+}
+.ge-cognate-words {
+  color: var(--fg-default);
+  font-style: italic;
+  line-height: 1.45;
+}
+.ge-cognate-link {
+  color: var(--teal-mid);
+  text-decoration: underline;
+  text-decoration-color: rgba(75, 122, 129, 0.3);
+  text-underline-offset: 2px;
+  cursor: pointer;
+  background: none;
+  border: none;
+  padding: 0;
+  font: inherit;
+  font-style: italic;
+}
+.ge-cognate-link:hover,
+.ge-cognate-link:active {
+  text-decoration-color: var(--teal-mid);
+}
+[data-mode="dark"] .ge-cognate-link {
+  color: var(--accent);
+  text-decoration-color: rgba(217, 199, 142, 0.3);
+}
+[data-mode="dark"] .ge-cognate-link:hover {
+  text-decoration-color: var(--accent);
 }
 
 mark.ge-mark { background: var(--hl-bg); border-radius: 2px; padding: 0 1px; color: inherit;

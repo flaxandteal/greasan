@@ -24,6 +24,8 @@ const ga: Record<string, string> = {
   'entry.senses': 'Bríonna \u00b7 Senses',
   'entry.forms': 'Foirmeacha \u00b7 Grammar forms',
   'entry.examples': 'Samplaí \u00b7 Examples',
+  'entry.etymology': 'Sanasaíocht \u00b7 Etymology',
+  'entry.cognates': 'Focail Ghaolmhara \u00b7 Related Words',
   'entry.star': 'Réalta',
   'entry.unstar': 'Bain réalta',
 
@@ -85,6 +87,7 @@ const ga: Record<string, string> = {
   'settings.licenseSubtitle': 'Licensed under CC BY-SA 3.0 / 4.0 and GFDL.',
   'settings.licenseEntries': 'Dictionary entries \u2014 Wiktionary, licensed CC BY-SA 3.0/4.0 + GFDL. Extracted via Kaikki.org using Wiktextract (Ylonen 2022, LREC). Each entry links to its Wiktionary source page; contributors credited via page edit history.',
   'settings.licenseExamples': 'Example sentences \u2014 Tatoeba (CC BY 2.0 FR); Gaois Parallel Corpus of Legislation (Fiontar & Scoil na Gaeilge, DCU, CC BY 4.0).',
+  'settings.licenseMacbain': 'Foclóir Sanasaíochta na Gàidhlig le MacBain (1911) \u2014 san fhearann poiblí. Aiteantas: Alasdair MacBain, trí Wikisource.',
   'settings.licenseFonts': 'Fonts \u2014 Kumbh Sans and League Gothic, both SIL Open Font License.',
   'settings.licenseShareAlike': 'This derived corpus inherits the Share-Alike obligation. Redistribution must preserve attribution and license terms.',
   'settings.licenseProvenance': 'Dump provenance, file hashes, and extract dates are recorded in the bundle manifest.',

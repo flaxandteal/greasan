@@ -1,6 +1,6 @@
 <script lang="ts">
-  import { currentEntry, familyConfig, starredEntries, toggleStar } from '../lib/store';
-  import type { EntryDetail } from '../lib/dictionary';
+  import { currentEntry, loading, familyConfig, starredEntries, toggleStar } from '../lib/store';
+  import { loadEntry, type EntryDetail } from '../lib/dictionary';
   import { dialectCode } from '../lib/family';
   import { t } from '../lib/i18n';
   import ExampleList from './ExampleList.svelte';
@@ -44,6 +44,25 @@
     { key: 'lenited', title: 'Lenited', match: (tags) => tags.some(tg => tg.toLowerCase().includes('lenited') || tg.toLowerCase().includes('lenition')) },
     { key: 'eclipsed', title: 'Eclipsed', match: (tags) => tags.some(tg => tg.toLowerCase().includes('eclipsed') || tg.toLowerCase().includes('eclipsis')) },
   ];
+
+  async function selectEntry(uri: string, headword: string) {
+    loading.set(true);
+    try {
+      const detail = await loadEntry(uri, headword);
+      currentEntry.set(detail);
+    } finally {
+      loading.set(false);
+    }
+  }
+
+  function groupedCognates(cognates: EntryDetail['cognates']): Array<{ language: string; cognates: EntryDetail['cognates'] }> {
+    const map = new Map<string, EntryDetail['cognates']>();
+    for (const c of cognates) {
+      if (!map.has(c.language)) map.set(c.language, []);
+      map.get(c.language)!.push(c);
+    }
+    return [...map.entries()].map(([language, cognates]) => ({ language, cognates }));
+  }
 
   function groupedForms(forms: EntryDetail['forms']) {
     const used = new Set<number>();
@@ -94,11 +113,12 @@
 
       <div style="padding:4px 18px 0;">
         <div class="ge-headword display" style="color:var(--cream);font-size:84px;">{entry.headword}</div>
-        <div style="font-size:14px;font-style:italic;color:rgba(246,244,235,0.72);margin-top:{hasDescenders ? '8px' : '-4px'};">
-          {entry.pos}
+        <div style="font-size:14px;color:rgba(246,244,235,0.72);margin-top:{hasDescenders ? '8px' : '-4px'};display:flex;align-items:baseline;gap:8px;flex-wrap:wrap;">
+          {#if entry.pos}
+            <span style="font-style:italic;">{entry.pos}</span>
+          {/if}
           {#if entry.dialect && dialectCode($familyConfig.id, entry.dialect)}
-            {#if entry.pos}<span style="margin:0 4px;">·</span>{/if}
-            <span style="font-style:normal;font-size:11px;letter-spacing:0.06em;font-weight:600;opacity:0.7;">{dialectCode($familyConfig.id, entry.dialect)}</span>
+            <span style="font-size:11px;letter-spacing:0.08em;font-weight:600;background:rgba(246,244,235,0.12);padding:2px 7px;border-radius:4px;">{dialectCode($familyConfig.id, entry.dialect)}</span>
           {/if}
         </div>
 
@@ -169,12 +189,57 @@
       </div>
     {/if}
 
+    <!-- Etymology -->
+    {#if entry.etymologies.length > 0}
+      <div class="ge-block-title">{$t('entry.etymology')}</div>
+      <div style="padding:0 16px;">
+        <div class="ge-list">
+          {#each entry.etymologies as etym}
+            <div class="ge-list-row" style="align-items:flex-start;">
+              <div class="row-main">
+                <div class="ge-etym-prose">{etym.text}</div>
+              </div>
+              {#if etym.sourceLabel}
+                <span class="ge-layer-tag">{etym.sourceLabel}</span>
+              {/if}
+            </div>
+          {/each}
+        </div>
+      </div>
+    {/if}
+
+    <!-- Cognates -->
+    {#if entry.cognates.length > 0}
+      <div class="ge-block-title">{$t('entry.cognates')}</div>
+      <div style="padding:0 16px;">
+        <div class="ge-list">
+          {#each groupedCognates(entry.cognates) as group}
+            <div class="ge-list-row" style="align-items:baseline;">
+              <span class="ge-cognate-lang">{group.language}</span>
+              <span class="ge-cognate-words">
+                {#each group.cognates as cognate, i}
+                  {#if i > 0}<span style="font-style:normal;color:var(--fg-soft);"> · </span>{/if}
+                  {#if cognate.entryId}
+                    <button class="ge-cognate-link" onclick={() => selectEntry(cognate.entryId!, cognate.headword)}>{cognate.headword}</button>
+                  {:else}
+                    {cognate.headword}
+                  {/if}
+                {/each}
+              </span>
+            </div>
+          {/each}
+        </div>
+      </div>
+    {/if}
+
     <!-- External examples -->
     {#if entry.externalExamples.length > 0}
       <div class="ge-block-title">{$t('entry.examples')}</div>
-      <div style="padding:0 16px 32px;">
+      <div style="padding:0 16px;">
         <ExampleList examples={entry.externalExamples} />
       </div>
     {/if}
+
+    <div style="padding-bottom:32px;"></div>
   </div>
 {/if}
