@@ -13,13 +13,62 @@ tauri-build = { version = "2", features = [] }
 [dependencies]
 tauri = { version = "2", features = ["protocol-asset"] }
 tauri-plugin-opener = "2"
+tauri-plugin-dialog = "2"
+tauri-plugin-fs = "2"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 ros-madair-core = { path = "../../../magic/RosMadair/crates/ros-madair-core" }
+# NOTE (v2 pilot): this points at the *sandbox* alizarin checkout, not
+# ../../../magic/alizarin. The v2 stack (ros-madair-query) hard-depends on the
+# sandbox core, and cargo cannot lock two copies of alizarin-core that share a
+# version (both are 2.0.0-alpha.120):
+#
+#   error: package collision in the lockfile: packages alizarin-core
+#   v2.0.0-alpha.120 (.../alizarin-sandbox/crates/alizarin-core) and
+#   alizarin-core v2.0.0-alpha.120 (.../alizarin/crates/alizarin-core) are
+#   different, but only one can be written to lockfile unambiguously
+#
+# ...and even at distinct versions, cargo refuses "the same package twice with
+# different names". The sandbox core is a superset (adds datatype_index /
+# IndexClass); v1 (ros-madair-core + this app) compiles against it unchanged.
+# UPSTREAM REQUEST R1: bump the sandbox core's version so both can coexist —
+# then this line reverts to ../../../magic/alizarin and v2.rs gets its own
+# `alizarin-core-v2 = { package = "alizarin-core", path = "...sandbox...",
+# optional = true }` alias back (v2.rs is already JSON-isolated for that).
+alizarin-core = { path = "../../../magic/alizarin-sandbox/crates/alizarin-core" }
 reqwest = { version = "0.12", features = ["rustls-tls"], default-features = false }
+quick-xml = "0.37"
 uuid = { version = "1", features = ["v4"] }
 tokio = { version = "1", features = ["fs", "sync"] }
 flate2 = "1"
 tar = "0.4"
 zip = { version = "2", default-features = false, features = ["deflate"] }
 percent-encoding = "2"
+unicode-normalization = "0.1"
+pagefind = { path = "../../../svg/malazan-experiment/pagefind/pagefind", default-features = false }
+
+# --- v2 static-assets pilot (optional; see src/v2.rs) -----------------------
+# The v2 core is the `alizarin-core` above (see the collision note there); only
+# the v2-only crates are gated. v2.rs still crosses into the app as JSON only,
+# so re-splitting the cores later touches no application code.
+alizarin-clm-core-v2 = { package = "alizarin-clm-core", path = "../../../magic/alizarin-sandbox/crates/alizarin-clm-core", optional = true }
+ros-madair-query = { path = "../../../magic/RosMadair-sandbox/crates/ros-madair-query", optional = true }
+rusqlite = { version = "0.32", features = ["bundled"], optional = true }
+rmp-serde = { version = "1", optional = true }
+
+[features]
+v2 = [
+    "dep:alizarin-clm-core-v2",
+    "dep:ros-madair-query",
+    "dep:rusqlite",
+    "dep:rmp-serde",
+]
+
+[target.'cfg(target_os = "android")'.dependencies]
+jni = "0.21"
+ndk-context = "0.1"
+
+[patch.crates-io]
+# Ensure ros-madair-core uses the same local alizarin-core (avoids type mismatch
+# between crates.io alizarin-core and the local path version).
+alizarin-core = { path = "../../../magic/alizarin-sandbox/crates/alizarin-core" }
