@@ -18,24 +18,16 @@ tauri-plugin-fs = "2"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 ros-madair-core = { path = "../../../magic/RosMadair/crates/ros-madair-core" }
-# NOTE (v2 pilot): this points at the *sandbox* alizarin checkout, not
-# ../../../magic/alizarin. The v2 stack (ros-madair-query) hard-depends on the
-# sandbox core, and cargo cannot lock two copies of alizarin-core that share a
-# version (both are 2.0.0-alpha.120):
+# v1 and the shipping app build against the REAL core (2.0.0-alpha.120). The v2
+# pilot links a *second* copy — the sandbox core, 2.0.0-alpha.121 — under the
+# `alizarin-core-v2` alias below.
 #
-#   error: package collision in the lockfile: packages alizarin-core
-#   v2.0.0-alpha.120 (.../alizarin-sandbox/crates/alizarin-core) and
-#   alizarin-core v2.0.0-alpha.120 (.../alizarin/crates/alizarin-core) are
-#   different, but only one can be written to lockfile unambiguously
-#
-# ...and even at distinct versions, cargo refuses "the same package twice with
-# different names". The sandbox core is a superset (adds datatype_index /
-# IndexClass); v1 (ros-madair-core + this app) compiles against it unchanged.
-# UPSTREAM REQUEST R1: bump the sandbox core's version so both can coexist —
-# then this line reverts to ../../../magic/alizarin and v2.rs gets its own
-# `alizarin-core-v2 = { package = "alizarin-core", path = "...sandbox...",
-# optional = true }` alias back (v2.rs is already JSON-isolated for that).
-alizarin-core = { path = "../../../magic/alizarin-sandbox/crates/alizarin-core" }
+# That used to be impossible: both cores were 2.0.0-alpha.120, and a lockfile
+# cannot hold two same-name/same-version packages from different paths ("package
+# collision in the lockfile"), so the whole app was dragged onto the sandbox
+# core. Upstream bumped the sandbox core to .121, so the two are now
+# distinguishable and cargo locks both.
+alizarin-core = { path = "../../../magic/alizarin/crates/alizarin-core" }
 reqwest = { version = "0.12", features = ["rustls-tls"], default-features = false }
 quick-xml = "0.37"
 uuid = { version = "1", features = ["v4"] }
@@ -48,27 +40,50 @@ unicode-normalization = "0.1"
 pagefind = { path = "../../../svg/malazan-experiment/pagefind/pagefind", default-features = false }
 
 # --- v2 static-assets pilot (optional; see src/v2.rs) -----------------------
-# The v2 core is the `alizarin-core` above (see the collision note there); only
-# the v2-only crates are gated. v2.rs still crosses into the app as JSON only,
-# so re-splitting the cores later touches no application code.
-alizarin-clm-core-v2 = { package = "alizarin-clm-core", path = "../../../magic/alizarin-sandbox/crates/alizarin-clm-core", optional = true }
+# The sandbox core, aliased so it sits alongside the real one above. v2.rs is
+# JSON-in / JSON-out, so no v2 type escapes this seam into the app.
+alizarin-core-v2 = { package = "alizarin-core", path = "../../../magic/alizarin-sandbox/crates/alizarin-core", optional = true }
+# The native read path: hydration, tile recovery, manifest loading. Replaces the
+# hand-rolled dict/spine/fragment_dir/chunks join and the msgpack read loop that
+# used to live in v2.rs.
+ros-madair-read = { path = "../../../magic/RosMadair-sandbox/crates/ros-madair-read", optional = true }
+# The artifact format types — notably `Manifest.handlers`, which is what makes
+# the registry below derivable instead of guessable.
+ros-madair-format = { path = "../../../magic/RosMadair-sandbox/crates/ros-madair-format", optional = true }
+# The single source of the extension-type registry. We no longer hand-build one
+# from alizarin-clm-core: the registry is rebuilt from the handler set the
+# *manifest declares*, so an emit/query registry mismatch fails loudly instead of
+# silently returning zero rows.
+ros-madair-handlers = { path = "../../../magic/RosMadair-sandbox/crates/ros-madair-handlers", optional = true }
 ros-madair-query = { path = "../../../magic/RosMadair-sandbox/crates/ros-madair-query", optional = true }
 rusqlite = { version = "0.32", features = ["bundled"], optional = true }
-rmp-serde = { version = "1", optional = true }
+# Regeneration only (`v2-emit`) — see examples/regen-macbain-v2.rs. Emitting from
+# *this* workspace keeps us off the sandbox's target/ lock and Cargo.lock, which
+# `cargo run -p ros-madair-emit --manifest-path <sandbox>` would take.
+ros-madair-emit = { path = "../../../magic/RosMadair-sandbox/crates/ros-madair-emit", optional = true }
 
 [features]
 v2 = [
-    "dep:alizarin-clm-core-v2",
+    "dep:alizarin-core-v2",
+    "dep:ros-madair-read",
+    "dep:ros-madair-format",
+    "dep:ros-madair-handlers",
     "dep:ros-madair-query",
     "dep:rusqlite",
-    "dep:rmp-serde",
 ]
+v2-emit = ["v2", "dep:ros-madair-emit"]
+
+[[example]]
+name = "regen-macbain-v2"
+required-features = ["v2-emit"]
 
 [target.'cfg(target_os = "android")'.dependencies]
 jni = "0.21"
 ndk-context = "0.1"
 
 [patch.crates-io]
-# Ensure ros-madair-core uses the same local alizarin-core (avoids type mismatch
-# between crates.io alizarin-core and the local path version).
-alizarin-core = { path = "../../../magic/alizarin-sandbox/crates/alizarin-core" }
+# ros-madair-core (v1) asks crates.io for alizarin-core; point it at the same
+# real local core the app uses, so v1 types match. The sandbox core is NOT
+# patched in here — the v2 crates reach it by path, which is exactly what lets
+# the two versions coexist.
+alizarin-core = { path = "../../../magic/alizarin/crates/alizarin-core" }
