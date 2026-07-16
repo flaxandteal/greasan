@@ -43,6 +43,7 @@ use std::path::{Path, PathBuf};
 
 use alizarin_core_v2::graph::StaticGraph;
 use ros_madair_handlers::ExtensionTypeRegistry;
+use ros_madair_read::Layers;
 use rusqlite::types::ValueRef;
 use serde_json::Value;
 
@@ -205,6 +206,81 @@ pub fn v2_query(head_dir: String, ir: Value) -> Result<Value, String> {
     run_query(Path::new(&head_dir), &ir, &graph)
 }
 
+// ---------------------------------------------------------------------------
+// Multi-layer composition (R1) — `ros-madair-read`'s `Layers`.
+//
+// The single-head commands above read ONE snapshot. `Layers` reads N ordered
+// snapshots (base first, later overrides earlier) as one composed view — a
+// shipped BASE plus overlays Gréasán emits on-device as the user edits. This is
+// the path the eventual `SparqlStore` replacement takes; the commands here prove
+// the R1 API compiles and runs through the dual-core seam. Precedence is
+// per-nodegroup and lives entirely inside `ros-madair-read`; this module stays a
+// JSON-in / JSON-out boundary, so no v2 type escapes into the app.
+//
+// The registry, graph and composability contract all come from the FIRST layer:
+// `Layers::open` refuses layers that disagree on base_uri / handler set / spine
+// tables / field class, so the base's registry and graph are authoritative for
+// the stack. Layers may carry different *model sets* (an overlay carries only
+// what was edited), but the shared model must be described identically.
+// ---------------------------------------------------------------------------
+
+/// Open an ordered layer stack, base first. Precedence = order.
+fn open_layers(head_dirs: &[String]) -> Result<Layers, String> {
+    let paths: Vec<PathBuf> = head_dirs.iter().map(PathBuf::from).collect();
+    let refs: Vec<&Path> = paths.iter().map(PathBuf::as_path).collect();
+    Layers::open(&refs).map_err(|e| e.to_string())
+}
+
+/// Compile a `ros-madair-query` IR against the composed view of a layer stack.
+///
+/// The registry and graph are taken from the first (base) layer — the
+/// composability check in `Layers::open` guarantees the rest agree. A
+/// `CountRecords` measure returns a composed count (`Layers::count`); anything
+/// else resolves the matching UUIDs (`Layers::resolve`), since a number cannot be
+/// precedence-filtered.
+#[tauri::command]
+pub fn v2_query_layers(head_dirs: Vec<String>, ir: Value) -> Result<Value, String> {
+    let Some(base) = head_dirs.first() else {
+        return Err("v2_query_layers: no layers given".to_string());
+    };
+    let graph = load_graph(&graph_path(base))?;
+    let registry = registry(Path::new(base))?;
+    let query: ros_madair_query::Query =
+        serde_json::from_value(ir).map_err(|e| format!("bad query IR: {e}"))?;
+    let layers = open_layers(&head_dirs)?;
+
+    let wants_count = query
+        .measures
+        .iter()
+        .any(|m| *m == ros_madair_query::Measure::CountRecords);
+    if wants_count {
+        let count = layers
+            .count(&query, &graph, Some(&registry))
+            .map_err(|e| e.to_string())?;
+        Ok(serde_json::json!({ "measure": "count_records", "count": count }))
+    } else {
+        let ids = layers
+            .resolve(&query, &graph, Some(&registry))
+            .map_err(|e| e.to_string())?;
+        Ok(serde_json::json!({ "measure": "select_ids", "ids": ids }))
+    }
+}
+
+/// Hydrate one resource from the composed view of a layer stack: gather its tiles
+/// from every layer that has it, merge with per-nodegroup precedence (topmost
+/// wins), then hydrate to a schema-aware JSON tree. The graph is the base's.
+#[tauri::command]
+pub fn v2_hydrate_layers(head_dirs: Vec<String>, resource_id: String) -> Result<Value, String> {
+    let Some(base) = head_dirs.first() else {
+        return Err("v2_hydrate_layers: no layers given".to_string());
+    };
+    let graph = load_graph(&graph_path(base))?;
+    let layers = open_layers(&head_dirs)?;
+    layers
+        .hydrate_resource(&resource_id, &graph)
+        .map_err(|e| e.to_string())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -329,5 +405,115 @@ mod tests {
         .unwrap();
         ros_madair_query::compile_with_registry(&query, &graph(), Some(&registry))
             .expect("manifest-derived registry makes the reference field head-indexed");
+    }
+
+    // -----------------------------------------------------------------------
+    // Multi-layer composition (R1) — single-element layer set as the baseline
+    // that proves the `Layers` API links + runs through the dual-core seam.
+    // A one-layer stack must compose to exactly the single-head answers.
+    // -----------------------------------------------------------------------
+
+    fn single_layer() -> Layers {
+        Layers::open(&[head_dir().as_path()]).expect("single-layer stack opens")
+    }
+
+    /// The seam itself: `Layers::open` links through `alizarin-core-v2` and a
+    /// one-element stack is well-formed.
+    #[test]
+    fn layers_open_single() {
+        let layers = single_layer();
+        assert_eq!(layers.len(), 1, "one head, one layer");
+        assert!(!layers.is_empty());
+    }
+
+    /// `count_records` through `Layers::count` must equal the single-head spine
+    /// count — a one-layer stack has nothing to override.
+    #[test]
+    fn layers_count_all_records() {
+        let ir = json!({ "model": "lexical-entry", "measures": ["count_records"] });
+        let query: ros_madair_query::Query = serde_json::from_value(ir).unwrap();
+        let registry = registry(&head_dir()).unwrap();
+        let count = single_layer()
+            .count(&query, &graph(), Some(&registry))
+            .expect("composed count");
+        assert_eq!(count, 7860, "composed count == single-head spine count");
+        assert_eq!(
+            count as i64,
+            sql_count("SELECT COUNT(*) FROM spine_lexical_entry"),
+            "Layers::count disagrees with direct SQL"
+        );
+    }
+
+    /// The manifest-derived registry works THROUGH `Layers`: a concept `is`
+    /// filter on the `reference`-datatype `dialect` node resolves to the same
+    /// 4980 resources the single-head path counts. `resolve` is capped by
+    /// `limit`, so it is lifted above the result size here.
+    #[test]
+    fn layers_resolve_reference() {
+        let concept = "1052ed22-def2-5e6b-a5a2-ddff79e08e70";
+        let ir = json!({
+            "model": "lexical-entry",
+            "where": { "concept": { "path": "dialect", "op": "is", "value": concept } },
+            "measures": ["select_ids"],
+            "limit": 10000,
+        });
+        let query: ros_madair_query::Query = serde_json::from_value(ir).unwrap();
+        let registry = registry(&head_dir()).unwrap();
+        let ids = single_layer()
+            .resolve(&query, &graph(), Some(&registry))
+            .expect("composed resolve on a reference field");
+        assert_eq!(ids.len(), 4980, "composed resolve on reference field");
+        assert_eq!(
+            ids.len() as i64,
+            sql_count(
+                "SELECT COUNT(DISTINCT ct.rid) FROM concept_tags ct \
+                 JOIN dict n ON n.term_id = ct.node \
+                 JOIN dict c ON c.term_id = ct.concept \
+                 WHERE n.term = '69fb02e1-6d10-5a11-9bc2-4a02ad7fb8b0' \
+                 AND c.term = '1052ed22-def2-5e6b-a5a2-ddff79e08e70'"
+            ),
+            "Layers::resolve count disagrees with direct SQL"
+        );
+        // The composed count agrees with the composed resolve — the fast path
+        // and the reference path on one query.
+        let count_ir = json!({
+            "model": "lexical-entry",
+            "where": { "concept": { "path": "dialect", "op": "is", "value": concept } },
+            "measures": ["count_records"],
+        });
+        let count_query: ros_madair_query::Query = serde_json::from_value(count_ir).unwrap();
+        assert_eq!(
+            single_layer()
+                .count(&count_query, &graph(), Some(&registry))
+                .unwrap(),
+            4980,
+            "Layers::count and Layers::resolve disagree"
+        );
+    }
+
+    /// `Layers::hydrate_resource` composes (trivially, one layer) and hydrates to
+    /// the same tree the single-head path produces: 19 cognates + 7 etymology,
+    /// text "vocative particle".
+    #[test]
+    fn layers_hydrate_sample() {
+        let tree = single_layer()
+            .hydrate_resource(SAMPLE, &graph())
+            .expect("composed hydrate");
+        let text = serde_json::to_string(&tree).unwrap();
+        assert!(
+            text.contains("vocative particle"),
+            "etymology_text not hydrated: {}",
+            &text[..text.len().min(400)]
+        );
+        let cognates = tree
+            .get("cognates")
+            .and_then(Value::as_array)
+            .expect("cognates array present");
+        let etymology = tree
+            .get("etymology")
+            .and_then(Value::as_array)
+            .expect("etymology array present");
+        assert_eq!(cognates.len(), 19, "cognate tiles");
+        assert_eq!(etymology.len(), 7, "etymology tiles");
     }
 }

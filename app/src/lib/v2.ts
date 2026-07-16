@@ -60,3 +60,40 @@ export async function queryV2(headDir: string, ir: V2Query): Promise<V2Result[]>
   const out = await invoke<{ results: V2Result[] }>('v2_query', { headDir, ir });
   return out.results;
 }
+
+// ---------------------------------------------------------------------------
+// Multi-layer composition (R1) — the path for the eventual SparqlStore
+// replacement.
+//
+// `queryV2`/`hydrateV2` above read ONE head. These read an ORDERED STACK of
+// heads (base first, later layers override earlier) as one composed view: a
+// shipped BASE plus overlays Gréasán emits on-device as the user edits. Rust
+// (`ros-madair-read::Layers`) owns per-nodegroup precedence; the webview still
+// only ever sees JSON. `headDirs[0]` is authoritative for the graph + registry,
+// and `Layers::open` refuses layers that are not mutually composable.
+// ---------------------------------------------------------------------------
+
+/** The composed answer to a layered query. Shape depends on the measure. */
+export type V2LayersResult =
+  /** A `count_records` measure: the composed record count. */
+  | { measure: 'count_records'; count: number }
+  /** Any other measure: the matching resource UUIDs (capped by `ir.limit`). */
+  | { measure: 'select_ids'; ids: string[] };
+
+/**
+ * Query the composed view of an ordered layer stack (`headDirs`, base first).
+ * A `count_records` measure returns a composed count; otherwise the matching
+ * UUIDs are resolved (a count cannot be precedence-filtered).
+ */
+export async function queryLayers(headDirs: string[], ir: V2Query): Promise<V2LayersResult> {
+  return await invoke<V2LayersResult>('v2_query_layers', { headDirs, ir });
+}
+
+/**
+ * Hydrate one resource from the composed view of an ordered layer stack: its
+ * tiles are gathered from every layer that carries it and merged with
+ * per-nodegroup precedence (topmost wins) before hydration. Graph is `headDirs[0]`.
+ */
+export async function hydrateLayers(headDirs: string[], resourceId: string): Promise<unknown> {
+  return await invoke<unknown>('v2_hydrate_layers', { headDirs, resourceId });
+}

@@ -45,6 +45,8 @@ pub fn run() {
         builder_plugin::layer_has_pagefind,
         v2::v2_hydrate,
         v2::v2_query,
+        v2::v2_query_layers,
+        v2::v2_hydrate_layers,
     ]);
 
     builder
