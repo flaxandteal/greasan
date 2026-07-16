@@ -31,9 +31,9 @@ dependencies = [
 
 [[package]]
 name = "alizarin-clm-core"
-version = "2.0.0-alpha.121"
+version = "2.0.0-alpha.122"
 dependencies = [
- "alizarin-core 2.0.0-alpha.121",
+ "alizarin-core 2.0.0-alpha.122",
  "regex",
  "serde",
  "serde_json",
@@ -41,7 +41,7 @@ dependencies = [
 
 [[package]]
 name = "alizarin-core"
-version = "2.0.0-alpha.120"
+version = "2.0.0-alpha.121"
 dependencies = [
  "chrono",
  "csv",
@@ -59,7 +59,7 @@ dependencies = [
 
 [[package]]
 name = "alizarin-core"
-version = "2.0.0-alpha.121"
+version = "2.0.0-alpha.122"
 dependencies = [
  "chrono",
  "csv",
@@ -1783,8 +1783,8 @@ dependencies = [
 name = "greasan"
 version = "0.1.0"
 dependencies = [
- "alizarin-core 2.0.0-alpha.120",
  "alizarin-core 2.0.0-alpha.121",
+ "alizarin-core 2.0.0-alpha.122",
  "flate2",
  "jni",
  "ndk-context",
@@ -4117,7 +4117,7 @@ dependencies = [
 name = "ros-madair-core"
 version = "0.1.0-alpha.15"
 dependencies = [
- "alizarin-core 2.0.0-alpha.120",
+ "alizarin-core 2.0.0-alpha.121",
  "geojson",
  "rmp-serde",
  "serde",
@@ -4130,7 +4130,7 @@ dependencies = [
 name = "ros-madair-emit"
 version = "0.1.0-alpha.15"
 dependencies = [
- "alizarin-core 2.0.0-alpha.121",
+ "alizarin-core 2.0.0-alpha.122",
  "rmp-serde",
  "ros-madair-format",
  "ros-madair-handlers",
@@ -4145,7 +4145,7 @@ dependencies = [
 name = "ros-madair-format"
 version = "0.1.0-alpha.15"
 dependencies = [
- "alizarin-core 2.0.0-alpha.121",
+ "alizarin-core 2.0.0-alpha.122",
  "getrandom 0.2.17",
  "ros-madair-handlers",
  "serde",
@@ -4157,7 +4157,7 @@ name = "ros-madair-handlers"
 version = "0.1.0-alpha.15"
 dependencies = [
  "alizarin-clm-core",
- "alizarin-core 2.0.0-alpha.121",
+ "alizarin-core 2.0.0-alpha.122",
  "getrandom 0.2.17",
  "serde",
 ]
@@ -4166,7 +4166,7 @@ dependencies = [
 name = "ros-madair-query"
 version = "0.1.0-alpha.15"
 dependencies = [
- "alizarin-core 2.0.0-alpha.121",
+ "alizarin-core 2.0.0-alpha.122",
  "getrandom 0.2.17",
  "serde",
  "serde_json",
@@ -4176,7 +4176,7 @@ dependencies = [
 name = "ros-madair-read"
 version = "0.1.0-alpha.15"
 dependencies = [
- "alizarin-core 2.0.0-alpha.121",
+ "alizarin-core 2.0.0-alpha.122",
  "rmp-serde",
  "ros-madair-format",
  "ros-madair-query",
@@ -5293,7 +5293,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "32497e9a4c7b38532efcdebeef879707aa9f794296a4f0244f6f69e9bc8574bd"
 dependencies = [
  "fastrand",
- "getrandom 0.4.2",
+ "getrandom 0.3.4",
  "once_cell",
  "rustix",
  "windows-sys 0.61.2",
