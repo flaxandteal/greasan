@@ -268,63 +268,51 @@ pub fn v2_query_layers(head_dirs: Vec<String>, ir: Value) -> Result<Value, Strin
 }
 
 // ---------------------------------------------------------------------------
-// Closure label resolution.
+// Concept label resolution.
 //
 // Hydrated trees leave REFERENCE/concept fields (part_of_speech, dialect,
-// source_label, …) as RAW UUIDs — the head indexes concept ids, not their
-// human labels. Each head ships a `closure.json` mapping those ids to labels:
+// gram_features, …) as RAW concept UUIDs — the head indexes concept ids, not
+// their human labels. Upstream (A2) retired the sidecar `closure.json` and
+// moved the labels INTO the head: the `vocab` table now carries a `label`
+// column keyed by the concept's dict `term_id`, so display resolves as a
+// self-contained SQL join
 //
-//   { "concepts":  { "<concept-uuid>": { "label": "...", ... }, ... },
-//     "value_map": { "<value-uuid>":   "<concept-uuid>", ... } }
+//   SELECT d.term, v.label FROM vocab v JOIN dict d ON d.term_id = v.concept
 //
-// A tile may carry either the concept id directly or a value id (the reference
-// datatype's per-instance value node). So the merged map keys BOTH forms onto
-// the label: concept-id -> label, and value-id -> label (via value_map). Later
-// layers override earlier, matching the base-first precedence of `Layers`.
+// where `d.term` is the concept UUID string and `v.label` its display label.
+// The old `value_map` (value-id -> concept-id) was only ever an emit-time
+// intermediate and is NOT carried in the head; macbain's reference values are
+// bare concept UUIDs, so they key straight into this map with no indirection.
+// Later layers override earlier, matching the base-first precedence of `Layers`.
 // ---------------------------------------------------------------------------
 
-#[derive(serde::Deserialize)]
-struct ClosureConcept {
-    #[serde(default)]
-    label: String,
-}
-
-#[derive(serde::Deserialize)]
-struct ClosureFile {
-    #[serde(default)]
-    concepts: HashMap<String, ClosureConcept>,
-    #[serde(default)]
-    value_map: HashMap<String, String>,
-}
-
-/// Read `<dir>/closure.json` for each head (base first) and fold into one
-/// `uuid -> label` map. Both concept ids and value ids resolve to the label;
-/// later layers override earlier. A head without a `closure.json` contributes
-/// nothing (overlays need not carry concepts) rather than failing the stack.
+/// Fold each head's (base first) `vocab.label` into one `uuid -> label` map by
+/// joining `vocab` to `dict` on the concept term_id. Concept UUIDs resolve
+/// directly; later layers override earlier. A head whose `vocab` is empty (an
+/// overlay that carries no concepts) simply contributes nothing rather than
+/// failing the stack. The command name and signature are unchanged from the
+/// `closure.json` era so the TS wrapper and `loadEntryV2` need no edits.
 #[tauri::command]
 pub fn v2_closure(head_dirs: Vec<String>) -> Result<HashMap<String, String>, String> {
     let mut map: HashMap<String, String> = HashMap::new();
     for dir in &head_dirs {
-        let path = Path::new(dir).join("closure.json");
-        if !path.exists() {
-            continue;
-        }
-        let raw = std::fs::read_to_string(&path)
-            .map_err(|e| format!("read {}: {e}", path.display()))?;
-        let closure: ClosureFile =
-            serde_json::from_str(&raw).map_err(|e| format!("parse {}: {e}", path.display()))?;
-        // concept-id -> label
-        for (id, concept) in &closure.concepts {
-            if !concept.label.is_empty() {
-                map.insert(id.clone(), concept.label.clone());
-            }
-        }
-        // value-id -> concept-id -> label
-        for (value_id, concept_id) in &closure.value_map {
-            if let Some(concept) = closure.concepts.get(concept_id) {
-                if !concept.label.is_empty() {
-                    map.insert(value_id.clone(), concept.label.clone());
-                }
+        let conn = ros_madair_read::open_head(Path::new(dir)).map_err(|e| e.to_string())?;
+        let mut stmt = conn
+            .prepare(
+                "SELECT d.term, v.label FROM vocab v \
+                 JOIN dict d ON d.term_id = v.concept \
+                 WHERE v.label IS NOT NULL",
+            )
+            .map_err(|e| format!("prepare vocab-label query for {dir}: {e}"))?;
+        let rows = stmt
+            .query_map([], |row| {
+                Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
+            })
+            .map_err(|e| format!("query vocab.label for {dir}: {e}"))?;
+        for row in rows {
+            let (uuid, label) = row.map_err(|e| format!("row from {dir}: {e}"))?;
+            if !label.is_empty() {
+                map.insert(uuid, label);
             }
         }
     }
@@ -737,47 +725,61 @@ mod tests {
     }
 
     // -----------------------------------------------------------------------
-    // Closure label resolution.
+    // Concept label resolution (A2: head's `vocab.label`, not `closure.json`).
     // -----------------------------------------------------------------------
 
-    /// `v2_closure` folds `closure.json` into a `uuid -> label` map where BOTH
-    /// a concept id and its value id resolve to the non-empty label.
+    /// `v2_closure` folds the head's `vocab.label` (via the `dict`/`vocab` join)
+    /// into a `uuid -> label` map. Concept UUIDs resolve DIRECTLY now — the old
+    /// value-id indirection is gone with `closure.json`.
     #[test]
     fn closure_resolves_known_uuids() {
         let map = v2_closure(vec![head_dir().to_string_lossy().into_owned()])
-            .expect("closure map builds from data/macbain-v2/closure.json");
-        assert!(!map.is_empty(), "closure map is non-empty");
+            .expect("label map builds from data/macbain-v2/head.sqlite vocab.label");
+        assert!(!map.is_empty(), "label map is non-empty");
 
-        // A concept id present in `concepts` resolves directly.
+        // A concept UUID resolves to its label via `vocab.label`.
         assert_eq!(
             map.get("0caceaea-9c8d-5df1-8fd2-4d015708fe3f").map(String::as_str),
             Some("noun"),
             "concept id resolves to its label",
         );
-        // A value id present in `value_map` resolves via its concept.
+        // A second concept UUID — pronoun's value-id indirection is retired, so
+        // the concept id itself is what a tile now carries and what resolves.
         assert_eq!(
-            map.get("021e83d3-cfa2-5dc7-8b3e-6c31af821b1c").map(String::as_str),
+            map.get("80fe1942-8911-5e10-8f7b-8dc6c78b223d").map(String::as_str),
             Some("pronoun"),
-            "value id resolves through value_map to the concept label",
+            "pronoun concept id resolves directly (no value_map)",
+        );
+        // The reference-datatype dialect concept resolves to its display label.
+        assert_eq!(
+            map.get("1052ed22-def2-5e6b-a5a2-ddff79e08e70").map(String::as_str),
+            Some("Scottish Gaelic (General)"),
+            "dialect reference concept resolves to its label",
         );
         // Every mapped label is non-empty.
         assert!(
             map.values().all(|l| !l.is_empty()),
-            "no empty labels in the closure map",
+            "no empty labels in the label map",
         );
     }
 
-    /// Two-layer closure is the merge of both heads' `closure.json` (later wins).
+    /// Two-layer label map is the merge of both heads' `vocab.label` (later wins).
     #[test]
     fn closure_merges_layers() {
         let dirs = vec![
             wiktionary_dir().to_string_lossy().into_owned(),
             head_dir().to_string_lossy().into_owned(),
         ];
-        let map = v2_closure(dirs).expect("merged closure builds");
+        let map = v2_closure(dirs).expect("merged label map builds");
         assert!(
             map.get("0caceaea-9c8d-5df1-8fd2-4d015708fe3f").map(String::as_str) == Some("noun"),
             "macbain concept still resolves in the merged map",
+        );
+        // The dialect concept — carried by both layers — resolves in the merge.
+        assert_eq!(
+            map.get("1052ed22-def2-5e6b-a5a2-ddff79e08e70").map(String::as_str),
+            Some("Scottish Gaelic (General)"),
+            "reference concept resolves through the merged map",
         );
     }
 
@@ -801,7 +803,8 @@ mod tests {
         eprintln!("=== shared uuid: {uuid} ===");
         eprintln!("{}", serde_json::to_string_pretty(&tree).unwrap());
 
-        // Also show what the closure resolves the raw reference uuids to.
+        // Also show what the vocab-backed label map resolves the raw reference
+        // uuids to.
         let map = v2_closure(vec![
             wikt.to_string_lossy().into_owned(),
             mac.to_string_lossy().into_owned(),
