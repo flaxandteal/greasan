@@ -1,7 +1,7 @@
 <script lang="ts">
   import { get } from 'svelte/store';
   import { searchQuery, searchResults, currentEntry, loading, activeTab, searchLang, visibleDialects, familyConfig, recentEntries, overlayView, layers } from '../lib/store';
-  import { search, loadEntry } from '../lib/dictionary';
+  import { search, loadEntryFlagged } from '../lib/dictionary';
   import type { SearchLang } from '../lib/dictionary';
   import { t } from '../lib/i18n';
 
@@ -59,7 +59,7 @@
   async function selectEntry(uri: string, headword: string) {
     loading.set(true);
     try {
-      const entry = await loadEntry(uri, headword);
+      const entry = await loadEntryFlagged(uri, headword);
       currentEntry.set(entry);
     } finally {
       loading.set(false);

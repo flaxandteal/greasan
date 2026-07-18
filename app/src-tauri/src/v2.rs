@@ -39,6 +39,7 @@
 //! JSON-out (`serde_json::Value` at every public boundary), so no v2 type
 //! escapes into the app and the two cores never meet.
 
+use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
 use alizarin_core_v2::graph::StaticGraph;
@@ -264,6 +265,70 @@ pub fn v2_query_layers(head_dirs: Vec<String>, ir: Value) -> Result<Value, Strin
             .map_err(|e| e.to_string())?;
         Ok(serde_json::json!({ "measure": "select_ids", "ids": ids }))
     }
+}
+
+// ---------------------------------------------------------------------------
+// Closure label resolution.
+//
+// Hydrated trees leave REFERENCE/concept fields (part_of_speech, dialect,
+// source_label, …) as RAW UUIDs — the head indexes concept ids, not their
+// human labels. Each head ships a `closure.json` mapping those ids to labels:
+//
+//   { "concepts":  { "<concept-uuid>": { "label": "...", ... }, ... },
+//     "value_map": { "<value-uuid>":   "<concept-uuid>", ... } }
+//
+// A tile may carry either the concept id directly or a value id (the reference
+// datatype's per-instance value node). So the merged map keys BOTH forms onto
+// the label: concept-id -> label, and value-id -> label (via value_map). Later
+// layers override earlier, matching the base-first precedence of `Layers`.
+// ---------------------------------------------------------------------------
+
+#[derive(serde::Deserialize)]
+struct ClosureConcept {
+    #[serde(default)]
+    label: String,
+}
+
+#[derive(serde::Deserialize)]
+struct ClosureFile {
+    #[serde(default)]
+    concepts: HashMap<String, ClosureConcept>,
+    #[serde(default)]
+    value_map: HashMap<String, String>,
+}
+
+/// Read `<dir>/closure.json` for each head (base first) and fold into one
+/// `uuid -> label` map. Both concept ids and value ids resolve to the label;
+/// later layers override earlier. A head without a `closure.json` contributes
+/// nothing (overlays need not carry concepts) rather than failing the stack.
+#[tauri::command]
+pub fn v2_closure(head_dirs: Vec<String>) -> Result<HashMap<String, String>, String> {
+    let mut map: HashMap<String, String> = HashMap::new();
+    for dir in &head_dirs {
+        let path = Path::new(dir).join("closure.json");
+        if !path.exists() {
+            continue;
+        }
+        let raw = std::fs::read_to_string(&path)
+            .map_err(|e| format!("read {}: {e}", path.display()))?;
+        let closure: ClosureFile =
+            serde_json::from_str(&raw).map_err(|e| format!("parse {}: {e}", path.display()))?;
+        // concept-id -> label
+        for (id, concept) in &closure.concepts {
+            if !concept.label.is_empty() {
+                map.insert(id.clone(), concept.label.clone());
+            }
+        }
+        // value-id -> concept-id -> label
+        for (value_id, concept_id) in &closure.value_map {
+            if let Some(concept) = closure.concepts.get(concept_id) {
+                if !concept.label.is_empty() {
+                    map.insert(value_id.clone(), concept.label.clone());
+                }
+            }
+        }
+    }
+    Ok(map)
 }
 
 /// Hydrate one resource from the composed view of a layer stack: gather its tiles
@@ -669,5 +734,86 @@ mod tests {
             .expect("etymology array present");
         assert_eq!(cognates.len(), 19, "cognate tiles");
         assert_eq!(etymology.len(), 7, "etymology tiles");
+    }
+
+    // -----------------------------------------------------------------------
+    // Closure label resolution.
+    // -----------------------------------------------------------------------
+
+    /// `v2_closure` folds `closure.json` into a `uuid -> label` map where BOTH
+    /// a concept id and its value id resolve to the non-empty label.
+    #[test]
+    fn closure_resolves_known_uuids() {
+        let map = v2_closure(vec![head_dir().to_string_lossy().into_owned()])
+            .expect("closure map builds from data/macbain-v2/closure.json");
+        assert!(!map.is_empty(), "closure map is non-empty");
+
+        // A concept id present in `concepts` resolves directly.
+        assert_eq!(
+            map.get("0caceaea-9c8d-5df1-8fd2-4d015708fe3f").map(String::as_str),
+            Some("noun"),
+            "concept id resolves to its label",
+        );
+        // A value id present in `value_map` resolves via its concept.
+        assert_eq!(
+            map.get("021e83d3-cfa2-5dc7-8b3e-6c31af821b1c").map(String::as_str),
+            Some("pronoun"),
+            "value id resolves through value_map to the concept label",
+        );
+        // Every mapped label is non-empty.
+        assert!(
+            map.values().all(|l| !l.is_empty()),
+            "no empty labels in the closure map",
+        );
+    }
+
+    /// Two-layer closure is the merge of both heads' `closure.json` (later wins).
+    #[test]
+    fn closure_merges_layers() {
+        let dirs = vec![
+            wiktionary_dir().to_string_lossy().into_owned(),
+            head_dir().to_string_lossy().into_owned(),
+        ];
+        let map = v2_closure(dirs).expect("merged closure builds");
+        assert!(
+            map.get("0caceaea-9c8d-5df1-8fd2-4d015708fe3f").map(String::as_str) == Some("noun"),
+            "macbain concept still resolves in the merged map",
+        );
+    }
+
+    /// SCRATCH (kept): dumps the composed wiktionary+macbain hydrate of the
+    /// shared UUID so the TS flattener can be written against real key/value
+    /// shapes — especially how part_of_speech / dialect / senses / source_label
+    /// appear (raw uuids vs objects, card-1 vs card-n). Run with:
+    ///   cargo test --features v2-emit --lib -- dump_shared_tree --nocapture
+    #[test]
+    fn dump_shared_tree() {
+        let wikt = wiktionary_dir();
+        let mac = head_dir();
+        let graph = load_graph(&wikt.join("graph.json")).expect("base graph loads");
+        let composed = Layers::open(&[wikt.as_path(), mac.as_path()]).expect("compose");
+        let uuid = if composed.hydrate_resource(SHARED, &graph).is_ok() {
+            SHARED
+        } else {
+            SHARED_ALT
+        };
+        let tree = composed.hydrate_resource(uuid, &graph).expect("hydrate");
+        eprintln!("=== shared uuid: {uuid} ===");
+        eprintln!("{}", serde_json::to_string_pretty(&tree).unwrap());
+
+        // Also show what the closure resolves the raw reference uuids to.
+        let map = v2_closure(vec![
+            wikt.to_string_lossy().into_owned(),
+            mac.to_string_lossy().into_owned(),
+        ])
+        .expect("closure");
+        for key in ["part_of_speech", "dialect"] {
+            if let Some(v) = tree.get(key) {
+                eprintln!(
+                    "{key} = {v:?}  -> label {:?}",
+                    v.as_str().and_then(|s| map.get(s))
+                );
+            }
+        }
     }
 }

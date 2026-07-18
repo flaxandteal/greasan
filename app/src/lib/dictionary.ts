@@ -6,6 +6,7 @@ import { ready } from './wasm';
 import { getPagefind, resetPagefind, type PagefindInstance } from './pagefind';
 import { FAMILIES, DEFAULT_FAMILY, type FamilyConfig, type FamilyId } from './family';
 import { diagStart, diagEnd } from './diagnostics';
+import { loadEntryV2 } from './dictionary-v2';
 
 let activeFamilyConfig: FamilyConfig = FAMILIES[DEFAULT_FAMILY];
 
@@ -657,6 +658,43 @@ export async function loadEntry(uri: string, knownHeadword?: string): Promise<En
     console.warn('[dictionary] loadEntry failed:', err);
     return null;
   }
+}
+
+// ---------------------------------------------------------------------------
+// v2 entry-detail path (static-assets pilot), behind a feature flag.
+//
+// `loadEntryV2` sources the SAME `EntryDetail` from the v2 cross-layer hydrate
+// (`v2_hydrate_layers`) + closure label resolution instead of the v1
+// SparqlStore-populate path. v1 `loadEntry` above stays untouched and default.
+// ---------------------------------------------------------------------------
+
+/**
+ * Feature flag: when true, entry detail is sourced from the v2 stack. Default
+ * FALSE — the v1 SparqlStore path remains the shipping default. Requires
+ * src-tauri built with `--features v2`.
+ */
+export const USE_V2 = false;
+
+/**
+ * Ordered v2 layer head dirs (base -> overlay: wiktionary then macbain).
+ *
+ * DEV-PATH CONSTANT. The Rust `v2_*` commands resolve these on the native side
+ * (`Path::new(dir)`), so at runtime they must be paths the Tauri process can
+ * open. This absolute repo path works for `tauri dev` on the pilot machine;
+ * shipping needs real installed-layer resolution (Tauri path APIs / the layer
+ * registry that `dynamicLayers` already tracks). See the report's UI-run note.
+ */
+export const V2_HEAD_DIRS: string[] = [
+  '/home/philtweir/Cód/Oscailte/Gréasán/data/wiktionary-v2',
+  '/home/philtweir/Cód/Oscailte/Gréasán/data/macbain-v2',
+];
+
+/**
+ * Dispatch entry loading by the `USE_V2` flag. The UI calls this; v1 `loadEntry`
+ * stays the default path when `USE_V2` is false.
+ */
+export function loadEntryFlagged(uri: string, knownHeadword?: string): Promise<EntryDetail | null> {
+  return USE_V2 ? loadEntryV2(uri, V2_HEAD_DIRS) : loadEntry(uri, knownHeadword);
 }
 
 export async function loadExample(resourceId: string): Promise<ExampleDetail | null> {

@@ -47,6 +47,7 @@ pub fn run() {
         v2::v2_query,
         v2::v2_query_layers,
         v2::v2_hydrate_layers,
+        v2::v2_closure,
     ]);
 
     builder

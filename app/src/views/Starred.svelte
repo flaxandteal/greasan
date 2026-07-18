@@ -1,6 +1,6 @@
 <script lang="ts">
   import { starredEntries, currentEntry, loading } from '../lib/store';
-  import { loadEntry } from '../lib/dictionary';
+  import { loadEntryFlagged } from '../lib/dictionary';
   import { t } from '../lib/i18n';
 
   type SortMode = 'recent' | 'alpha';
@@ -15,7 +15,7 @@
   async function selectEntry(uri: string, headword: string) {
     loading.set(true);
     try {
-      const entry = await loadEntry(uri, headword);
+      const entry = await loadEntryFlagged(uri, headword);
       currentEntry.set(entry);
     } finally {
       loading.set(false);

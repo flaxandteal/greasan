@@ -1,6 +1,6 @@
 <script lang="ts">
   import { currentEntry, loading, familyConfig, starredEntries, toggleStar } from '../lib/store';
-  import { loadEntry, type EntryDetail } from '../lib/dictionary';
+  import { loadEntryFlagged, type EntryDetail } from '../lib/dictionary';
   import { dialectCode } from '../lib/family';
   import { t } from '../lib/i18n';
   import ExampleList from './ExampleList.svelte';
@@ -48,7 +48,7 @@
   async function selectEntry(uri: string, headword: string) {
     loading.set(true);
     try {
-      const detail = await loadEntry(uri, headword);
+      const detail = await loadEntryFlagged(uri, headword);
       currentEntry.set(detail);
     } finally {
       loading.set(false);
