@@ -42,7 +42,7 @@
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
-use alizarin_core_v2::graph::StaticGraph;
+use alizarin_core::graph::StaticGraph;
 use ros_madair_handlers::ExtensionTypeRegistry;
 use ros_madair_read::Layers;
 use rusqlite::types::ValueRef;
@@ -669,6 +669,65 @@ mod tests {
             merged_keys.len(),
             wikt_keys.len(),
             mac_keys.len()
+        );
+    }
+
+    /// FULL-HEAD proof: exactly the head dirs the running app is wired to
+    /// (`V2_HEAD_DIRS` = wiktionary-v2-full + macbain-v2), hydrating the shared
+    /// `fear` UUID through the SAME code path the `v2_hydrate_layers` Tauri
+    /// command runs (`open_layers` → `Layers::hydrate_resource`). Prints the
+    /// merged tree so a human can see wiktionary's headword/senses AND macbain's
+    /// etymology/cognates in one resource. Run with `-- --nocapture`.
+    fn wiktionary_full_dir() -> PathBuf {
+        Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../../data/wiktionary-v2-full")
+            .canonicalize()
+            .expect("data/wiktionary-v2-full present (the app's V2_HEAD_DIRS base)")
+    }
+
+    #[test]
+    #[ignore = "requires data/wiktionary-v2-full/ incl. chunks on disk (not committed — 74MB binary); full-head proof, run explicitly"]
+    fn fear_merge_full_head_app_path() {
+        // The app passes String paths to v2_hydrate_layers; mirror that exactly.
+        let head_dirs: Vec<String> = vec![
+            wiktionary_full_dir().to_string_lossy().into_owned(),
+            head_dir().to_string_lossy().into_owned(),
+        ];
+        let graph = load_graph(&graph_path(&head_dirs[0])).expect("full-head base graph loads");
+        let layers = open_layers(&head_dirs).expect("wiktionary-full + macbain compose");
+        assert_eq!(layers.len(), 2, "two layers");
+
+        // fear — has wiktionary headword+senses AND macbain etymology+cognates.
+        const FEAR: &str = "e98ed0c3-34e5-5f5f-8151-fe77547d56d7";
+        let merged = layers
+            .hydrate_resource(FEAR, &graph)
+            .expect("fear hydrates through the FULL-head 2-layer stack");
+
+        let merged_keys = tree_keys(&merged);
+        let pretty = serde_json::to_string_pretty(&merged).unwrap();
+        eprintln!("=== fear ({FEAR}) merged via FULL head + macbain ===");
+        eprintln!("merged nodegroup keys: {merged_keys:?}");
+        eprintln!("headword field       : {:?}", merged.get("headword"));
+        eprintln!(
+            "merged tree (first 1600 chars):\n{}",
+            &pretty[..pretty.len().min(1600)]
+        );
+
+        // macbain enrichment present in the merge...
+        assert!(
+            merged_keys.contains("etymology") && merged_keys.contains("cognates"),
+            "FULL-head merge missing macbain etymology/cognates: {merged_keys:?}"
+        );
+        // ...alongside wiktionary-side content (more than just the two macbain
+        // nodegroups), i.e. the union is genuinely enriched.
+        assert!(
+            merged_keys.len() > 2,
+            "FULL-head merge did not carry wiktionary nodegroups too: {merged_keys:?}"
+        );
+        // The wiktionary headword text survives into the merged tree.
+        assert!(
+            pretty.contains("fear"),
+            "merged tree does not contain the headword text 'fear'"
         );
     }
 
