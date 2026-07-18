@@ -77,6 +77,10 @@ v2-emit = ["v2", "dep:ros-madair-emit"]
 name = "regen-macbain-v2"
 required-features = ["v2-emit"]
 
+[[example]]
+name = "regen-layer-v2"
+required-features = ["v2-emit"]
+
 [target.'cfg(target_os = "android")'.dependencies]
 jni = "0.21"
 ndk-context = "0.1"

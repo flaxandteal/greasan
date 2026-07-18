@@ -491,6 +491,160 @@ mod tests {
         );
     }
 
+    // -----------------------------------------------------------------------
+    // Multi-layer composition (R1) — the real thing: TWO layers, wiktionary
+    // (base, 185 resources across 2 models) + macbain (overlay, 7860 lexical
+    // entries), composed on the 7 UUIDs they share. macbain enriches a
+    // wiktionary headword with etymology + cognates under the SAME resource
+    // UUID and the SAME lexical-entry graph; the cross-layer tile merge is the
+    // union of their nodegroups. Heads are produced by
+    // `examples/regen-layer-v2.rs` (see that file / this report's provenance).
+    // -----------------------------------------------------------------------
+
+    /// A UUID present in BOTH prebuild-wiktionary (lexical-entry) and
+    /// prebuild-macbain. Its wiktionary tiles are the headword-side nodegroups;
+    /// its macbain tiles are etymology + cognates. Disjoint nodegroup sets, so
+    /// the composed hydrate is a clean union.
+    const SHARED: &str = "e98ed0c3-34e5-5f5f-8151-fe77547d56d7";
+    /// Fallback shared UUID, same shape.
+    const SHARED_ALT: &str = "512ab3f3-e9e8-5f9d-8297-c2ac397d7d4a";
+
+    fn wiktionary_dir() -> PathBuf {
+        Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../../data/wiktionary-v2")
+            .canonicalize()
+            .expect("data/wiktionary-v2 present (see examples/regen-layer-v2.rs)")
+    }
+
+    /// Top-level tree keys = the aliases of the root nodegroups the composed
+    /// resource carries. This is the observable of the merge.
+    fn tree_keys(tree: &Value) -> std::collections::BTreeSet<String> {
+        tree.as_object()
+            .map(|o| o.keys().cloned().collect())
+            .unwrap_or_default()
+    }
+
+    /// The point of the whole swap: a resource shared across two real layers
+    /// hydrates to the UNION of both layers' nodegroups, base + overlay.
+    #[test]
+    fn cross_layer_merge_shared_uuid() {
+        let wikt = wiktionary_dir();
+        let mac = head_dir();
+
+        // The graph is the base's (both layers describe lexical-entry
+        // identically — that is what `Layers::open` checks).
+        let graph = load_graph(&wikt.join("graph.json")).expect("base graph loads");
+
+        // base = wiktionary, overlay = macbain. If this refuses, the real layer
+        // data does not honour the composition contract — a key finding, not a
+        // thing to hack around.
+        let composed = Layers::open(&[wikt.as_path(), mac.as_path()])
+            .expect("wiktionary+macbain compose (base_uri/handlers/spine/field-class agree)");
+        assert_eq!(composed.len(), 2, "two layers");
+
+        // Pick a shared UUID that hydrates from the composed stack.
+        let uuid = if composed.hydrate_resource(SHARED, &graph).is_ok() {
+            SHARED
+        } else {
+            SHARED_ALT
+        };
+
+        let merged = composed
+            .hydrate_resource(uuid, &graph)
+            .expect("composed hydrate of shared uuid");
+
+        // Same UUID through each single layer alone.
+        let wikt_only = Layers::open(&[wikt.as_path()]).expect("wiktionary single layer");
+        let mac_only = Layers::open(&[mac.as_path()]).expect("macbain single layer");
+        let wikt_tree = wikt_only
+            .hydrate_resource(uuid, &graph)
+            .expect("wiktionary-alone hydrate");
+        let mac_tree = mac_only
+            .hydrate_resource(uuid, &graph)
+            .expect("macbain-alone hydrate");
+
+        let merged_keys = tree_keys(&merged);
+        let wikt_keys = tree_keys(&wikt_tree);
+        let mac_keys = tree_keys(&mac_tree);
+
+        // Make the merge visible in the test log (`cargo test -- --nocapture`).
+        eprintln!("shared uuid           : {uuid}");
+        eprintln!("wiktionary-only keys  : {wikt_keys:?}");
+        eprintln!("macbain-only keys     : {mac_keys:?}");
+        eprintln!("composed (merged) keys: {merged_keys:?}");
+
+        // macbain's enrichment nodegroups are macbain-only...
+        assert!(
+            mac_keys.contains("etymology") && mac_keys.contains("cognates"),
+            "macbain layer must carry etymology + cognates: {mac_keys:?}"
+        );
+        assert!(
+            !wikt_keys.contains("etymology") && !wikt_keys.contains("cognates"),
+            "etymology/cognates must NOT be in the wiktionary layer: {wikt_keys:?}"
+        );
+        // ...and wiktionary carries at least one nodegroup macbain does not.
+        let wikt_exclusive: Vec<_> = wikt_keys.difference(&mac_keys).collect();
+        assert!(
+            !wikt_exclusive.is_empty(),
+            "wiktionary must contribute a nodegroup macbain lacks: {wikt_keys:?} vs {mac_keys:?}"
+        );
+
+        // The composed tree contains BOTH a wiktionary-only nodegroup AND
+        // macbain's etymology + cognates: the union, not either layer alone.
+        assert!(
+            merged_keys.contains("etymology") && merged_keys.contains("cognates"),
+            "composed tree missing macbain enrichment: {merged_keys:?}"
+        );
+        for k in &wikt_exclusive {
+            assert!(
+                merged_keys.contains(k.as_str()),
+                "composed tree dropped wiktionary-only nodegroup {k}: {merged_keys:?}"
+            );
+        }
+        // Genuine union: composed keys == wiktionary keys ∪ macbain keys.
+        let union: std::collections::BTreeSet<String> =
+            wikt_keys.union(&mac_keys).cloned().collect();
+        assert_eq!(
+            merged_keys, union,
+            "composed nodegroup set is not the union of the two layers"
+        );
+        // And the union is strictly bigger than either layer — enrichment
+        // actually happened, this is not one layer masking the other.
+        assert!(
+            merged_keys.len() > wikt_keys.len() && merged_keys.len() > mac_keys.len(),
+            "merge did not enlarge the nodegroup set: merged {} wikt {} mac {}",
+            merged_keys.len(),
+            wikt_keys.len(),
+            mac_keys.len()
+        );
+    }
+
+    /// The overlay's non-shared resources still hydrate through the 2-layer
+    /// stack: `SAMPLE` exists only in macbain, and composing wiktionary under it
+    /// must not hide it.
+    #[test]
+    fn cross_layer_overlay_only_uuid() {
+        let wikt = wiktionary_dir();
+        let mac = head_dir();
+        let graph = load_graph(&wikt.join("graph.json")).expect("base graph loads");
+        let composed =
+            Layers::open(&[wikt.as_path(), mac.as_path()]).expect("wiktionary+macbain compose");
+
+        let tree = composed
+            .hydrate_resource(SAMPLE, &graph)
+            .expect("overlay-only uuid hydrates through the 2-layer set");
+        let cognates = tree
+            .get("cognates")
+            .and_then(Value::as_array)
+            .expect("cognates present from overlay");
+        let etymology = tree
+            .get("etymology")
+            .and_then(Value::as_array)
+            .expect("etymology present from overlay");
+        assert_eq!(cognates.len(), 19, "overlay-only cognate tiles preserved");
+        assert_eq!(etymology.len(), 7, "overlay-only etymology tiles preserved");
+    }
+
     /// `Layers::hydrate_resource` composes (trivially, one layer) and hydrates to
     /// the same tree the single-head path produces: 19 cognates + 7 etymology,
     /// text "vocative particle".
