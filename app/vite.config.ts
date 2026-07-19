@@ -33,6 +33,48 @@ function pagefindServe(): Plugin {
   };
 }
 
+// v2 dev pagefind serving. The v2 layers' Pagefind indices live outside the app
+// (data/<layer>-index/pagefind-<lang>/, extracted from the built pagefind zips).
+// Serving them via public/ symlinks blows the inotify watcher limit (thousands
+// of .pf_fragment files); a request-time middleware reads them on demand WITHOUT
+// vite watching them, and keeps them same-origin so the Tauri CSP `'self'`
+// connect-src allows the fetch (no CORS, no CSP edit). Maps
+// `/layer-<name>/...` -> `../data/<name>-index/...`. Production would serve these
+// via the pfzip custom protocol like v1 (see dictionary.ts V2_LAYERS note).
+function v2LayerServe(): Plugin {
+  const CT: Record<string, string> = {
+    '.js': 'application/javascript', '.mjs': 'application/javascript',
+    '.json': 'application/json', '.css': 'text/css', '.wasm': 'application/wasm',
+  };
+  const MAP: Record<string, string> = {
+    '/layer-wiktionary/': resolve(__dirname, '../data/wiktionary-index'),
+    '/layer-macbain/': resolve(__dirname, '../data/macbain-index'),
+  };
+  return {
+    name: 'v2-layer-serve',
+    configureServer(server) {
+      server.middlewares.use((req, res, next) => {
+        const url = req.url && req.url.split('?')[0];
+        if (!url) return next();
+        for (const [prefix, root] of Object.entries(MAP)) {
+          if (!url.startsWith(prefix)) continue;
+          const rel = decodeURIComponent(url.slice(prefix.length));
+          if (rel.includes('..')) return next();
+          const filePath = resolve(root, rel);
+          if (!existsSync(filePath)) return next();
+          const ext = (filePath.match(/\.[a-z0-9_]+$/i) || [''])[0].toLowerCase();
+          const data = readFileSync(filePath);
+          res.setHeader('Content-Type', CT[ext] || 'application/octet-stream');
+          res.setHeader('Content-Length', data.length);
+          res.end(data);
+          return;
+        }
+        return next();
+      });
+    },
+  };
+}
+
 // Redirect alizarin's internal WASM module import to the combined ros-madair-alizarin
 // binary.  This gives us a single WASM instance that contains both the alizarin
 // heritage viewer and the ros-madair SPARQL engine, so connect_tile_source can
@@ -86,6 +128,7 @@ function combinedWasmPlugin(): Plugin {
 export default defineConfig({
   plugins: [
     pagefindServe(),
+    v2LayerServe(),
     combinedWasmPlugin(),
     svelte(),
     tailwindcss(),

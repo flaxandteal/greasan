@@ -325,7 +325,9 @@ export async function search(query: string, lang: SearchLang = 'ga', dialects?: 
   if (query.trim().length < 3) return [];
 
   try {
-    await ensureStore();
+    // v2 mode: search is pure Pagefind over the registered v2 layers — the v1
+    // SparqlStore is never constructed. Only v1 needs ensureStore here.
+    if (!USE_V2) await ensureStore();
     const bases = allPagefindBasesForLang(lang);
     if (bases.length === 0) return []; // No layers installed — no data to search
 
@@ -673,21 +675,69 @@ export async function loadEntry(uri: string, knownHeadword?: string): Promise<En
  * FALSE — the v1 SparqlStore path remains the shipping default. Requires
  * src-tauri built with `--features v2`.
  */
-export const USE_V2 = false;
+export const USE_V2 = true;
 
 /**
- * Ordered v2 layer head dirs (base -> overlay: wiktionary then macbain).
- *
- * DEV-PATH CONSTANT. The Rust `v2_*` commands resolve these on the native side
- * (`Path::new(dir)`), so at runtime they must be paths the Tauri process can
- * open. This absolute repo path works for `tauri dev` on the pilot machine;
- * shipping needs real installed-layer resolution (Tauri path APIs / the layer
- * registry that `dynamicLayers` already tracks). See the report's UI-run note.
+ * A v2 pilot layer: a native head (for cross-layer hydrate) plus a Pagefind
+ * base (for text search). `headDir` is consumed by the Rust `v2_*` commands;
+ * `pagefindBase` feeds `collectPagefindBases`/search via the `dynamicLayers`
+ * registry.
  */
-export const V2_HEAD_DIRS: string[] = [
-  '/home/philtweir/Cód/Oscailte/Gréasán/data/wiktionary-v2',
-  '/home/philtweir/Cód/Oscailte/Gréasán/data/macbain-v2',
+export interface V2LayerConfig {
+  /** Stable layer name — the `dynamicLayers` registry key. */
+  name: string;
+  /** v2 head dir (SQLite head + content-addressed chunks + graph.json). */
+  headDir: string;
+  /**
+   * Pagefind base: the dir CONTAINING the per-language `pagefind-<lang>/`
+   * subdirs (`allPagefindBasesForLang` appends `pagefind-<lang>/`). Relative &
+   * same-origin so the vite dev server serves it through the `app/public/layer-*`
+   * symlinks; production would use the pfzip custom protocol like v1.
+   */
+  pagefindBase: string;
+}
+
+/**
+ * DEV-PATH CONSTANT — the v2 pilot layer set (base -> overlay: wiktionary then
+ * macbain). `headDir` values are absolute repo paths the native `v2_*` commands
+ * open directly (`Path::new(dir)`) — valid for `tauri dev` on the pilot machine
+ * only; shipping needs real installed-layer resolution (Tauri path APIs / the
+ * `dynamicLayers` registry). See the report's UI-run note.
+ */
+export const V2_LAYERS: V2LayerConfig[] = [
+  {
+    name: 'wiktionary',
+    headDir: '/home/philtweir/Cód/Oscailte/Gréasán/data/wiktionary-v2-full',
+    pagefindBase: '/layer-wiktionary/',
+  },
+  {
+    name: 'macbain',
+    headDir: '/home/philtweir/Cód/Oscailte/Gréasán/data/macbain-v2',
+    pagefindBase: '/layer-macbain/',
+  },
 ];
+
+/** Ordered v2 layer head dirs (base first), derived from {@link V2_LAYERS}. */
+export const V2_HEAD_DIRS: string[] = V2_LAYERS.map((l) => l.headDir);
+
+/**
+ * Register the v2 pilot layers WITHOUT touching the v1 engine.
+ *
+ * v1 `addDynamicLayer` also calls `SparqlStore.addLayer` (via `ensureStore`),
+ * which is meaningless in v2 mode and fails against v2 heads. This v2 variant
+ * only populates the `dynamicLayers` registry — enough for the `layers` store
+ * (clears the "install a layer" empty state) and `collectPagefindBases`/search
+ * — and never constructs a SparqlStore. Detail hydrate uses `V2_HEAD_DIRS`
+ * natively (see `loadEntryV2`), not this registry.
+ */
+export function registerV2Layers(): void {
+  dynamicLayers.length = 0;
+  for (const layer of V2_LAYERS) {
+    dynamicLayers.push({ name: layer.name, baseUrl: layer.headDir, pagefindBase: layer.pagefindBase });
+  }
+  // A newly-registered layer may introduce new dialect values.
+  dialectCache.clear();
+}
 
 /**
  * Dispatch entry loading by the `USE_V2` flag. The UI calls this; v1 `loadEntry`

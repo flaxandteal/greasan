@@ -2,7 +2,7 @@
   import { App } from 'konsta/svelte';
   import { onMount } from 'svelte';
   import { get } from 'svelte/store';
-  import { currentEntry, currentExample, wasmReady, activeTab, darkMode, density, listStyle, restoreLayers, pushRecent, overlayView } from './lib/store';
+  import { currentEntry, currentExample, wasmReady, activeTab, darkMode, density, listStyle, bootstrapLayers, pushRecent, overlayView } from './lib/store';
   import { t } from './lib/i18n';
   import Search from './views/Search.svelte';
   import EntryDetail from './views/EntryDetail.svelte';
@@ -28,7 +28,7 @@
       darkMode.set(mq.matches ? 'dark' : 'light');
     }
 
-    restoreLayers();
+    bootstrapLayers();
 
     // Push history state when navigating forward into entry/example views
     const unsubEntry = currentEntry.subscribe((val) => {

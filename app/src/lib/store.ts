@@ -1,7 +1,7 @@
 import { writable, derived, readable, get, type Writable } from 'svelte/store';
 import { ready } from './wasm';
 import { FAMILIES, DEFAULT_FAMILY, type FamilyId } from './family';
-import { switchFamily, addDynamicLayer, removeDynamicLayer, getDynamicLayers, type DynamicLayerInfo, type ExampleDetail } from './dictionary';
+import { switchFamily, addDynamicLayer, removeDynamicLayer, getDynamicLayers, registerV2Layers, USE_V2, type DynamicLayerInfo, type ExampleDetail } from './dictionary';
 import { buildLayer, waitForBuild, listLayers, assetUrl, removeLayerFiles, type BuildLayerStatus } from './tauri-builder';
 import type { SearchLang } from './dictionary';
 
@@ -225,6 +225,22 @@ export async function removeLayer(name: string): Promise<void> {
     console.warn(`[store] removeLayerFiles "${name}" failed:`, err);
   }
   layers.set(getDynamicLayers());
+}
+
+/**
+ * Startup layer bootstrap. In v2 mode, register the v2 heads as installed
+ * layers (name + pagefind base) via `registerV2Layers` — no v1 SparqlStore —
+ * which clears the "install a layer" empty state and enables Pagefind search;
+ * detail hydrate then uses `V2_HEAD_DIRS` natively. In v1 mode, fall back to the
+ * disk-restore path. Gated entirely by `USE_V2`; v1 behaviour is unchanged.
+ */
+export async function bootstrapLayers(): Promise<void> {
+  if (USE_V2) {
+    registerV2Layers();
+    layers.set(getDynamicLayers());
+    return;
+  }
+  await restoreLayers();
 }
 
 /** Restore previously-built layers from disk on app startup. */
