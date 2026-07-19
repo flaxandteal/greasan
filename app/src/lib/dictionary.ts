@@ -715,6 +715,11 @@ export const V2_LAYERS: V2LayerConfig[] = [
     headDir: '/home/philtweir/Cód/Oscailte/Gréasán/data/macbain-v2',
     pagefindBase: '/layer-macbain/',
   },
+  {
+    name: 'tearma',
+    headDir: '/home/philtweir/Cód/Oscailte/Gréasán/data/tearma-v2',
+    pagefindBase: '/layer-tearma/',
+  },
 ];
 
 /** Ordered v2 layer head dirs (base first), derived from {@link V2_LAYERS}. */

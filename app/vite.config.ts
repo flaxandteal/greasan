@@ -49,6 +49,7 @@ function v2LayerServe(): Plugin {
   const MAP: Record<string, string> = {
     '/layer-wiktionary/': resolve(__dirname, '../data/wiktionary-index'),
     '/layer-macbain/': resolve(__dirname, '../data/macbain-index'),
+    '/layer-tearma/': resolve(__dirname, '../data/tearma-index'),
   };
   return {
     name: 'v2-layer-serve',
@@ -147,7 +148,7 @@ export default defineConfig({
     // combinedWasmPlugin can intercept the internal ../pkg/alizarin import.
     // The pre-built dist/ bundle has the WASM glue baked in and can't be redirected.
     alias: {
-      'alizarin': resolve(__dirname, 'node_modules/alizarin/js/main.ts'),
+      'alizarin': resolve(__dirname, '../../magic/alizarin/js/main.ts'),
     },
     // Ensure @alizarin/clm's peer dep and direct imports resolve to the same instance.
     dedupe: ['alizarin', 'ros-madair-alizarin'],

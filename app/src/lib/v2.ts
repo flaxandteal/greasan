@@ -97,3 +97,21 @@ export async function queryLayers(headDirs: string[], ir: V2Query): Promise<V2La
 export async function hydrateLayers(headDirs: string[], resourceId: string): Promise<unknown> {
   return await invoke<unknown>('v2_hydrate_layers', { headDirs, resourceId });
 }
+
+/**
+ * Reverse-cognate lookup: the resources that LINK TO `uri` through `nodePath`
+ * (a link-datatype node alias, e.g. `cognate_entry_id`) in the composed view.
+ *
+ * The inverse of a forward `has_link` predicate — opening an entry, find the
+ * entries that cite it. Restores v1's continuum behaviour: the Irish "fear"
+ * surfaces the MacBain "fear" that lists it as a cognate, so the loader can fold
+ * MacBain's etymology/cognates into the Irish entry. Base layer (`headDirs[0]`)
+ * is authoritative for graph + registry.
+ */
+export async function citedBy(
+  headDirs: string[],
+  uri: string,
+  nodePath: string,
+): Promise<string[]> {
+  return await invoke<string[]>('v2_cited_by', { headDirs, uri, nodePath });
+}
