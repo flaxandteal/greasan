@@ -178,7 +178,53 @@ surfaced as data-quality anomalies — never silently normalized away.
   continuum: the model asserts headword-**form** identity, not etymological
   identity.
 
-## 8. What the pipeline changes (checklist)
+## 8. Grammar / paradigm layering (BuNaMo and other morphology sources)
+
+Adding an authoritative morphology source — e.g. **BuNaMo** (An Foras/Gaois's
+National Morphology Database; full Irish paradigms, openly licensed) — is just
+another layer contributing to a resource's `forms` nodegroup. But a grammar chart
+is a **paradigm** (one value per slot), not a bag, so `forms` must **not** compose
+as a raw card-N union. Two cases:
+
+**Cross-dialect — complementary, not a conflict.** BuNaMo supplies an *Irish*
+paradigm; a Scottish source supplies a *Scottish* one. With dialect on the form
+tiles (§5) these are different charts for one lexeme and render **per-dialect, side
+by side** — exactly like senses. No collision.
+
+**Same-dialect, two sources — resolve by slot precedence.** When two layers both
+supply an Irish chart for `fear`, a raw union yields duplicate or *conflicting*
+slots (two "genitive singular" values). Instead compose `forms` by
+**dedup-per-slot with layer precedence**, keyed on `(dialect, gram_features)`:
+- the highest-precedence layer wins each slot — BuNaMo (authoritative) takes each
+  Irish slot;
+- lower-precedence layers fill only the slots the authority lacks.
+
+It is the grammar analog of the sense fold, but **precedence-per-slot** instead of
+union — because a paradigm wants the best *single* value per cell, not all of them.
+
+**Home: consumer-side, no RM change.** RM keeps composing card-N tiles by union;
+the consumer (`loadEntryV2`) applies the slot-dedup using the layer order it
+already holds (`headDirs` = precedence), the same place the sense/etymology folds
+run. A generic per-nodegroup "keyed-override" composition mode in RM would be a
+convenience, but it is domain-agnostic and **optional** — not required.
+
+**Dependency — feature → concept mapping (the grammar analog of POS normalization).**
+The slot key is `gram_features`, which are **concepts** (resolved via the closure
+vocab). For BuNaMo's forms to dedup against Wiktionary's, BuNaMo's morphology
+features must map onto the **same concept vocabulary** (`genitive`, `singular`,
+`masculine`, …). If they don't, slots never line up and the dedup silently fails —
+you get exactly the union you were avoiding. So a BuNaMo import needs a
+feature-mapping step, mirroring the Téarma POS-normalization map. This is the real
+work in adding the layer.
+
+**Worked example — `fear`.** BuNaMo's Irish paradigm (`fear` / gen sg `fir` / voc
+`fhir` / nom pl `fir` / gen pl `fear`…) tiles tagged Irish; any Scottish forms tile
+tagged Scottish → the card shows an Irish chart and a Scottish chart. Within the
+Irish chart, if Wiktionary also offered `fir` (gen sg), it dedups against BuNaMo's
+on `(Irish, genitive+singular)` and BuNaMo wins; a slot only Wiktionary has
+survives.
+
+## 9. What the pipeline changes (checklist)
 
 1. Slug construction: emit `goi-HEAD-POS`; `HEAD` normalized per §3; keep the
    coarse POS; keep `-etym` as-is (excluded from merge).
@@ -190,6 +236,10 @@ surfaced as data-quality anomalies — never silently normalized away.
 5. Do **NOT** string-strip initial mutation (§6a, §7) — it clashes
    (`T-léine`→`léine`, `bhfuil`→`fuil`) and corrupts loanword lemmas. Headwords
    are already lemmas; fold alt-form entries via their explicit *"form of"* link.
+
+6. **Morphology layers (BuNaMo, …):** map the source's features to the shared
+   concept vocabulary (§8); compose `forms` by slot-dedup-with-precedence keyed on
+   `(dialect, gram_features)`, not raw union.
 
 **No Rós Madair / alizarin change.** The engine composes by `resourceid`; it never
 sees a headword.
