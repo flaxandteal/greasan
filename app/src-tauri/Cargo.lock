@@ -1768,7 +1768,9 @@ dependencies = [
  "alizarin-core",
  "flate2",
  "jni",
+ "ndk",
  "ndk-context",
+ "ndk-sys",
  "pagefind",
  "percent-encoding",
  "quick-xml 0.37.5",
@@ -1782,6 +1784,7 @@ dependencies = [
  "rusqlite",
  "serde",
  "serde_json",
+ "tao",
  "tar",
  "tauri",
  "tauri-build",
@@ -4112,6 +4115,7 @@ name = "ros-madair-emit"
 version = "0.1.0-alpha.15"
 dependencies = [
  "alizarin-core",
+ "geojson",
  "rmp-serde",
  "ros-madair-format",
  "ros-madair-handlers",
@@ -4128,6 +4132,7 @@ version = "0.1.0-alpha.15"
 dependencies = [
  "alizarin-core",
  "getrandom 0.2.17",
+ "rmp-serde",
  "ros-madair-handlers",
  "serde",
  "serde_json",

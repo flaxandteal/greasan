@@ -87,6 +87,13 @@ ndk-context = "0.1"
 # resource_dir() is `asset://localhost/` on Android, unreadable by std::fs.
 ndk = "0.9"
 ndk-sys = "0.6"
+# Tauri v2 runs a Java `WryActivity` (not a NativeActivity), so nothing ever
+# calls `ndk_context::initialize_android_context` — leaving `android_context()`
+# to panic-abort. tao (already a transitive dep via wry) holds the real
+# JavaVM + Activity in `main_android_context()`; we bridge it into ndk_context
+# at startup. default-features=false keeps this to a feature-union no-op — the
+# version resolves to the same tao wry already pulls, so no extra deps.
+tao = { version = "0.35", default-features = false }
 
 [patch.crates-io]
 # ros-madair-core (v1) asks crates.io for alizarin-core; point it at the same

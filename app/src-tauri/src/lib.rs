@@ -12,6 +12,11 @@ mod v2;
 #[cfg(feature = "v2")]
 mod offline;
 
+/// Android JNI context bridge — initializes `ndk_context` from tao's live
+/// JavaVM + Activity, since Tauri v2's `WryActivity` never does it itself.
+#[cfg(target_os = "android")]
+mod android_ctx;
+
 use std::collections::HashMap;
 use std::sync::Mutex;
 
@@ -20,6 +25,15 @@ pub type BuilderState = Mutex<HashMap<String, builder_plugin::BuildLayerStatus>>
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let builder = tauri::Builder::default()
+        .setup(|_app| {
+            // Bridge tao's live Android context into `ndk_context` before any
+            // JNI-dependent command (offline extract, content:// import) runs.
+            // By the time setup runs, tao's `create` JNI callback has already
+            // populated its context, so this is ready. No-op off Android.
+            #[cfg(target_os = "android")]
+            android_ctx::init_from_tao();
+            Ok(())
+        })
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_fs::init())

@@ -107,8 +107,10 @@ fn read_android_asset(rel: &str) -> Result<Vec<u8>, String> {
     use std::io::Read;
     use std::ptr::NonNull;
 
-    // JavaVM + Android Context, published by the Tauri/ndk-glue runtime.
-    let ctx = ndk_context::android_context();
+    // JavaVM + Android Context. Bridged in from tao at startup (see
+    // `android_ctx`); the accessor returns Err instead of panic-aborting if the
+    // context is somehow unavailable.
+    let ctx = crate::android_ctx::context()?;
     let vm = unsafe { jni::JavaVM::from_raw(ctx.vm().cast()) }
         .map_err(|e| format!("android: JavaVM::from_raw: {e}"))?;
     let mut env = vm
