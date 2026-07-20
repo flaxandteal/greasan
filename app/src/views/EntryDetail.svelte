@@ -150,6 +150,9 @@
                   </div>
                 {/if}
               </div>
+              {#if sense.dialect}
+                <span class="ge-layer-tag" style="background:transparent;border:1px solid currentColor;opacity:0.75;" title="Dialect">{sense.dialect}</span>
+              {/if}
               {#if sense.sourceLabel}
                 <span class="ge-layer-tag">{sense.sourceLabel}</span>
               {/if}

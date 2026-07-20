@@ -39,7 +39,7 @@ export interface EntryDetail {
   headword: string;
   pos: string;
   dialect?: string;
-  senses: Array<{ gloss: string; examples: string[]; sourceLabel?: string }>;
+  senses: Array<{ gloss: string; examples: string[]; sourceLabel?: string; dialect?: string }>;
   forms: Array<{ writtenRep: string; tags: string[] }>;
   ipa: string[];
   etymologies: Array<{ text: string; sourceLabel?: string }>;
