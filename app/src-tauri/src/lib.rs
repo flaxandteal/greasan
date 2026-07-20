@@ -7,6 +7,11 @@ mod tbx_parser;
 #[cfg(feature = "v2")]
 mod v2;
 
+/// First-run offline setup: unpack bundled heads + Pagefind zips into app-data.
+/// Part of the self-contained offline build; v2-gated (only the v2 path uses it).
+#[cfg(feature = "v2")]
+mod offline;
+
 use std::collections::HashMap;
 use std::sync::Mutex;
 
@@ -49,6 +54,7 @@ pub fn run() {
         v2::v2_hydrate_layers,
         v2::v2_closure,
         v2::v2_cited_by,
+        offline::v2_prepare_offline,
     ]);
 
     builder

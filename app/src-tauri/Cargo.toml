@@ -83,6 +83,10 @@ required-features = ["v2-emit"]
 [target.'cfg(target_os = "android")'.dependencies]
 jni = "0.21"
 ndk-context = "0.1"
+# Read bundled APK assets (heads + pagefind zips) from Rust on first run:
+# resource_dir() is `asset://localhost/` on Android, unreadable by std::fs.
+ndk = "0.9"
+ndk-sys = "0.6"
 
 [patch.crates-io]
 # ros-madair-core (v1) asks crates.io for alizarin-core; point it at the same

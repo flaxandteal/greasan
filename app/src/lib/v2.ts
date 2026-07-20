@@ -13,6 +13,28 @@
  */
 import { invoke } from '@tauri-apps/api/core';
 
+/**
+ * One resolved offline layer returned by `v2_prepare_offline` (Rust
+ * `offline::OfflineLayer`). Emitted after the first-run unpack of bundled heads
+ * + Pagefind zips into app-data. `head_dir` is the real fs path the `v2_*`
+ * commands open; `pagefind_index` is the `pfzip://` URL segment.
+ */
+export interface OfflineLayer {
+  name: string;
+  head_dir: string;
+  pagefind_index: string;
+}
+
+/**
+ * Run first-run offline preparation and return the resolved layer set. On first
+ * launch this unpacks the bundled corpus heads + Pagefind zips into app-data
+ * (idempotent thereafter). Only meaningful in a built Tauri app; in `tauri dev`
+ * the dev machinery (absolute paths + vite middleware) is used instead.
+ */
+export async function prepareOffline(): Promise<OfflineLayer[]> {
+  return await invoke<OfflineLayer[]>('v2_prepare_offline');
+}
+
 /** Filter tree (mirrors `ros_madair_query::Expr`; serde snake_case). */
 export type V2Expr =
   | { all: V2Expr[] }

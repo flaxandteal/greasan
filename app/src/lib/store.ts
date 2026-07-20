@@ -1,7 +1,7 @@
 import { writable, derived, readable, get, type Writable } from 'svelte/store';
 import { ready } from './wasm';
 import { FAMILIES, DEFAULT_FAMILY, type FamilyId } from './family';
-import { switchFamily, addDynamicLayer, removeDynamicLayer, getDynamicLayers, registerV2Layers, USE_V2, type DynamicLayerInfo, type ExampleDetail } from './dictionary';
+import { switchFamily, addDynamicLayer, removeDynamicLayer, getDynamicLayers, registerV2Layers, initOfflineLayers, USE_V2, type DynamicLayerInfo, type ExampleDetail } from './dictionary';
 import { buildLayer, waitForBuild, listLayers, assetUrl, removeLayerFiles, type BuildLayerStatus } from './tauri-builder';
 import type { SearchLang } from './dictionary';
 
@@ -136,6 +136,10 @@ export const layers = writable<readonly DynamicLayerInfo[]>([]);
 // Build progress for the currently building layer (null when idle)
 export const buildProgress = writable<BuildLayerStatus | null>(null);
 
+// True while first-run offline setup (unpacking bundled heads + Pagefind zips
+// into app-data) runs. Drives the "preparing dictionary" UI on first launch.
+export const preparingDictionary = writable<boolean>(false);
+
 export function setActiveFamily(familyId: FamilyId): void {
   activeFamily.set(familyId);
   visibleDialects.set(FAMILIES[familyId].defaultDialects);
@@ -236,6 +240,16 @@ export async function removeLayer(name: string): Promise<void> {
  */
 export async function bootstrapLayers(): Promise<void> {
   if (USE_V2) {
+    // Built app: unpack bundled heads + Pagefind zips into app-data on first
+    // launch, then point the active layer set at those real paths. No-op in dev.
+    try {
+      preparingDictionary.set(true);
+      await initOfflineLayers();
+    } catch (err) {
+      console.error('[store] offline layer prep failed:', err);
+    } finally {
+      preparingDictionary.set(false);
+    }
     registerV2Layers();
     layers.set(getDynamicLayers());
     return;

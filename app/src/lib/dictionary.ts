@@ -7,6 +7,7 @@ import { getPagefind, resetPagefind, type PagefindInstance } from './pagefind';
 import { FAMILIES, DEFAULT_FAMILY, type FamilyConfig, type FamilyId } from './family';
 import { diagStart, diagEnd } from './diagnostics';
 import { loadEntryV2 } from './dictionary-v2';
+import { prepareOffline } from './v2';
 
 let activeFamilyConfig: FamilyConfig = FAMILIES[DEFAULT_FAMILY];
 
@@ -722,8 +723,41 @@ export const V2_LAYERS: V2LayerConfig[] = [
   },
 ];
 
-/** Ordered v2 layer head dirs (base first), derived from {@link V2_LAYERS}. */
+/**
+ * The ACTIVE v2 layer set. Defaults to the dev constant {@link V2_LAYERS} (vite
+ * dev server: absolute head paths + the layer- middleware). In a built,
+ * self-contained app {@link initOfflineLayers} replaces this with the app-data
+ * head dirs (unpacked from the bundle) and pfzip Pagefind bases.
+ */
+let activeV2Layers: V2LayerConfig[] = V2_LAYERS;
+
+/** Ordered active v2 layer head dirs (base first). */
+export function currentV2HeadDirs(): string[] {
+  return activeV2Layers.map((l) => l.headDir);
+}
+
+/**
+ * DEV-ONLY back-compat alias. Prefer {@link currentV2HeadDirs}; this reflects the
+ * dev defaults only and does NOT track {@link initOfflineLayers}.
+ */
 export const V2_HEAD_DIRS: string[] = V2_LAYERS.map((l) => l.headDir);
+
+/**
+ * First-run offline resolution. In a production/built app (not `tauri dev`),
+ * unpack the bundled heads + Pagefind zips into app-data and point the active
+ * layer set at those real paths, with Pagefind served from zip via the `pfzip`
+ * custom protocol. No-op under vite dev (keeps the absolute-path + middleware
+ * dev flow). Idempotent; safe to await once at startup before search/hydrate.
+ */
+export async function initOfflineLayers(): Promise<void> {
+  if (import.meta.env.DEV) return; // dev uses V2_LAYERS + vite middleware
+  const layers = await prepareOffline();
+  activeV2Layers = layers.map((l) => ({
+    name: l.name,
+    headDir: l.head_dir,
+    pagefindBase: `http://pfzip.localhost/${encodeURIComponent(l.pagefind_index)}/`,
+  }));
+}
 
 /**
  * Register the v2 pilot layers WITHOUT touching the v1 engine.
@@ -737,7 +771,7 @@ export const V2_HEAD_DIRS: string[] = V2_LAYERS.map((l) => l.headDir);
  */
 export function registerV2Layers(): void {
   dynamicLayers.length = 0;
-  for (const layer of V2_LAYERS) {
+  for (const layer of activeV2Layers) {
     dynamicLayers.push({ name: layer.name, baseUrl: layer.headDir, pagefindBase: layer.pagefindBase });
   }
   // A newly-registered layer may introduce new dialect values.
@@ -749,7 +783,7 @@ export function registerV2Layers(): void {
  * stays the default path when `USE_V2` is false.
  */
 export function loadEntryFlagged(uri: string, knownHeadword?: string): Promise<EntryDetail | null> {
-  return USE_V2 ? loadEntryV2(uri, V2_HEAD_DIRS) : loadEntry(uri, knownHeadword);
+  return USE_V2 ? loadEntryV2(uri, currentV2HeadDirs()) : loadEntry(uri, knownHeadword);
 }
 
 export async function loadExample(resourceId: string): Promise<ExampleDetail | null> {

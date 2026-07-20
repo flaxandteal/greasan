@@ -2,7 +2,7 @@
   import { App } from 'konsta/svelte';
   import { onMount } from 'svelte';
   import { get } from 'svelte/store';
-  import { currentEntry, currentExample, wasmReady, activeTab, darkMode, density, listStyle, bootstrapLayers, pushRecent, overlayView } from './lib/store';
+  import { currentEntry, currentExample, wasmReady, activeTab, darkMode, density, listStyle, bootstrapLayers, pushRecent, overlayView, preparingDictionary } from './lib/store';
   import { t } from './lib/i18n';
   import Search from './views/Search.svelte';
   import EntryDetail from './views/EntryDetail.svelte';
@@ -98,6 +98,20 @@
       </div>
     {/if}
 
+    {#if $preparingDictionary}
+      <div style="position:fixed;inset:0;z-index:9999;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;background:var(--bg,#fff);color:var(--fg,#111);text-align:center;padding:24px;">
+        <div class="ge-spinner" style="width:32px;height:32px;border:3px solid var(--fg-soft,#ccc);border-top-color:var(--accent,#3b6);border-radius:50%;animation:ge-spin 0.9s linear infinite;"></div>
+        <div style="font-size:var(--fs-body,15px);font-weight:600;">Preparing dictionary…</div>
+        <div style="font-size:var(--fs-small,13px);color:var(--fg-soft,#888);max-width:280px;">Unpacking offline data. This runs once, on first launch.</div>
+      </div>
+    {/if}
+
     <LicenseToast onShowFull={openLicenseSettings} />
   </div>
 </App>
+
+<style>
+  @keyframes -global-ge-spin {
+    to { transform: rotate(360deg); }
+  }
+</style>
