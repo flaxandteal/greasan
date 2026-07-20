@@ -54,9 +54,9 @@ agreeing on the `uuid5` namespace.
 
 Rules, in order:
 
-1. **Length accents → macron** (transliterate, do **not** strip): map both the
-   Irish acute and the Scottish grave to a macron — a **dialect-neutral length
-   marker**:
+1. **Length accents → macron** (transliterate, do **not** strip): map both acute
+   and grave — *from any source, regardless of dialect* — to a macron, a
+   **dialect-neutral length marker**:
 
    | in (grave / acute) | out (macron) |
    |---|---|
@@ -71,6 +71,12 @@ Rules, in order:
    is written by neither orthography — that is the point: the identity privileges
    no dialect, and the real spellings live on the form tiles (§5).
 
+   **Accent does not track dialect — the corpus proves it.** MacBain (1911,
+   pre-reform Scottish orthography) writes Scottish `mór` with an *acute*, and
+   Wiktionary records `gd-mór` as an *"alternative form of mòr"*. So the fold must
+   map *both* accents from *every* source — a naive `grave→acute` rule resting on
+   "grave = Scottish, acute = Irish" is wrong.
+
 2. **Case-fold** to lower case.
 
 3. **Word separators → hyphen.** Multi-word headwords keep internal hyphens
@@ -82,10 +88,15 @@ distinct words — `fear`(man)/`féar`(grass), `cead`(permission)/`céad`(hundre
 not help URLs (it *collides* `/fear-noun`). Macron characters are URL-legal
 (percent-encoded), so the normalized slug is a fine URL if one is ever needed.
 
-*Assumption:* acute/grave in modern Irish/Scottish mark **only** vowel length
-(lenition is an `h`, not a diacritic), so collapsing them to a length macron
-loses no lexical information. An old-orthography quality distinction, if any, is a
-display nuance on a form tile, never an identity concern.
+*Caveat (real, not hypothetical):* in **modern** Irish/Scottish, acute/grave mark
+only vowel **length** (lenition is an `h`, not a diacritic), so the macron fold is
+lossless. But **old** Scottish orthography (MacBain, 1911) used acute vs grave for
+vowel **quality** (close `ó` vs open `ò`), so the fold *could* rarely merge two
+historically quality-distinct words. Modern grave-only orthography has largely
+dropped the distinction, and most acute-Scottish forms are just variants of the
+grave standard (`mór` = *"alternative form of mòr"*). If a genuine quality
+minimal-pair ever bites, fix it with a small allowlist of quality-distinct pairs —
+do not abandon the fold.
 
 ## 4. `POS` and the `-etym` exclusion
 
@@ -177,6 +188,14 @@ surfaced as data-quality anomalies — never silently normalized away.
   across dialects) become dialect-senses of one resource. Accepted under the
   continuum: the model asserts headword-**form** identity, not etymological
   identity.
+- **Filter variant-form redirect glosses on merge.** Diacritic-convention variants
+  *do* merge (macron folds `mór`→`mòr`) — correct — but such an entry's gloss is
+  often just a redirect (`mór`: *"alternative form of mòr"*; the alt-form `bh-fear`:
+  *"obsolete spelling of bhfear"*). Once composed onto the lemma resource that gloss
+  is circular and must **not** surface as a sense: detect the
+  *"(alternative|obsolete|variant|…) form/spelling of …"* pattern (or the source's
+  structured *"form of"* field) and drop it from `senses` — keep it at most as a
+  spelling/form note on the corresponding form tile.
 
 ## 8. Grammar / paradigm layering (BuNaMo and other morphology sources)
 
