@@ -273,23 +273,27 @@ class TestParseFixture:
 
 
 class TestUriDeterminism:
+    # Slugs are now the dialect-neutral `goi-HEAD-POS` with macron-folded length
+    # (docs/goidelic-slug-identity.md). The "wiktionary-compatible" intent holds:
+    # tbx/tearma and Wiktionary share `goi_slug`, so the same word+POS -> same
+    # resource across layers. `lang_code` is accepted but ignored by slugify.
     def test_focal_produces_wiktionary_compatible_uri(self, records):
         rec = _find(records, "focal")
         assert rec is not None
         slug = slugify(rec["word"], rec["pos"], rec["lang_code"])
-        assert slug == "ga-focal-noun"
+        assert slug == "goi-focal-noun"
 
     def test_dli_produces_wiktionary_compatible_uri(self, records):
         rec = _find(records, "dlí")
         assert rec is not None
         slug = slugify(rec["word"], rec["pos"], rec["lang_code"])
-        assert slug == "ga-dlí-noun"
+        assert slug == "goi-dlī-noun"  # í -> ī (macron)
 
     def test_phrase_slug(self, records):
         rec = _find(records, "smacht an dlí")
         assert rec is not None
         slug = slugify(rec["word"], rec["pos"], rec["lang_code"])
-        assert slug == "ga-smacht-an-dlí-phrase"
+        assert slug == "goi-smacht-an-dlī-phrase"
 
 
 # --- Merge logic ---
