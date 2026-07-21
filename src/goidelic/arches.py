@@ -16,11 +16,14 @@ COLUMNS = [
     "part_of_speech",
     "dialect",
     "ipa_value",
+    "pronunciation_dialect",
     "gloss",
     "example",
     "source_label",
+    "sense_dialect",
     "written_rep",
     "gram_features",
+    "form_dialect",
     "domain",
     "etymology_text",
     "etymology_source",
@@ -62,21 +65,24 @@ def entry_to_rows(entry: dict) -> list[dict[str, str]]:
             if domains:
                 row["domain"] = "|".join(domains)
 
-        # Pronunciation (cardinality-n)
+        # Pronunciation (cardinality-n) — dialect rides the tile
         if i < len(pronunciations):
             row["ipa_value"] = pronunciations[i].get("ipa_value", "")
+            row["pronunciation_dialect"] = pronunciations[i].get("dialect", "")
 
-        # Sense (cardinality-n)
+        # Sense (cardinality-n) — dialect rides the tile
         if i < len(senses):
             row["gloss"] = senses[i].get("gloss", "")
             row["example"] = senses[i].get("example", "")
             row["source_label"] = senses[i].get("source_label", "")
+            row["sense_dialect"] = senses[i].get("dialect", "")
 
-        # Form (cardinality-n)
+        # Form (cardinality-n) — dialect rides the tile
         if i < len(forms):
             row["written_rep"] = forms[i].get("written_rep", "")
             features = forms[i].get("gram_features", [])
             row["gram_features"] = ", ".join(features) if features else ""
+            row["form_dialect"] = forms[i].get("dialect", "")
 
         rows.append(row)
 
