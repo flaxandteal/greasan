@@ -87,7 +87,7 @@ def run_tbx_pipeline(config_path: Path, tbx_path: Path, layer_code: str = "") ->
     print("[pipeline] Stage 2/3: ontolex", file=sys.stderr)
     m = shape_file(tbx_normalised, tbx_shaped)
     manifests.append(m)
-    print(f"  → {m['total']} resources shaped, {m['duplicate_ids_resolved']} ID collisions resolved", file=sys.stderr)
+    print(f"  → {m['resources']} resources from {m['total_entries']} entries, {m['merged_resources']} dialect-merged", file=sys.stderr)
 
     # Stage 3: Arches CSV
     print("[pipeline] Stage 3/3: arches", file=sys.stderr)
@@ -156,7 +156,7 @@ def run_pipeline(config_path: Path, fixture: bool = False) -> None:
     print("[pipeline] Stage 3/5: ontolex", file=sys.stderr)
     m = shape_file(paths["normalised"], paths["shaped"])
     manifests.append(m)
-    print(f"  → {m['total']} resources shaped, {m['duplicate_ids_resolved']} ID collisions resolved", file=sys.stderr)
+    print(f"  → {m['resources']} resources from {m['total_entries']} entries, {m['merged_resources']} dialect-merged", file=sys.stderr)
 
     # Stage 4: Arches CSV
     print("[pipeline] Stage 4/5: arches", file=sys.stderr)
