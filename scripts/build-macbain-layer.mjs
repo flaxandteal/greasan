@@ -28,7 +28,20 @@ import { readFileSync, writeFileSync, mkdirSync, existsSync } from 'fs';
 import { execSync } from 'child_process';
 import { fileURLToPath } from 'url';
 import { dirname, resolve } from 'path';
-import { v5 as uuidv5 } from '../app/node_modules/ros-madair/node_modules/uuid/dist/esm-browser/index.js';
+import { createHash } from 'node:crypto';
+
+// RFC 4122 v5 (SHA-1), matching the `uuid` package's v5(name, namespace). The npm
+// `uuid` dep isn't present in this tree; this is deterministic and matches Python's
+// uuid.uuid5 / the Rust uuid5 used to derive resource UUIDs across the pipeline — so
+// macbain's cognate_entry_id UUIDs equal the goi resource UUIDs (cross-layer links).
+function uuidv5(name, namespace) {
+  const ns = Buffer.from(namespace.replace(/-/g, ''), 'hex');
+  const b = Buffer.from(createHash('sha1').update(Buffer.concat([ns, Buffer.from(name, 'utf8')])).digest().subarray(0, 16));
+  b[6] = (b[6] & 0x0f) | 0x50; // version 5
+  b[8] = (b[8] & 0x3f) | 0x80; // variant
+  const h = b.toString('hex');
+  return `${h.slice(0, 8)}-${h.slice(8, 12)}-${h.slice(12, 16)}-${h.slice(16, 20)}-${h.slice(20, 32)}`;
+}
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const root = resolve(__dirname, '..');
@@ -56,6 +69,17 @@ function stripDiacritics(text) {
 
 function slugify(text) {
   return stripDiacritics(text).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+}
+
+// Identity normalization for matching against goi resources: fold acute AND grave to
+// a macron (length PRESERVED, not stripped), matching docs/goidelic-slug-identity.md
+// §3 / the pipeline's normalize_head — so macbain cognate/headword matches align with
+// the goi slug identity (fear ≠ fēar; mór = mòr = mōr). Distinct from stripDiacritics,
+// which stays for accent-insensitive SEARCH recall.
+const _MACRON = { 'à': 'ā', 'á': 'ā', 'è': 'ē', 'é': 'ē', 'ì': 'ī', 'í': 'ī', 'ò': 'ō', 'ó': 'ō', 'ù': 'ū', 'ú': 'ū' };
+function normalizeHead(text) {
+  const s = text.normalize('NFC').toLowerCase();
+  return Array.from(s, (ch) => _MACRON[ch] || ch).join('');
 }
 
 function decodeEntities(html) {
@@ -379,25 +403,28 @@ if (existsSync(wkCsvPath)) {
 
     // Headword lookup (first row per entry has headword)
     if (hw) {
-      const key = stripDiacritics(hw).toLowerCase();
-      if (rid.startsWith('ga-')) {
-        if (!gaLookup.has(key)) gaLookup.set(key, []);
-        const arr = gaLookup.get(key);
-        if (!arr.includes(rid)) arr.push(rid);
-      } else if (rid.startsWith('gd-')) {
-        if (!gdLookup.has(key)) gdLookup.set(key, []);
-        const arr = gdLookup.get(key);
+      const key = normalizeHead(hw);
+      // goi- resources are the merged cross-dialect lexeme (Irish + Scottish in
+      // one), so they are candidates for BOTH Irish and Scottish cognate matches.
+      // ga-/gd- kept for any pre-goi data.
+      const hwTargets = rid.startsWith('goi-') ? [gaLookup, gdLookup]
+        : rid.startsWith('ga-') ? [gaLookup]
+        : rid.startsWith('gd-') ? [gdLookup] : [];
+      for (const lk of hwTargets) {
+        if (!lk.has(key)) lk.set(key, []);
+        const arr = lk.get(key);
         if (!arr.includes(rid)) arr.push(rid);
       }
     }
 
     // Forms lookup (written_rep on subsequent rows)
     if (wr && !hw) {
-      const key = stripDiacritics(wr).toLowerCase();
-      if (rid.startsWith('ga-')) {
-        if (!gaFormsLookup.has(key)) gaFormsLookup.set(key, rid);
-      } else if (rid.startsWith('gd-')) {
-        if (!gdFormsLookup.has(key)) gdFormsLookup.set(key, rid);
+      const key = normalizeHead(wr);
+      const fmTargets = rid.startsWith('goi-') ? [gaFormsLookup, gdFormsLookup]
+        : rid.startsWith('ga-') ? [gaFormsLookup]
+        : rid.startsWith('gd-') ? [gdFormsLookup] : [];
+      for (const lk of fmTargets) {
+        if (!lk.has(key)) lk.set(key, rid);
       }
     }
   }
@@ -454,14 +481,14 @@ function addRows(rid, rows) {
 }
 
 for (const entry of allEntries) {
-  const normHw = stripDiacritics(entry.primaryHeadword).toLowerCase();
+  const normHw = normalizeHead(entry.primaryHeadword);
   const wkIds = wkLookup.get(normHw) || [];
 
   // Resolve cognate entry IDs against ga/gd lookups (headword first, then forms fallback)
   const resolvedCognates = entry.cognates.map(c => {
     const lookup = COGNATE_LANG_TO_LOOKUP[c.language];
     if (!lookup) return { ...c, entryId: null };
-    const key = stripDiacritics(c.headword).toLowerCase();
+    const key = normalizeHead(c.headword);
     const ids = lookup.get(key);
     if (ids?.[0]) return { ...c, entryId: ids[0] };
     // Fallback: check forms lookup (lemmatization)
@@ -551,7 +578,7 @@ for (const entry of allEntries) {
   for (const c of entry.cognates) {
     const lookup = COGNATE_LANG_TO_LOOKUP[c.language];
     if (!lookup) continue;
-    const key = stripDiacritics(c.headword).toLowerCase();
+    const key = normalizeHead(c.headword);
     if (lookup.has(key)) {
       linkedCognateCount++;
     } else {
