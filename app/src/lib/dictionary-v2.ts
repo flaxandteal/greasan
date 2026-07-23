@@ -20,7 +20,7 @@
  * built with `--features v2` (the `v2_*` invokes reject otherwise).
  */
 import { invoke } from '@tauri-apps/api/core';
-import { hydrateLayers, citedBy } from './v2';
+import { hydrateLayers, citedBy, descriptors } from './v2';
 import type { EntryDetail } from './dictionary';
 
 /** Cache the closure map per headDirs stack (keyed by the ordered join). */
@@ -140,12 +140,17 @@ function mergeCognates(target: EntryDetail['cognates'], incoming: EntryDetail['c
  * and passed in. This is what lets a lexeme card show senses from multiple dialects
  * each tagged with its own — the main entry's, plus each cognate citer's.
  */
-function extractSenses(tree: Record<string, any>, dialect: string): EntryDetail['senses'] {
+function extractSenses(tree: Record<string, any>, label: (v: unknown) => string): EntryDetail['senses'] {
   const out: EntryDetail['senses'] = [];
   for (const s of asArray(tree.senses)) {
     const gloss = localStr(s?.gloss);
     const example = localStr(s?.example);
     const sourceLabel = localStr(s?.source_label);
+    // Per-tile dialect: the `sense_dialect` concept node (goi dialect-on-tiles),
+    // resolved via the closure map. On a merged goi resource each sense carries the
+    // dialect of the entry it came from — so one card shows Irish + Scottish senses.
+    // Strip the "(General)" qualifier so Téarma's "Irish (General)" folds onto "Irish".
+    const dialect = label(s?.sense_dialect).replace(/\s*\(General\)$/, '');
     if (gloss) {
       out.push({
         gloss,
@@ -208,7 +213,7 @@ export async function loadEntryV2(uri: string, headDirs: string[]): Promise<Entr
     // Senses — cardinality n, deduplicated across layers (merge identical
     // gloss+examples, combine source labels with '+').
     const senses: EntryDetail['senses'] = [];
-    mergeSenses(senses, extractSenses(tree, dialect));
+    mergeSenses(senses, extractSenses(tree, label));
 
     // Forms — cardinality n. gram_features are raw concept uuids → closure.
     const forms: EntryDetail['forms'] = [];
@@ -255,9 +260,29 @@ export async function loadEntryV2(uri: string, headDirs: string[]): Promise<Entr
       console.warn('[dictionary-v2] cited_by enrichment skipped:', err);
     }
 
-    // externalExamples: v1 loads these from the SEPARATE example graph via
-    // SparqlStore. The v2 loader has no example-layer head wired, so this stays
-    // empty for the pilot — a gap to close when the example graph is layered.
+    // External example sentences. `external_examples` hydrates as a list-of-LISTS of
+    // refs into the ExternalExample model — whose graph is NOT shipped with this head,
+    // so those resources cannot be hydrated (they come back empty). But their
+    // descriptor (spine `display_name`) IS the sentence, so resolve them cheaply via
+    // `descriptors` — ONE indexed batch, no hydration, no N+1. Full detail
+    // (translation/source/highlights) is deferred to on-interaction. Best-effort.
+    const externalExamples: EntryDetail['externalExamples'] = [];
+    try {
+      const refs = asArray(tree.external_examples)
+        .flat()
+        .map((r) => (r && typeof r === 'object' ? (r.resourceId ?? r.id ?? '') : typeof r === 'string' ? r : ''))
+        .filter(Boolean);
+      if (refs.length) {
+        const sentences = await descriptors(headDirs, refs);
+        for (const id of refs) {
+          const ga = sentences[id];
+          if (ga) externalExamples.push({ resourceId: id, ga, en: '', src: 'gaois', hl: [] });
+        }
+      }
+    } catch (err) {
+      console.warn('[dictionary-v2] external examples skipped:', err);
+    }
+
     return {
       uri,
       headword,
@@ -268,7 +293,7 @@ export async function loadEntryV2(uri: string, headDirs: string[]): Promise<Entr
       ipa,
       etymologies,
       cognates,
-      externalExamples: [],
+      externalExamples,
     };
   } catch (err) {
     console.warn('[dictionary-v2] loadEntryV2 failed:', err);

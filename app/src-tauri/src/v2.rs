@@ -320,6 +320,53 @@ pub fn v2_closure(head_dirs: Vec<String>) -> Result<HashMap<String, String>, Str
     Ok(map)
 }
 
+/// Resolve resource UUIDs to their `display_name` (descriptor) via the head's spine
+/// tables — a cheap indexed lookup (`dict` → `spine_*`), NO hydration. This is how a
+/// consumer shows a related resource whose descriptor IS the content — e.g. an
+/// external example, whose `display_name` is the sentence — without a per-resource
+/// hydrate, and crucially without needing that resource's MODEL graph (the head ships
+/// only the base graph.json). Every `spine_*` table (one per model) is searched across
+/// the layer stack; first hit wins. Batch: one call resolves many uris.
+#[tauri::command]
+pub fn v2_descriptors(
+    head_dirs: Vec<String>,
+    uris: Vec<String>,
+) -> Result<HashMap<String, String>, String> {
+    let mut out: HashMap<String, String> = HashMap::new();
+    for dir in &head_dirs {
+        let conn = ros_madair_read::open_head(Path::new(dir)).map_err(|e| e.to_string())?;
+        // Spine tables (one per model) are named in sqlite_master, not user input.
+        let spines: Vec<String> = {
+            let mut stmt = conn
+                .prepare("SELECT name FROM sqlite_master WHERE type='table' AND name LIKE 'spine_%'")
+                .map_err(|e| format!("list spines for {dir}: {e}"))?;
+            let rows = stmt
+                .query_map([], |r| r.get::<_, String>(0))
+                .map_err(|e| format!("query spines for {dir}: {e}"))?;
+            rows.filter_map(|r| r.ok()).collect()
+        };
+        for uri in &uris {
+            if out.contains_key(uri) {
+                continue;
+            }
+            for spine in &spines {
+                let sql = format!(
+                    "SELECT s.display_name FROM {spine} s \
+                     JOIN dict d ON d.term_id = s.term_id \
+                     WHERE d.term = ?1 LIMIT 1"
+                );
+                if let Ok(name) = conn.query_row(&sql, [uri], |r| r.get::<_, String>(0)) {
+                    if !name.is_empty() {
+                        out.insert(uri.clone(), name);
+                        break;
+                    }
+                }
+            }
+        }
+    }
+    Ok(out)
+}
+
 /// Hydrate one resource from the composed view of a layer stack: gather its tiles
 /// from every layer that has it, merge with per-nodegroup precedence (topmost
 /// wins), then hydrate to a schema-aware JSON tree. The graph is the base's.

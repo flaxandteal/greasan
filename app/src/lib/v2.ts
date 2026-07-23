@@ -121,6 +121,16 @@ export async function hydrateLayers(headDirs: string[], resourceId: string): Pro
 }
 
 /**
+ * Resolve resource UUIDs → their descriptor (spine `display_name`) across the layer
+ * stack — a cheap indexed lookup, no hydration, and no need for the resource's model
+ * graph. Used e.g. for external example sentences (whose descriptor IS the sentence).
+ * Batch: one call resolves many uris.
+ */
+export async function descriptors(headDirs: string[], uris: string[]): Promise<Record<string, string>> {
+  return await invoke<Record<string, string>>('v2_descriptors', { headDirs, uris });
+}
+
+/**
  * Reverse-cognate lookup: the resources that LINK TO `uri` through `nodePath`
  * (a link-datatype node alias, e.g. `cognate_entry_id`) in the composed view.
  *
