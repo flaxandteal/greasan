@@ -1,7 +1,7 @@
 import { writable, derived, readable, get, type Writable } from 'svelte/store';
 import { ready } from './wasm';
-import { FAMILIES, DEFAULT_FAMILY, type FamilyId } from './family';
-import { switchFamily, addDynamicLayer, removeDynamicLayer, getDynamicLayers, registerV2Layers, initOfflineLayers, USE_V2, type DynamicLayerInfo, type ExampleDetail } from './dictionary';
+import { FAMILIES, DEFAULT_FAMILY, layerSwatch, type FamilyId } from './family';
+import { switchFamily, addDynamicLayer, removeDynamicLayer, getDynamicLayers, registerV2Layers, initOfflineLayers, setHiddenLayers, search, loadEntryFlagged, type DynamicLayerInfo, type ExampleDetail } from './dictionary';
 import { buildLayer, waitForBuild, listLayers, assetUrl, removeLayerFiles, type BuildLayerStatus } from './tauri-builder';
 import type { SearchLang } from './dictionary';
 
@@ -37,7 +37,30 @@ export const wasmReady = readable(false, (set) => {
 });
 
 export const activeTab = writable<'search' | 'starred' | 'settings'>('search');
-export const overlayView = writable<'faq' | null>(null);
+export const overlayView = writable<'faq' | 'flags' | null>(null);
+
+/**
+ * Open placenames-map state — the `map(layer, filter, selected)` argument bag
+ * for `MapView`. Domain-agnostic: `layer` names a head that carries geometry,
+ * `filter` is the reverse-link node + target UUIDs to plot, `selected` is an
+ * optional point id to focus. Non-null ⇒ the map view is shown (see App.svelte).
+ */
+export interface MapState {
+  layer: { headDir: string; label: string };
+  filter: { nodeUri: string; targetUri: string; label: string };
+  selected?: string;
+}
+export const mapState = writable<MapState | null>(null);
+
+/** Open the placenames map over `state`; pushes a history entry (see App.svelte). */
+export function openMap(state: MapState): void {
+  mapState.set(state);
+}
+
+/** Close the map, returning to whatever was underneath (usually the entry). */
+export function closeMap(): void {
+  mapState.set(null);
+}
 export const showLicenseToast = persisted<boolean>('ge:showLicenseToast', true);
 export const darkMode = persisted<'light' | 'dark'>('ge:darkMode', 'light');
 export const density = persisted<'compact' | 'comfortable' | 'spacious'>('ge:density', 'comfortable');
@@ -136,6 +159,78 @@ export const layers = writable<readonly DynamicLayerInfo[]>([]);
 // Build progress for the currently building layer (null when idle)
 export const buildProgress = writable<BuildLayerStatus | null>(null);
 
+// --- Layer visibility ----------------------------------------------------
+// Hiding a layer is a view filter, not an uninstall: the head stays on disk
+// and the toggle is free. Install/remove stays in Settings, deliberately.
+
+/** Names of layers hidden from composition. Any layer may be hidden; the only
+ *  rule (enforced in `setHiddenLayers`) is that the stack can't be emptied. */
+export const hiddenLayerNames = persisted<string[]>('ge:hiddenLayers', []);
+hiddenLayerNames.subscribe(names => setHiddenLayers(names));
+
+/** Whether the layer sheet is showing. */
+export const layerSheetOpen = writable(false);
+
+export interface LayerStackItem {
+  name: string;
+  label: string;
+  swatch: string;
+  /** The sole remaining visible layer — pinned so the stack can't be emptied.
+   *  Not a fixed layer: it's whichever one is last standing. */
+  base: boolean;
+  visible: boolean;
+}
+
+/** The stack in composition order, as the sheet renders it. */
+export const layerStack = derived(
+  [layers, hiddenLayerNames, activeFamily],
+  ([$layers, $hidden, $family]): LayerStackItem[] => {
+    const items: LayerStackItem[] = $layers.map((l) => ({
+      name: l.name,
+      label: FAMILIES[$family]?.layerPresentation?.[l.name]?.label ?? l.name,
+      swatch: layerSwatch($family, l.name),
+      base: false,
+      visible: !$hidden.includes(l.name),
+    }));
+    // No layer is permanently the base. Only the LAST visible layer is pinned
+    // (un-hideable) so RM always gets a non-empty stack. If a stale set hid them
+    // all, force the first back on to match `setHiddenLayers`' fallback.
+    const visible = items.filter((it) => it.visible);
+    const pin = visible.length <= 1 ? (visible[0] ?? items[0]) : null;
+    if (pin) { pin.visible = true; pin.base = true; }
+    return items;
+  },
+);
+
+/**
+ * Toggle a layer's visibility, then refresh whatever is on screen. Both the
+ * result set and the composed entry change when the stack changes, so a stale
+ * view would silently misreport its own provenance.
+ */
+export async function toggleLayerVisibility(name: string): Promise<void> {
+  if (get(layerStack).find(l => l.name === name)?.base) return;
+
+  hiddenLayerNames.update(h =>
+    h.includes(name) ? h.filter(n => n !== name) : [...h, name],
+  );
+
+  const q = get(searchQuery);
+  const entry = get(currentEntry);
+  loading.set(true);
+  try {
+    if (q.trim()) {
+      searchResults.set(await search(q, get(searchLang), get(visibleDialects)));
+    }
+    if (entry?.uri) {
+      currentEntry.set(await loadEntryFlagged(entry.uri, entry.headword));
+    }
+  } catch (err) {
+    console.warn('[store] refresh after layer toggle failed:', err);
+  } finally {
+    loading.set(false);
+  }
+}
+
 // True while first-run offline setup (unpacking bundled heads + Pagefind zips
 // into app-data) runs. Drives the "preparing dictionary" UI on first launch.
 export const preparingDictionary = writable<boolean>(false);
@@ -228,33 +323,35 @@ export async function removeLayer(name: string): Promise<void> {
   } catch (err) {
     console.warn(`[store] removeLayerFiles "${name}" failed:`, err);
   }
+  // Don't leave the name in the hidden set: a later reinstall would come back
+  // invisible, looking like a failed install.
+  hiddenLayerNames.update(h => h.filter(n => n !== name));
   layers.set(getDynamicLayers());
 }
 
 /**
- * Startup layer bootstrap. In v2 mode, register the v2 heads as installed
- * layers (name + pagefind base) via `registerV2Layers` — no v1 SparqlStore —
- * which clears the "install a layer" empty state and enables Pagefind search;
- * detail hydrate then uses `V2_HEAD_DIRS` natively. In v1 mode, fall back to the
- * disk-restore path. Gated entirely by `USE_V2`; v1 behaviour is unchanged.
+ * Startup layer bootstrap. Registers the v2 heads as installed layers (name +
+ * pagefind base) via `registerV2Layers` — no v1 SparqlStore — which clears the
+ * "install a layer" empty state and enables Pagefind search; detail hydrate then
+ * uses the active head dirs natively.
  */
 export async function bootstrapLayers(): Promise<void> {
-  if (USE_V2) {
-    // Built app: unpack bundled heads + Pagefind zips into app-data on first
-    // launch, then point the active layer set at those real paths. No-op in dev.
-    try {
-      preparingDictionary.set(true);
-      await initOfflineLayers();
-    } catch (err) {
-      console.error('[store] offline layer prep failed:', err);
-    } finally {
-      preparingDictionary.set(false);
-    }
-    registerV2Layers();
-    layers.set(getDynamicLayers());
-    return;
+  // Built app: unpack bundled heads + Pagefind zips into app-data on first
+  // launch, then point the active layer set at those real paths. No-op in dev.
+  try {
+    preparingDictionary.set(true);
+    await initOfflineLayers();
+  } catch (err) {
+    console.error('[store] offline layer prep failed:', err);
+  } finally {
+    preparingDictionary.set(false);
   }
-  await restoreLayers();
+  registerV2Layers();
+  // Re-apply persisted visibility now that the real layer set is known:
+  // `setHiddenLayers` strips the base layer, and until initOfflineLayers has
+  // run that base is the dev constant, not the installed one.
+  setHiddenLayers(get(hiddenLayerNames));
+  layers.set(getDynamicLayers());
 }
 
 /** Restore previously-built layers from disk on app startup. */

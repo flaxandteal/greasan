@@ -26,8 +26,24 @@ const en: Record<string, string> = {
   'entry.examples': 'Examples',
   'entry.etymology': 'Etymology',
   'entry.cognates': 'Related Words',
+  'entry.placenames': 'Placenames',
+  'entry.placenamesCount': '{count} placenames are built from this word',
+  'entry.placenamesSource': 'From Logainm (CC BY 4.0), modified',
   'entry.star': 'Star',
   'entry.unstar': 'Unstar',
+
+  // Placenames map
+  'map.title': 'Placenames map',
+  'map.viewOnMap': 'Map',
+  'map.pointsWithGeo': '{count} with location',
+  'map.clearFilter': 'Clear filter',
+  'map.loading': 'Loading placenames…',
+  'map.empty': 'No placenames with coordinates for this word.',
+  'map.source': 'From Logainm (CC BY 4.0), modified · outline: Natural Earth',
+  'map.goToEntry': 'Go to entry',
+  'map.viewOnLogainm': 'View on Logainm',
+  'map.loadingDetail': 'Loading place details…',
+  'map.constituentWords': 'Constituent words',
 
   // Form groups
   'forms.nominative': 'Nominative',
@@ -37,6 +53,20 @@ const en: Record<string, string> = {
   'forms.lenited': 'Lenited',
   'forms.eclipsed': 'Eclipsed',
   'forms.other': 'Other',
+  'forms.singular': 'Singular',
+  'forms.plural': 'Plural',
+  'forms.past': 'Past',
+  'forms.present': 'Present',
+  'forms.future': 'Future',
+  'forms.conditional': 'Conditional',
+  'forms.subjunctive': 'Subjunctive',
+  'forms.imperative': 'Imperative',
+  'forms.comparison': 'Comparison',
+  'forms.principalParts': 'Principal parts',
+  'forms.verbalNoun': 'verbal noun',
+  'forms.verbalAdjective': 'verbal adjective',
+  'forms.base': 'base',
+  'forms.autonomous': 'auton.',
 
   // Example detail
   'example.title': 'Example',
@@ -51,6 +81,14 @@ const en: Record<string, string> = {
   'starred.emptyHint': 'Tap the star on any entry to save it here',
 
   // Settings
+  // Layer sheet
+  'layers.title': 'Layers',
+  'layers.aria': 'Show or hide layers',
+  'layers.base': 'Last layer · always on',
+  'layers.noEntry': 'nothing for this entry',
+  'layers.hint': 'Hiding a layer keeps it on the device.',
+  'layers.manage': 'Manage',
+
   'settings.title': 'Settings',
   'settings.dictionary': 'Dictionary',
   'settings.layers': 'Layers',
@@ -64,10 +102,15 @@ const en: Record<string, string> = {
   'settings.removeLayer': 'Remove layer',
   'settings.formatBuilt': 'Pre-built package',
   'settings.formatPrebuild': 'Build from source',
+  'settings.formatTbx': 'TBX terminology',
+  'settings.buildTbx': 'Build from TBX',
+  'settings.chooseTbxFile': 'Choose TBX file\u2026',
+  'settings.noFileChosen': 'No file chosen',
   'settings.buildFetching': 'Fetching source\u2026',
   'settings.buildExtracting': 'Extracting package\u2026',
   'settings.buildParsing': 'Parsing data\u2026',
   'settings.buildBuilding': 'Building index\u2026',
+  'settings.buildIndexing': 'Building search index\u2026',
   'settings.buildWriting': 'Writing files\u2026',
   'settings.dialects': 'Dialects',
   'settings.density': 'Density',
@@ -88,6 +131,7 @@ const en: Record<string, string> = {
   'settings.licenseEntries': 'Dictionary entries \u2014 Wiktionary, licensed CC BY-SA 3.0/4.0 + GFDL. Extracted via Kaikki.org using Wiktextract (Ylonen 2022, LREC). Each entry links to its Wiktionary source page; contributors credited via page edit history.',
   'settings.licenseExamples': 'Example sentences \u2014 Tatoeba (CC BY 2.0 FR); Gaois Parallel Corpus of Legislation (Fiontar & Scoil na Gaeilge, DCU, CC BY 4.0).',
   'settings.licenseMacbain': 'MacBain\'s Etymological Dictionary of the Gaelic Language (1911) \u2014 public domain. Attribution: Alexander MacBain, via Wikisource.',
+  'settings.licenseLogainm': 'Placenames \u2014 Linked Logainm (logainm.ie), Gaois / Fiontar & Scoil na Gaeilge, DCU; \u00a9 Government of Ireland, licensed CC BY 4.0. Modified: name elements are linked to dictionary entries and coordinates reduced to centroids.',
   'settings.licenseFonts': 'Fonts \u2014 Kumbh Sans and League Gothic, both SIL Open Font License.',
   'settings.licenseShareAlike': 'This derived corpus inherits the Share-Alike obligation. Redistribution must preserve attribution and license terms.',
   'settings.licenseProvenance': 'Dump provenance, file hashes, and extract dates are recorded in the bundle manifest.',
@@ -105,7 +149,7 @@ const en: Record<string, string> = {
 
   // License toast
   'toast.title': 'Open Data',
-  'toast.body': 'Dictionary content from Wiktionary (CC BY-SA), examples from Tatoeba (CC BY 2.0) & Gaois.',
+  'toast.body': 'Dictionary content from Wiktionary (CC BY-SA); examples from Tatoeba (CC BY 2.0) and Gaois — Parallel Corpus of Legislation (Fiontar & Scoil na Gaeilge, DCU; CC BY 4.0).',
   'toast.details': 'Details',
   'toast.ok': 'OK',
   'toast.aria': 'Licensing information',

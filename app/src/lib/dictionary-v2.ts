@@ -16,8 +16,8 @@
  *     PLAIN localized strings ("WK" / "MB"), NOT uuids — matching v1, which read
  *     them with `String(...)` rather than `getDisplay()`.
  *
- * Off by default; gated behind `USE_V2` in dictionary.ts. Requires src-tauri
- * built with `--features v2` (the `v2_*` invokes reject otherwise).
+ * This is the entry-detail path. Requires src-tauri built with `--features v2`
+ * (the `v2_*` invokes reject otherwise).
  */
 import { invoke } from '@tauri-apps/api/core';
 import { hydrateLayers, citedBy, descriptors } from './v2';
@@ -202,6 +202,9 @@ export async function loadEntryV2(uri: string, headDirs: string[]): Promise<Entr
     const headword = localStr(tree.headword);
     const pos = label(tree.part_of_speech);
     const dialect = label(tree.dialect);
+    // Grammatical class (BuNaMo): noun declension / verb conjugation / adjective
+    // declension — a plain localized string on the composed tree ('1'..'5', 'irr', '').
+    const grammarClass = localStr(tree.grammar_class) || undefined;
 
     // Pronunciation — cardinality n.
     const ipa: string[] = [];
@@ -225,6 +228,14 @@ export async function loadEntryV2(uri: string, headDirs: string[]): Promise<Entr
         if (tag && tag !== '(pending)' && tag !== '(unresolved)') tags.push(tag);
       }
       if (writtenRep) forms.push({ writtenRep, tags });
+    }
+
+    // Gender is an entry-level property carried on the (BuNaMo) form tiles; surface
+    // the first masculine/feminine tag for the title badge.
+    let gender: string | undefined;
+    for (const f of forms) {
+      const g = f.tags.find((t) => t === 'masculine' || t === 'feminine');
+      if (g) { gender = g; break; }
     }
 
     // Etymology — cardinality n, deduplicated by text, merge source labels.
@@ -266,21 +277,55 @@ export async function loadEntryV2(uri: string, headDirs: string[]): Promise<Entr
     // descriptor (spine `display_name`) IS the sentence, so resolve them cheaply via
     // `descriptors` — ONE indexed batch, no hydration, no N+1. Full detail
     // (translation/source/highlights) is deferred to on-interaction. Best-effort.
+    // Examples illustrating this headword — the reverse of the example layers'
+    // `illustrates.headword_entry` link (mirror of placenames). Two heads, so we
+    // query each and tag its source. `headword_entry` is an example-graph node, so
+    // run it example-authoritative (per head), like place's `element_entry`.
     const externalExamples: EntryDetail['externalExamples'] = [];
-    try {
-      const refs = asArray(tree.external_examples)
-        .flat()
-        .map((r) => (r && typeof r === 'object' ? (r.resourceId ?? r.id ?? '') : typeof r === 'string' ? r : ''))
-        .filter(Boolean);
-      if (refs.length) {
-        const sentences = await descriptors(headDirs, refs);
-        for (const id of refs) {
+    for (const head of headDirs.filter((d) => d.includes('/example-'))) {
+      const src: 'tatoeba' | 'gaois' = head.includes('tatoeba') ? 'tatoeba' : 'gaois';
+      try {
+        const ids = await citedBy([head], uri, 'headword_entry');
+        if (!ids.length) continue;
+        const sentences = await descriptors([head], ids);
+        for (const id of ids) {
           const ga = sentences[id];
-          if (ga) externalExamples.push({ resourceId: id, ga, en: '', src: 'gaois', hl: [] });
+          if (ga) externalExamples.push({ resourceId: id, ga, en: '', src, hl: [] });
+        }
+      } catch (err) {
+        console.warn(`[dictionary-v2] examples (${src}) skipped:`, err);
+      }
+    }
+
+    // Placenames: resources in the `place` layer whose name is constituted by this
+    // word — the reverse of `name_elements.element_entry`. A DIFFERENT node path
+    // from `cognate_entry_id`, so placenames stay cleanly separate from etymological
+    // cognates. `citedBy` returns only UUIDs (indexed reverse_links, no hydration);
+    // we keep the full count and resolve display names for a small sample via
+    // `descriptors` (one indexed batch). Best-effort. Place detail is on-interaction.
+    let placenames: EntryDetail['placenames'];
+    try {
+      // `element_entry` is a node in the PLACE graph, not the lexical_entry graph
+      // that heads the composed stack — so `cited_by` (which resolves the node
+      // alias against the authoritative graph = headDirs[0] = wiktionary) throws
+      // "unknown alias 'element_entry'" if run over the full stack. Run it
+      // place-authoritative instead: against the place head alone (the stack
+      // member whose dir is the `place-v2` head). Verified on-device: this returns
+      // 8,875 for baile where the full-stack call errors.
+      const placeHead = headDirs.find((d) => d.includes('place-v2'));
+      if (placeHead) {
+        const placeIds = await citedBy([placeHead], uri, 'element_entry');
+        if (placeIds.length) {
+          const sampleIds = placeIds.slice(0, 24);
+          const names = await descriptors([placeHead], sampleIds);
+          const sample = sampleIds
+            .map((id) => ({ resourceId: id, name: names[id] || '' }))
+            .filter((p) => p.name);
+          placenames = { count: placeIds.length, sample };
         }
       }
     } catch (err) {
-      console.warn('[dictionary-v2] external examples skipped:', err);
+      console.warn('[dictionary-v2] placenames skipped:', err);
     }
 
     return {
@@ -288,12 +333,15 @@ export async function loadEntryV2(uri: string, headDirs: string[]): Promise<Entr
       headword,
       pos,
       dialect: dialect || undefined,
+      gender,
+      grammarClass,
       senses,
       forms,
       ipa,
       etymologies,
       cognates,
       externalExamples,
+      placenames,
     };
   } catch (err) {
     console.warn('[dictionary-v2] loadEntryV2 failed:', err);

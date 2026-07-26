@@ -35,3 +35,6 @@ uv.lock
 
 # Claude design artifacts
 claude-design/
+.basemap-tools/
+app/src-tauri/basemap/*.pmtiles
+app/src-tauri/basemap/*.layerstats.tsv.gz

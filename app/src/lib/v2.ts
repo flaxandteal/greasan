@@ -147,3 +147,30 @@ export async function citedBy(
 ): Promise<string[]> {
   return await invoke<string[]>('v2_cited_by', { headDirs, uri, nodePath });
 }
+
+/** One geo-point resolved by {@link geoPoints}: a citing resource with a point. */
+export interface GeoPoint {
+  id: string;
+  name: string;
+  lat: number;
+  lng: number;
+}
+
+/**
+ * The `map(layer, filter)` primitive: every resource in the head at `headDir`
+ * that cites `targetUri` through the reverse-link node `nodePath`, with its
+ * display name and point geometry. `nodePath`/`targetUri` are `dict.term` UUIDs
+ * already (no alias resolution against a graph), so this works against a head
+ * whose spine/geo tables belong to a DIFFERENT graph than the app's base stack —
+ * e.g. the Logainm place head, whose `element_entry` node cites lexical entries.
+ *
+ * Backed by one indexed SQL join (reverse_links → spine_place → geo_bbox), no
+ * hydration. Verified: baile → 6,103 points in ~78 ms.
+ */
+export async function geoPoints(
+  headDir: string,
+  nodePath: string,
+  targetUri: string,
+): Promise<GeoPoint[]> {
+  return await invoke<GeoPoint[]>('v2_geo_points', { headDir, nodePath, targetUri });
+}

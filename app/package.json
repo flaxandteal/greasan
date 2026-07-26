@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
-    "build:mobile": "vite build && rm -rf dist/index-*",
+    "build:mobile": "vite build && rm -rf dist/index-* dist/layer-*",
     "build:search": "echo 'build-search-index not yet implemented'",
     "preview": "vite preview",
     "check": "svelte-check --tsconfig ./tsconfig.app.json && tsc -p tsconfig.node.json",
@@ -19,23 +19,27 @@
   "devDependencies": {
     "@sveltejs/vite-plugin-svelte": "^7.0.0",
     "@tailwindcss/vite": "^4.2.4",
+    "@tauri-apps/cli": "^2",
     "@tsconfig/svelte": "^5.0.8",
     "@types/node": "^24.12.2",
+    "pagefind": "^1.3.0",
     "svelte": "^5.55.4",
     "svelte-check": "^4.4.6",
     "tailwindcss": "^4.2.4",
     "typescript": "~6.0.2",
     "vite": "^8.0.10",
     "vite-plugin-wasm": "^3.6.0",
-    "pagefind": "^1.3.0",
-    "vitest": "^4.1.5",
-    "@tauri-apps/cli": "^2"
+    "vitest": "^4.1.5"
   },
   "dependencies": {
     "@alizarin/clm": "https://github.com/flaxandteal/alizarin/releases/download/v2.0.0-alpha.94/alizarin-clm-2.0.0-alpha.94.tgz",
     "@tauri-apps/api": "^2",
-    "alizarin": "https://github.com/flaxandteal/alizarin/releases/download/v2.0.0-alpha.95/alizarin-2.0.0-alpha.95.tgz",
+    "@tauri-apps/plugin-dialog": "^2.7.1",
+    "@tauri-apps/plugin-fs": "^2.5.1",
+    "alizarin": "file:../../magic/alizarin-sandbox",
     "konsta": "^5.0.9",
+    "maplibre-gl": "^6.0.0",
+    "pmtiles": "^4.4.1",
     "ros-madair-alizarin": "file:../../magic/RosMadair/pkg-alizarin"
   }
 }

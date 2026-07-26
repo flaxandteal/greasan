@@ -3,6 +3,9 @@
   import { FAMILIES, type FamilyId, type SuggestedLayer } from '../lib/family';
   import { t } from '../lib/i18n';
   import { diagEntries, diagTotalMs, diagTotalBytes, diagReset } from '../lib/diagnostics';
+  import { open } from '@tauri-apps/plugin-dialog';
+
+
 
   const familyIds = Object.keys(FAMILIES) as FamilyId[];
 
@@ -23,7 +26,8 @@
   let layerUrl = $state('');
   let layerName = $state('');
   let layerError = $state('');
-  let layerFormat = $state<'built' | 'prebuild'>('built');
+  let layerFormat = $state<'built' | 'prebuild' | 'tbx'>('built');
+  let tbxFilePath = $state('');
 
   let isBuilding = $derived($buildProgress !== null && $buildProgress.state !== 'failed');
 
@@ -40,6 +44,20 @@
     layerFormat = s.format;
   }
 
+  async function handleChooseTbxFile() {
+    const selected = await open({
+      multiple: false,
+      filters: [{ name: 'All files', extensions: ['*/*'] }],
+    });
+    if (selected) {
+      const picked = selected as string;
+      layerError = '';
+      tbxFilePath = decodeURIComponent(picked.split('/').pop() || 'file.tbx');
+      // Pass content:// URI directly — Rust builder handles it via JNI
+      layerUrl = picked;
+    }
+  }
+
   async function handleImportLayer() {
     if (!layerUrl.trim() || !layerName.trim()) return;
     layerError = '';
@@ -47,10 +65,11 @@
       if (layerFormat === 'built') {
         await installPackage(layerUrl.trim(), layerName.trim());
       } else {
-        await importLayer(layerUrl.trim(), layerName.trim());
+        await importLayer(layerUrl.trim(), layerName.trim(), layerFormat);
       }
       layerUrl = '';
       layerName = '';
+      tbxFilePath = '';
     } catch (err) {
       layerError = String(err);
     }
@@ -169,6 +188,7 @@
            $buildProgress.state === 'extracting' ? $t('settings.buildExtracting') :
            $buildProgress.state === 'parsing' ? $t('settings.buildParsing') :
            $buildProgress.state === 'building' ? $t('settings.buildBuilding') :
+           $buildProgress.state === 'indexing' ? $t('settings.buildIndexing') :
            $buildProgress.state === 'writing' ? $t('settings.buildWriting') :
            $buildProgress.state}
         </div>
@@ -183,25 +203,46 @@
           placeholder={$t('settings.layerName')}
           style="padding:6px 10px;border:1px solid var(--srf-rule);border-radius:6px;font-size:var(--fs-body);background:var(--srf-base);color:var(--fg-body);"
         />
-        <input
-          bind:value={layerUrl}
-          placeholder={layerFormat === 'built' ? $t('settings.layerUrlPackage') : $t('settings.layerUrl')}
-          style="padding:6px 10px;border:1px solid var(--srf-rule);border-radius:6px;font-size:var(--fs-body);background:var(--srf-base);color:var(--fg-body);"
-        />
+        {#if layerFormat === 'tbx'}
+          <div style="display:flex;align-items:center;gap:8px;">
+            <button
+              onclick={handleChooseTbxFile}
+              style="padding:6px 12px;border:1px solid var(--srf-rule);border-radius:6px;font-size:var(--fs-body);background:var(--srf-card);color:var(--fg-body);cursor:pointer;white-space:nowrap;"
+            >
+              {$t('settings.chooseTbxFile')}
+            </button>
+            <span style="font-size:var(--fs-small);color:var(--fg-muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">
+              {tbxFilePath ? tbxFilePath.split('/').pop() : $t('settings.noFileChosen')}
+            </span>
+          </div>
+        {:else}
+          <input
+            bind:value={layerUrl}
+            placeholder={layerFormat === 'built' ? $t('settings.layerUrlPackage') : $t('settings.layerUrl')}
+            style="padding:6px 10px;border:1px solid var(--srf-rule);border-radius:6px;font-size:var(--fs-body);background:var(--srf-base);color:var(--fg-body);"
+          />
+        {/if}
         <div class="ge-segs" style="margin:2px 0;">
           <button
             class="ge-seg"
             class:active={layerFormat === 'built'}
-            onclick={() => { layerFormat = 'built'; }}
+            onclick={() => { layerFormat = 'built'; tbxFilePath = ''; layerUrl = ''; }}
           >
             {$t('settings.formatBuilt')}
           </button>
           <button
             class="ge-seg"
             class:active={layerFormat === 'prebuild'}
-            onclick={() => { layerFormat = 'prebuild'; }}
+            onclick={() => { layerFormat = 'prebuild'; tbxFilePath = ''; layerUrl = ''; }}
           >
             {$t('settings.formatPrebuild')}
+          </button>
+          <button
+            class="ge-seg"
+            class:active={layerFormat === 'tbx'}
+            onclick={() => { layerFormat = 'tbx'; layerUrl = ''; }}
+          >
+            {$t('settings.formatTbx')}
           </button>
         </div>
         <button
@@ -209,7 +250,7 @@
           disabled={!layerUrl.trim() || !layerName.trim()}
           style="padding:6px 12px;border:1px solid var(--srf-rule);border-radius:6px;font-size:var(--fs-body);background:var(--accent-deep);color:white;cursor:pointer;opacity:{!layerUrl.trim() || !layerName.trim() ? '0.5' : '1'};"
         >
-          {layerFormat === 'built' ? $t('settings.installPackage') : $t('settings.importLayer')}
+          {layerFormat === 'built' ? $t('settings.installPackage') : layerFormat === 'tbx' ? $t('settings.buildTbx') : $t('settings.importLayer')}
         </button>
       </div>
     {/if}
@@ -375,6 +416,7 @@
             <p>{$t('settings.licenseEntries')}</p>
             <p>{$t('settings.licenseExamples')}</p>
             <p>{$t('settings.licenseMacbain')}</p>
+            <p>{$t('settings.licenseLogainm')}</p>
             <p>{$t('settings.licenseFonts')}</p>
             <p>{$t('settings.licenseShareAlike')}</p>
             <p style="margin-top:8px;font-size:var(--fs-micro);color:var(--fg-soft);">

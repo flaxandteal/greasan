@@ -8,6 +8,15 @@
     "opener:default",
     "ros-madair-builder:allow-build-layer",
     "ros-madair-builder:allow-get-layer-status",
-    "ros-madair-builder:allow-list-layers"
+    "ros-madair-builder:allow-list-layers",
+    "dialog:default",
+    "fs:default",
+    "fs:allow-read-file",
+    "fs:allow-write-file",
+    "fs:allow-write-text-file",
+    "fs:allow-mkdir",
+    "fs:allow-exists",
+    "fs:allow-appdata-write-recursive",
+    "fs:allow-appdata-read-recursive"
   ]
 }

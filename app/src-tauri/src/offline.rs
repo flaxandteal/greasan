@@ -26,7 +26,7 @@ use tauri::{AppHandle, Manager, Runtime};
 
 /// Bump this when the bundled artifact FORMAT changes, so already-installed apps
 /// re-extract instead of reusing a stale layout.
-const READY_MARKER: &str = ".offline-ready-v1";
+const READY_MARKER: &str = ".offline-ready-v2";
 
 struct CorpusSpec {
     /// Layer name — the `dynamicLayers` registry key and V2 layer name.
@@ -60,6 +60,55 @@ const CORPORA: &[CorpusSpec] = &[
         head: "tearma-v2",
         index: "tearma-index",
         langs: &["ga", "en"],
+    },
+    CorpusSpec {
+        // Morphology enrichment (BuNaMo): forms + grammar_class compose onto the
+        // shared goi ids. Pagefind is ga-only (inflected surface forms). Its
+        // pagefind zips live in the head dir, so index == head basename.
+        name: "bunamo",
+        head: "bunamo-v2",
+        index: "bunamo-v2",
+        langs: &["ga"],
+    },
+    CorpusSpec {
+        // Logainm placenames — its OWN graph (schema.org/Place), NOT the shared
+        // lexical_entry model, so it composes as a separate model in the stack.
+        // name_elements.element_entry links each name to the goi dictionary entry
+        // its elements come from (reverse lookup via `cited_by`). Pagefind is
+        // ga-only (Irish + English name text); zips live in the head dir.
+        name: "place",
+        head: "place-v2",
+        index: "place-v2",
+        langs: &["ga"],
+    },
+    CorpusSpec {
+        // Corpus examples — own graph; head bundled for hydrate + cited_by. Two
+        // heads keep the licences distinct (Tatoeba CC BY 2.0 / Gaois CC BY 4.0).
+        // sampla pagefind (example-granular) carried for the sample search.
+        name: "example-tatoeba",
+        head: "example-tatoeba-v2",
+        index: "example-tatoeba-v2",
+        langs: &["sampla"],
+    },
+    CorpusSpec {
+        name: "example-gaois",
+        head: "example-gaois-v2",
+        index: "example-gaois-v2",
+        langs: &["sampla"],
+    },
+    CorpusSpec {
+        // Person graph — seeded "User" that authors notes. No pagefind.
+        name: "person",
+        head: "person-v2",
+        index: "person-v2",
+        langs: &[],
+    },
+    CorpusSpec {
+        // Note/flag graph — the MUTABLE layer, re-emitted on each flag. No pagefind.
+        name: "note",
+        head: "note-v2",
+        index: "note-v2",
+        langs: &[],
     },
 ];
 

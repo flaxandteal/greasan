@@ -18,11 +18,29 @@ export interface LayerConfig {
   name: string;
 }
 
+/**
+ * How a layer presents itself in the layer sheet and on `.ge-layer-tag` chips.
+ * Keyed by layer name. The swatch colour is the legend link: the same token
+ * bars the chip on a sense and the row in the sheet, so "where did this come
+ * from" is answerable without reading either label.
+ */
+export interface LayerPresentation {
+  label: string;
+  /** CSS colour (token reference preferred) — see `--layer-*` in tokens.css. */
+  swatch: string;
+  /**
+   * `source_label` values this layer emits, lowercased. Used to colour the
+   * per-sense chips; a layer whose data carries no source label simply gets
+   * no chip tint, which is the existing behaviour.
+   */
+  sourceLabels?: string[];
+}
+
 export interface SuggestedLayer {
   name: string;
   url: string;
   label: string;
-  format: 'built' | 'prebuild';
+  format: 'built' | 'prebuild' | 'tbx';
 }
 
 export interface FamilyConfig {
@@ -38,11 +56,44 @@ export interface FamilyConfig {
   searchLangs: SearchLangOption[];
   defaultLayers: LayerConfig[];
   suggestedLayers: SuggestedLayer[];
+  /** Per-layer display config, keyed by layer name. Unlisted layers fall back
+   *  to their raw name and a neutral swatch. */
+  layerPresentation?: Record<string, LayerPresentation>;
 }
 
-/** Look up the short block-caps code for a dialect label, e.g. "Connacht Irish" → "GA.CON". */
+/** Swatch colour for a layer name, or a neutral default. */
+export function layerSwatch(familyId: FamilyId, layerName: string): string {
+  return FAMILIES[familyId]?.layerPresentation?.[layerName]?.swatch ?? 'var(--layer-default)';
+}
+
+/** Swatch colour for a `source_label` chip value, or '' when unattributable. */
+export function sourceLabelSwatch(familyId: FamilyId, sourceLabel: string): string {
+  const pres = FAMILIES[familyId]?.layerPresentation;
+  if (!pres) return '';
+  // A merged chip ("MacBain+Wiktionary") has no single colour — leave it plain.
+  if (sourceLabel.includes('+')) return '';
+  const needle = sourceLabel.trim().toLowerCase();
+  for (const p of Object.values(pres)) {
+    if (p.sourceLabels?.includes(needle)) return p.swatch;
+  }
+  return '';
+}
+
+/**
+ * Look up the short block-caps code for a dialect label, e.g. "Connacht Irish"
+ * → "GA.CON", "Irish" → "GA".
+ *
+ * Tolerant of the "(General)" qualifier being present or absent: sense dialects
+ * arrive already stripped ("Irish"), while entry/settings labels keep it
+ * ("Irish (General)"). Both resolve to the language-generic code.
+ */
 export function dialectCode(familyId: FamilyId, dialectLabel: string): string {
-  const opt = FAMILIES[familyId]?.dialectOptions.find(d => d.value === dialectLabel);
+  const opts = FAMILIES[familyId]?.dialectOptions ?? [];
+  const strip = (s: string) => s.replace(/\s*\(General\)$/, '').trim();
+  const target = strip(dialectLabel);
+  const opt =
+    opts.find(d => d.value === dialectLabel) ??
+    opts.find(d => strip(d.value) === target);
   return opt?.code || '';
 }
 
@@ -77,6 +128,16 @@ export const FAMILIES: Record<FamilyId, FamilyConfig> = {
       { id: 'en', label: 'Gluais' },
       { id: 'sampla', label: 'Samplaí' },
     ],
+    // Keyed by v2 layer name (see V2_LAYERS / the installed layer registry).
+    // sourceLabels are the codes the pipeline stamps on senses: "WK" from
+    // normalise.py, "MB" from build-macbain-layer.mjs, "TE" from the TBX run.
+    layerPresentation: {
+      wiktionary: { label: 'Vicífhoclóir', swatch: 'var(--layer-wk)', sourceLabels: ['wk'] },
+      macbain: { label: 'MacBain (1911)', swatch: 'var(--layer-mb)', sourceLabels: ['mb'] },
+      tearma: { label: 'Téarma', swatch: 'var(--layer-te)', sourceLabels: ['te'] },
+      // Morphology only — no senses, so no source chips ever carry "BN".
+      bunamo: { label: 'BuNaMo', swatch: 'var(--layer-bn)', sourceLabels: ['bn'] },
+    },
     defaultLayers: [],
     suggestedLayers: [
       {
@@ -93,9 +154,9 @@ export const FAMILIES: Record<FamilyId, FamilyConfig> = {
       },
       {
         name: 'tearma',
-        url: 'http://localhost:8080/tearma-layer.tar.gz',
-        label: 'Téarma — Irish terminology',
-        format: 'built',
+        url: 'https://www.tearma.ie/api/tbx',
+        label: 'Téarma — Irish terminology (on-device build)',
+        format: 'tbx',
       },
       {
         name: 'macbain',

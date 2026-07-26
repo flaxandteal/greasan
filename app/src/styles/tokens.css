@@ -42,6 +42,9 @@
   --srf-app:        var(--cream);          /* page background */
   --srf-card:       var(--paper);          /* lists, cards */
   --srf-card-alt:   #FBF9F2;               /* selected/striped row */
+  --map-land:       #FBF9F2;               /* map: landmass fill */
+  --map-coast:      var(--teal-deep);      /* map: coastline (dark line on cream) */
+  --map-water:      #DCE6E5;               /* map: water bodies (cool grey on cream) */
   --srf-chrome:     var(--paper);          /* navbar, search bar */
   --srf-chrome-fg:  var(--ink);
   --srf-divider:    rgba(51, 75, 78, 0.10);
@@ -99,6 +102,15 @@
   /* --- Shadow --------------------------------------------------------- */
   --shadow-card: 0 1px 2px rgba(12, 9, 16, 0.04), 0 4px 14px rgba(12, 9, 16, 0.05);
   --shadow-pop:  0 6px 24px rgba(12, 9, 16, 0.10);
+
+  /* Layer swatches — the legend link between a sheet row and a source chip.
+     Distinguishable at 4px wide, and by lightness alone for colour-blind
+     readers (teal → gold → rust runs light-to-dark in that order). */
+  --layer-wk:      var(--teal-mid);
+  --layer-mb:      var(--gold-deep);
+  --layer-te:      #9C6B4F;
+  --layer-bn:      #6E7F5B;
+  --layer-default: var(--fg-soft);
 }
 
 /* --- Density modifiers (toggled at runtime) ---------------------------- */
@@ -118,6 +130,9 @@
   --srf-app:        var(--teal-deep);
   --srf-card:       #2A3F42;
   --srf-card-alt:   #324A4D;
+  --map-land:       #3C585C;               /* map: raised landmass, lighter than the teal bg */
+  --map-coast:      #6FA3AB;               /* map: coastline, legible on dark teal (bg was == --teal-deep) */
+  --map-water:      #223C40;               /* map: water bodies, darker than land so they recede */
   --srf-chrome:     #2A3F42;
   --srf-chrome-fg:  var(--cream);
   --srf-divider:    rgba(246, 244, 235, 0.10);
@@ -128,6 +143,10 @@
   --fg-soft:        #7d8b8d;
   --link:           var(--accent);
   --link-active:    var(--paper);
+  --layer-wk:       #7FB3BA;
+  --layer-mb:       var(--gold);
+  --layer-te:       #C99476;
+  --layer-bn:       #9AAE84;
   --hl-bg:          rgba(217, 199, 142, 0.30);
   --shadow-card:    0 1px 2px rgba(0,0,0,0.25), 0 4px 14px rgba(0,0,0,0.20);
 }
@@ -208,19 +227,65 @@
   vertical-align: baseline;
 }
 
-.ge-layer-tag {
-  display: inline-block;
-  font-size: 10px;
-  color: var(--fg-muted);
-  opacity: 0.40;
-  font-weight: 600;
-  font-style: normal;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
+/* Per-sense tag column: a dialect chip and a source chip of equal, fixed width
+   so they align vertically down the sense list. Empty slots hold their space
+   (visibility:hidden) so a sense missing one tag doesn't shift the other. */
+.ge-sense-tags {
+  display: flex;
+  gap: 6px;
   flex-shrink: 0;
   align-self: flex-start;
   margin-top: 2px;
   margin-left: 8px;
+}
+
+.ge-sense-tag {
+  box-sizing: border-box;
+  min-width: 48px;
+  text-align: center;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  padding: 1px 6px;
+  border-radius: 4px;
+  border: 1px solid transparent;
+  white-space: nowrap;
+}
+
+/* Dialect: neutral outline (GA / GD / GA.ULS …). */
+.ge-sense-tag.dialect {
+  border-color: currentColor;
+  color: var(--fg-muted);
+  opacity: 0.70;
+}
+
+/* GD (Scottish Gaelic) reversed out — filled with the text colour, label knocked
+   out to the card background — so Scottish senses stand out against the Irish ones. */
+.ge-sense-tag.dialect.gd {
+  background: var(--fg-muted);
+  border-color: var(--fg-muted);
+  color: var(--srf-card, #fffefb);
+  opacity: 1;
+}
+
+/* Source: layer code (WK / MB …), block caps, no box unless tinted. */
+.ge-sense-tag.source {
+  color: var(--fg-muted);
+  opacity: 0.50;
+  text-transform: uppercase;
+}
+
+/* Tinted by the layer swatch — a full outline in the source colour, so the two
+   chips stay the same width and shape (no asymmetric left bar). */
+.ge-sense-tag.source.tinted {
+  border-color: var(--sw);
+  color: var(--sw);
+  opacity: 0.95;
+}
+
+/* Empty slot: keep the width, drop the ink. */
+.ge-sense-tag.empty {
+  visibility: hidden;
 }
 
 /* Etymology prose (full ink, readable) */

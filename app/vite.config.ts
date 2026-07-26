@@ -50,6 +50,10 @@ function v2LayerServe(): Plugin {
     '/layer-wiktionary/': resolve(__dirname, '../data/wiktionary-index'),
     '/layer-macbain/': resolve(__dirname, '../data/macbain-index'),
     '/layer-tearma/': resolve(__dirname, '../data/tearma-index'),
+    // BuNaMo keeps its extracted pagefind-<lang>/ dirs in the head dir itself.
+    '/layer-bunamo/': resolve(__dirname, '../data/bunamo-v2'),
+    // Place (Logainm) — bundled but excluded from search for now (NON_SEARCH_LAYERS).
+    '/layer-place/': resolve(__dirname, '../data/place-v2'),
   };
   return {
     name: 'v2-layer-serve',

@@ -3,9 +3,9 @@ import './app.css'
 import App from './App.svelte'
 
 // Tauri Android's tauri.localhost proxy drops concurrent Range requests
-// (https://github.com/tauri-apps/tauri/issues/14097). Redirect data fetches
-// to the Vite dev server via the ADB reverse tunnel, bypassing the proxy.
-if (window.location.hostname === 'tauri.localhost') {
+// (https://github.com/tauri-apps/tauri/issues/14097). In dev mode only,
+// redirect data fetches to the Vite dev server via ADB reverse tunnel.
+if (import.meta.env.DEV && window.location.hostname === 'tauri.localhost') {
   const devOrigin = 'http://127.0.0.1:5173';
   const origFetch = window.fetch;
   window.fetch = function (input: RequestInfo | URL, init?: RequestInit) {
@@ -49,5 +49,9 @@ window.addEventListener('unhandledrejection', (event) => {
 const app = mount(App, {
   target: document.getElementById('app')!,
 })
+
+// greasan:// deep links (deterministic navigation + shareable links). No-op off Tauri.
+import { initDeepLinks } from './lib/deeplink';
+void initDeepLinks();
 
 export default app

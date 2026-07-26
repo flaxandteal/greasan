@@ -1,9 +1,10 @@
 <script lang="ts">
   import { get } from 'svelte/store';
-  import { searchQuery, searchResults, currentEntry, loading, activeTab, searchLang, visibleDialects, familyConfig, recentEntries, overlayView, layers } from '../lib/store';
-  import { search, loadEntryFlagged } from '../lib/dictionary';
+  import { searchQuery, searchResults, currentEntry, currentExample, loading, activeTab, searchLang, visibleDialects, familyConfig, recentEntries, overlayView, layers } from '../lib/store';
+  import { search, loadEntryFlagged, loadExample } from '../lib/dictionary';
   import type { SearchLang } from '../lib/dictionary';
   import { t } from '../lib/i18n';
+  import LayerPill from './LayerPill.svelte';
 
   /** Dialect code tag for display (codes come directly from Pagefind meta). */
   function dialectTag(dialect?: string): string {
@@ -65,12 +66,36 @@
       loading.set(false);
     }
   }
+
+  // A tapped result: Samplaí (example-granular) opens the EXAMPLE page; the
+  // headword tabs open the entry.
+  async function selectResult(result: { uri: string; headword: string }) {
+    if ($searchLang === 'sampla') {
+      loading.set(true);
+      try {
+        const ex = await loadExample(result.uri);
+        if (ex) currentExample.set(ex);
+      } finally {
+        loading.set(false);
+      }
+    } else {
+      await selectEntry(result.uri, result.headword);
+    }
+  }
 </script>
 
 <div class="ge-navbar">
-  <div class="ge-navbar-side"></div>
+  <div class="ge-navbar-side">
+    <LayerPill />
+  </div>
   <div class="ge-navbar-title">{$t('search.title')}</div>
   <div class="ge-navbar-side right">
+    <button class="ge-iconbtn" aria-label="Bratacha · Flags" onclick={() => overlayView.set('flags')}>
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M4 21V7M4 7h8l-1.4 2.5L12 12H4"/>
+        <path d="M8 16V3M8 3h8l-1.4 2.5L16 8H8"/>
+      </svg>
+    </button>
     <button class="ge-iconbtn" aria-label={$t('search.info')} onclick={() => overlayView.set('faq')}>
       <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
         <circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/>
@@ -117,7 +142,7 @@
       {#each $searchResults as result}
         <button
           class="ge-list-row"
-          onclick={() => selectEntry(result.uri, result.headword)}
+          onclick={() => selectResult(result)}
           style="width:100%;background:transparent;border:0;text-align:left;cursor:pointer;"
         >
           <div class="row-main">
@@ -129,6 +154,16 @@
               </div>
               <div class="ge-list-subtitle">
                 {result.headword}
+                {#if dialectTag(result.dialect)}
+                  <span class="ge-dialect-tag">{dialectTag(result.dialect)}</span>
+                {/if}
+              </div>
+            {:else if $searchLang === 'sampla'}
+              <div class="ge-list-title" style="font-weight:600;line-height:1.4;">
+                {result.headword}
+              </div>
+              <div class="ge-list-subtitle" style="line-height:1.4;">
+                {#if result.gloss}{result.gloss}{/if}
                 {#if dialectTag(result.dialect)}
                   <span class="ge-dialect-tag">{dialectTag(result.dialect)}</span>
                 {/if}

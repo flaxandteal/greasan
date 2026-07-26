@@ -7,7 +7,7 @@ import { getPagefind, resetPagefind, type PagefindInstance } from './pagefind';
 import { FAMILIES, DEFAULT_FAMILY, type FamilyConfig, type FamilyId } from './family';
 import { diagStart, diagEnd } from './diagnostics';
 import { loadEntryV2 } from './dictionary-v2';
-import { prepareOffline } from './v2';
+import { prepareOffline, descriptors, hydrateV2, citedBy } from './v2';
 
 let activeFamilyConfig: FamilyConfig = FAMILIES[DEFAULT_FAMILY];
 
@@ -39,12 +39,20 @@ export interface EntryDetail {
   headword: string;
   pos: string;
   dialect?: string;
+  /** Gender concept label ('masculine'/'feminine'), when known — shown in the title. */
+  gender?: string;
+  /** Grammatical class token from BuNaMo: noun declension ('1'..'5'), verb conjugation,
+   *  adjective declension. Combined with pos/gender into the title badge (e.g. 'm1'). */
+  grammarClass?: string;
   senses: Array<{ gloss: string; examples: string[]; sourceLabel?: string; dialect?: string }>;
   forms: Array<{ writtenRep: string; tags: string[] }>;
   ipa: string[];
   etymologies: Array<{ text: string; sourceLabel?: string }>;
   cognates: Array<{ headword: string; language: string; entryId?: string }>;
   externalExamples: ExternalExample[];
+  /** Placenames whose name is constituted by this word (reverse `element_entry`
+   *  lookup into the `place` layer). Count is exact; sample is a resolved page. */
+  placenames?: { count: number; sample: Array<{ resourceId: string; name: string }> };
 }
 
 export interface ExampleDetail {
@@ -54,7 +62,14 @@ export interface ExampleDetail {
   source: string;
   sourceId: string;
   highlights: string;
+  /** Sub-corpus / collection (Gaois), split to the ga side for display. */
+  collection: string;
+  /** Source citation (e.g. legal instrument reference). */
+  citation: string;
   sourceUrl: string;
+  /** Headwords this sentence illustrates (from the resource's `illustrates`
+   *  tiles), each with the character span(s) of its surface form. */
+  headwords: Array<{ resourceId: string; headword: string; spans: [number, number][] }>;
 }
 
 export interface DynamicLayerInfo {
@@ -68,7 +83,6 @@ export interface DynamicLayerInfo {
 export let sparqlStore: SparqlStore | null = null;
 let storeReady = false;
 let modelPromise: ReturnType<typeof graphManager.loadGraph> | null = null;
-let exampleModelPromise: ReturnType<typeof graphManager.loadGraph> | null = null;
 
 // Serialise all async &mut self calls on the SparqlStore.
 // wasm_bindgen holds RefCell borrows across await points — concurrent
@@ -80,10 +94,6 @@ function withStoreMut<T>(fn: () => Promise<T>): Promise<T> {
   storeMutex = new Promise(r => (release = r));
   return prev.then(fn).finally(release);
 }
-
-// Map concept UUIDs to source labels (populated at build time)
-// These are deterministic from the collections.csv for the ExternalExample graph
-let sourceConceptMap: Record<string, 'tatoeba' | 'gaois'> | null = null;
 
 // Dynamic layers added at runtime (e.g. from TBX import via Tauri builder)
 const dynamicLayers: DynamicLayerInfo[] = [];
@@ -101,8 +111,6 @@ function teardown(): void {
   storeReady = false;
   storeMutex = Promise.resolve();
   modelPromise = null;
-  exampleModelPromise = null;
-  sourceConceptMap = null;
   dialectCache.clear();
   dynamicLayers.length = 0;
   (window as any).sparqlStore = null;
@@ -206,36 +214,11 @@ async function ensureStore(): Promise<SparqlStore> {
   const dModels = diagStart('loadGraph (models)');
   const modelP = graphManager.loadGraph(activeFamilyConfig.graphId);
   modelPromise = Promise.resolve(modelP).then(r => { diagEnd(dModels); return r; });
-  exampleModelPromise = graphManager.loadGraph(activeFamilyConfig.exampleGraphId);
 
   storeReady = true;
   return sparqlStore;
 }
 
-/** Build source concept UUID → label map from the Example Sources collection. */
-async function ensureSourceConceptMap(): Promise<Record<string, 'tatoeba' | 'gaois'>> {
-  if (sourceConceptMap) return sourceConceptMap;
-
-  sourceConceptMap = {};
-  try {
-    // Load all collections and find "Example Sources"
-    const collections = await RDM.getCollections?.() || [];
-    for (const coll of collections) {
-      const concepts = coll?.concepts || coll?.__allConcepts;
-      if (!concepts) continue;
-      const conceptList = concepts instanceof Map ? [...concepts.values()] : Object.values(concepts);
-      for (const concept of conceptList) {
-        const label = (concept?.label || concept?.prefLabel || '').toLowerCase();
-        const id = concept?.conceptid || concept?.id;
-        if (id && label === 'tatoeba') sourceConceptMap[id] = 'tatoeba';
-        else if (id && label === 'gaois') sourceConceptMap[id] = 'gaois';
-      }
-    }
-  } catch {
-    // Fallback: map will be empty, source will default to 'tatoeba'
-  }
-  return sourceConceptMap;
-}
 
 
 export type SearchLang = string;
@@ -253,10 +236,26 @@ async function getAvailableDialects(pf: PagefindInstance, base: string): Promise
 
 /** Collect all pagefind base paths to search for a given language.
  * Pagefind comes exclusively from dynamic layers — no base index pagefind. */
+/**
+ * Layers whose Pagefind index is bundled but deliberately kept OUT of the main
+ * search: search returns dictionary headwords only. `place` placenames are
+ * discovered via the reverse-lookup on a word entry, not by searching for them.
+ * (Flip this — remove `place` — when we add dedicated place search.)
+ */
+const NON_SEARCH_LAYERS: ReadonlySet<string> = new Set(['place', 'example-tatoeba', 'example-gaois', 'person', 'note']);
+
 function allPagefindBasesForLang(lang: SearchLang): string[] {
   const bases: string[] = [];
   const dir = lang === 'en' ? 'pagefind-en' : lang === 'sampla' ? 'pagefind-sampla' : `pagefind-${lang}`;
+  // Samplaí is EXAMPLE-granular: it searches the example layers' own sampla index
+  // (each record is one sentence, url = example UUID → tap opens the example page),
+  // NOT the headword-granular base index. So for sampla we include ONLY the example
+  // layers (which are NON_SEARCH for ga/en); for ga/en we skip those layers.
+  const sampla = lang === 'sampla';
   for (const layer of dynamicLayers) {
+    if (hiddenLayers.has(layer.name)) continue;
+    const isExample = layer.name.startsWith('example-');
+    if (sampla ? !isExample : NON_SEARCH_LAYERS.has(layer.name)) continue;
     if (!layer.pagefindBase) continue;
     bases.push(layer.pagefindBase + dir + '/');
   }
@@ -312,8 +311,11 @@ async function searchOneInstance(
       uri,
       headword: d.meta.title,
       pos: '',
-      gloss: d.meta.gloss || undefined,
-      excerpt: lang === 'sampla' ? d.excerpt : undefined,
+      // Samplaí: the sentence is the title (headword); the translation is the
+      // subtitle (gloss). Don't surface pagefind's raw excerpt — its `content`
+      // concatenates the sentence, its accent-stripped copy, and the translation,
+      // which reads as the same line three times.
+      gloss: lang === 'sampla' ? (d.meta.sentence_en || undefined) : (d.meta.gloss || undefined),
       dialect,
     };
   });
@@ -321,39 +323,52 @@ async function searchOneInstance(
 
 export async function search(query: string, lang: SearchLang = 'ga', dialects?: string[]): Promise<EntrySummary[]> {
   if (!query.trim()) return [];
-  // Skip pagefind entirely for very short queries — single/two-char searches
-  // are expensive and return too many substring hits to be useful.
-  if (query.trim().length < 3) return [];
 
   try {
-    // v2 mode: search is pure Pagefind over the registered v2 layers — the v1
-    // SparqlStore is never constructed. Only v1 needs ensureStore here.
-    if (!USE_V2) await ensureStore();
+    // Search is pure Pagefind over the registered layers.
     const bases = allPagefindBasesForLang(lang);
     if (bases.length === 0) return []; // No layers installed — no data to search
 
     // Normalize query: strip diacritics so "focal" matches "fócal"
     const normQuery = stripDiacritics(query);
 
+    // 1-2 char queries: prefix/substring matching floods with hits (and is slow),
+    // so do an EXACT-WORD search instead (pagefind double-quote syntax) — short
+    // lemmas like "bó" / "cú" / "ó" stay findable without the noise.
+    const pfQuery = query.trim().length < 3 ? `"${normQuery}"` : normQuery;
+
     // Query all pagefind instances in parallel
     const resultSets = await Promise.all(
       bases.map(base =>
-        searchOneInstance(base, normQuery, lang, dialects).catch(err => {
+        searchOneInstance(base, pfQuery, lang, dialects).catch(err => {
           console.warn(`[dictionary] Search failed for ${base}:`, err);
           return [] as EntrySummary[];
         })
       )
     );
 
-    // Merge and deduplicate by URI (first occurrence wins)
-    const seen = new Set<string>();
-    const merged: EntrySummary[] = [];
+    // Merge across layers, UNIONING dialects for a shared slug. The slug is
+    // dialect-neutral (goi-<head>-<pos>), so the same uri comes back from
+    // different heads — e.g. wiktionary GA + macbain GD for "fear". First-wins
+    // would show only the leading layer's dialect; instead, if a slug spans more
+    // than one Goidelic branch (GA/GD/GV) we tag it "G" (both), matching the
+    // dialect-neutral slug and the composed entry the user will see on open.
+    const byUri = new Map<string, EntrySummary>();
+    const branchesByUri = new Map<string, Set<string>>();
     for (const results of resultSets) {
       for (const r of results) {
-        if (seen.has(r.uri)) continue;
-        seen.add(r.uri);
-        merged.push(r);
+        if (!byUri.has(r.uri)) {
+          byUri.set(r.uri, r);
+          branchesByUri.set(r.uri, new Set<string>());
+        }
+        const branch = (r.dialect || '').split('.')[0];
+        if (branch) branchesByUri.get(r.uri)!.add(branch);
       }
+    }
+    const merged: EntrySummary[] = [];
+    for (const [uri, r] of byUri) {
+      if (branchesByUri.get(uri)!.size > 1) r.dialect = 'G';
+      merged.push(r);
     }
 
     const q = query.toLowerCase();
@@ -361,11 +376,18 @@ export async function search(query: string, lang: SearchLang = 'ga', dialects?: 
     merged.sort((a, b) => {
       const aText = (lang === 'en' ? a.gloss || '' : a.headword).toLowerCase();
       const bText = (lang === 'en' ? b.gloss || '' : b.headword).toLowerCase();
-      const aRank = aText === q ? 0 : aText.startsWith(q) ? 1
-        : stripDiacritics(aText) === qNorm ? 2 : stripDiacritics(aText).startsWith(qNorm) ? 3 : 4;
-      const bRank = bText === q ? 0 : bText.startsWith(q) ? 1
-        : stripDiacritics(bText) === qNorm ? 2 : stripDiacritics(bText).startsWith(qNorm) ? 3 : 4;
-      return aRank - bRank;
+      // Tier order: exact-with-accent > exact-up-to-accent > prefix/compound-with-accent
+      // > prefix-up-to-accent > everything else (inflected forms, gloss hits). Putting
+      // exact-up-to-accent ABOVE the prefix tiers is the fix: a whole headword ("bó"
+      // searched as "bo") now outranks a compound/prefix ("bo-…"), instead of the
+      // compound jumping ahead just for sharing the leading letters.
+      const rank = (t: string): number =>
+        t === q ? 0
+          : stripDiacritics(t) === qNorm ? 1
+            : t.startsWith(q) ? 2
+              : stripDiacritics(t).startsWith(qNorm) ? 3
+                : 4;
+      return rank(aText) - rank(bText);
     });
 
     return merged.slice(0, 50);
@@ -415,253 +437,6 @@ async function preloadTiles(
   }
 }
 
-export async function loadEntry(uri: string, knownHeadword?: string): Promise<EntryDetail | null> {
-  try {
-    await ensureStore();
-    const model = await modelPromise!;
-
-    // Create an alizarin resource instance. Tiles are pre-loaded from the
-    // SparqlStore before populate(), so ensureTilesLoaded never fires.
-    const instance = model.makeInstance(uri, null, false, true);
-
-    const resourceUri = `${activeFamilyConfig.rdfBase}/resource/${uri}`;
-    await preloadTiles(sparqlStore!, resourceUri, instance);
-
-    const dPopulate = diagStart('populate (entry)');
-    await instance.$.populate(false);
-    diagEnd(dPopulate);
-
-    // Read values via alias-based proxy access (the alizarin way)
-    const headword = String(await instance.headword ?? '');
-
-    const posVm = await instance.part_of_speech;
-    const pos = posVm?.getDisplay ? await posVm.getDisplay() : String(posVm ?? '');
-
-    const dialectVm = await instance.dialect;
-    const dialect = dialectVm?.getDisplay ? await dialectVm.getDisplay() : String(dialectVm ?? '');
-
-    // Pronunciation — cardinality n
-    const ipaValues: string[] = [];
-    if (await instance.__has('pronunciation')) {
-      for (const p of await instance.pronunciation ?? []) {
-        const resolved = await p;
-        const val = String(await resolved?.ipa_value ?? '');
-        if (val) ipaValues.push(val);
-      }
-    }
-
-    // Senses — cardinality n, deduplicated across layers
-    const rawSenses: EntryDetail['senses'] = [];
-    if (await instance.__has('senses')) {
-      for (const s of await instance.senses ?? []) {
-        const resolved = await s;
-        const gloss = String(await resolved?.gloss ?? '');
-        const example = String(await resolved?.example ?? '');
-        const sourceLabel = String(await resolved?.source_label ?? '');
-        if (gloss) rawSenses.push({ gloss, examples: example ? [example] : [], sourceLabel: sourceLabel || undefined });
-      }
-    }
-    // Merge senses with identical gloss+examples, combining source labels
-    const senses: EntryDetail['senses'] = [];
-    for (const sense of rawSenses) {
-      const key = sense.gloss + '\0' + sense.examples.join('\0');
-      const existing = senses.find(s => s.gloss + '\0' + s.examples.join('\0') === key);
-      if (existing && sense.sourceLabel) {
-        const labels = new Set((existing.sourceLabel ?? '').split('+').filter(Boolean));
-        labels.add(sense.sourceLabel);
-        existing.sourceLabel = [...labels].sort().join('+');
-      } else if (!existing) {
-        senses.push({ ...sense });
-      }
-    }
-
-    // Forms — cardinality n
-    const forms: EntryDetail['forms'] = [];
-    if (await instance.__has('forms')) {
-      for (const f of await instance.forms ?? []) {
-        const resolved = await f;
-        const writtenRep = String(await resolved?.written_rep ?? '');
-        const tags: string[] = [];
-        const featList = await resolved?.gram_features;
-        if (featList?.[Symbol.iterator]) {
-          for (const feat of featList) {
-            const r = await feat;
-            const label = r?.getDisplay ? await r.getDisplay() : String(r ?? '');
-            if (label && label !== '(pending)' && label !== '(unresolved)') tags.push(label);
-          }
-        }
-        if (writtenRep) forms.push({ writtenRep, tags });
-      }
-    }
-
-    // Etymology — cardinality n, deduplicated across layers
-    const rawEtymologies: Array<{ text: string; sourceLabel?: string }> = [];
-    if (await instance.__has('etymology')) {
-      for (const e of await instance.etymology ?? []) {
-        const resolved = await e;
-        const text = String(await resolved?.etymology_text ?? '');
-        const sourceLabel = String(await resolved?.etymology_source ?? '');
-        if (text) rawEtymologies.push({ text, sourceLabel: sourceLabel || undefined });
-      }
-    }
-    // Deduplicate by text, merge source labels
-    const etymologies: EntryDetail['etymologies'] = [];
-    for (const etym of rawEtymologies) {
-      const existing = etymologies.find(e => e.text === etym.text);
-      if (existing && etym.sourceLabel) {
-        const labels = new Set((existing.sourceLabel ?? '').split('+').filter(Boolean));
-        labels.add(etym.sourceLabel);
-        existing.sourceLabel = [...labels].sort().join('+');
-      } else if (!existing) {
-        etymologies.push({ ...etym });
-      }
-    }
-
-    // Cognates — cardinality n
-    const cognates: EntryDetail['cognates'] = [];
-    if (await instance.__has('cognates')) {
-      for (const c of await instance.cognates ?? []) {
-        const resolved = await c;
-        const hw = String(await resolved?.cognate_headword ?? '');
-        const language = String(await resolved?.cognate_language ?? '');
-        // cognate_entry_id is resource-instance: ViewModel with .id, or null
-        const entryIdVm = await resolved?.cognate_entry_id;
-        const entryId = entryIdVm?.id || '';
-        if (hw) cognates.push({ headword: hw, language, entryId: entryId || undefined });
-      }
-    }
-
-    // Reverse cognate links via queryPatterns — find entries that cite THIS
-    // entry via cognate_entry_id (resource-instance). queryPatterns directly
-    // queries predicate blocks to find matching subjects, avoiding the
-    // page-level granularity problem of summaryToPage.
-    const REV_MAX = 10;
-    try {
-      const resourceUri = `${activeFamilyConfig.rdfBase}/resource/${uri}`;
-      const predUri = `${activeFamilyConfig.rdfBase}/node/cognate_entry_id`;
-      const patterns = JSON.stringify([{ s: '?x', p: predUri, o: resourceUri }]);
-      const citingUris: string[] = await withStoreMut(() => sparqlStore!.queryPatterns(patterns));
-      for (const srcUri of citingUris.slice(0, REV_MAX)) {
-        const srcId = srcUri.split('/resource/').pop() || '';
-        if (!srcId || srcId === uri) continue;
-        try {
-          const srcInstance = model.makeInstance(srcId, null, false, true);
-          await preloadTiles(sparqlStore!, srcUri, srcInstance);
-          await srcInstance.$.populate(false);
-          const srcHeadword = String(await srcInstance.headword ?? '');
-          const srcDialectVm = await srcInstance.dialect;
-          const srcDialect = srcDialectVm?.getDisplay ? await srcDialectVm.getDisplay() : '';
-          const srcLang = srcDialect?.includes('Scottish') ? 'Scottish Gaelic'
-            : srcDialect?.includes('Manx') ? 'Manx'
-            : srcDialect?.includes('Irish') || srcDialect?.includes('Connacht') || srcDialect?.includes('Ulster') || srcDialect?.includes('Munster') ? 'Irish'
-            : srcDialect || 'Unknown';
-          if (srcHeadword) {
-            const dedup = `${srcLang}:${srcHeadword}`;
-            if (!cognates.some(c => `${c.language}:${c.headword}` === dedup)) {
-              cognates.push({ headword: srcHeadword, language: srcLang, entryId: srcId });
-            }
-          }
-          // Surface etymology from the citing entry
-          if (await srcInstance.__has('etymology')) {
-            for (const e of await srcInstance.etymology ?? []) {
-              const resolved = await e;
-              const text = String(await resolved?.etymology_text ?? '');
-              const sourceLabel = String(await resolved?.etymology_source ?? '');
-              if (text && !etymologies.some(et => et.text === text)) {
-                etymologies.push({ text, sourceLabel: sourceLabel || undefined });
-              }
-            }
-          }
-        } catch (srcErr) {
-          console.warn('[dictionary] reverse src load failed:', srcId, srcErr);
-        }
-      }
-    } catch (revErr) {
-      console.warn('[dictionary] reverse cognate lookup (non-fatal):', revErr);
-    }
-
-    // External examples — extract reference IDs from raw tile data (avoids
-    // ResourceInstanceListViewModel which causes OOB via fire-and-forget promises),
-    // then eagerly load each example resource to get sentence + translation text.
-    const externalExamples: ExternalExample[] = [];
-    try {
-      const exRefList = instance.$.wasmWrapper.getValuesAtPath('external_examples', null);
-      const exRefValues = exRefList.getAllValues();
-      const refIds: string[] = [];
-      for (const pv of exRefValues) {
-        const rawData = pv.tileData;
-        // tileData may be: a Map (serde_wasm_bindgen serializes JSON objects as Map),
-        // an Array, or a Map whose values are Arrays of reference objects.
-        const entries: any[] = [];
-        if (rawData instanceof Map) {
-          for (const v of rawData.values()) {
-            if (Array.isArray(v)) entries.push(...v);
-            else entries.push(v);
-          }
-        } else if (Array.isArray(rawData)) {
-          entries.push(...rawData);
-        }
-        for (const entry of entries) {
-          const rid = entry instanceof Map
-            ? (entry.get('resourceId') || entry.get('resourceinstance_id') || '')
-            : (entry?.resourceId || entry?.resourceinstance_id || '');
-          if (rid) refIds.push(rid);
-        }
-      }
-
-      // Eagerly load example resources in parallel, reusing the tile source handle
-      if (refIds.length > 0) {
-        const exampleModel = await exampleModelPromise!;
-        const results = await Promise.all(
-          refIds.slice(0, 20).map(async (refId) => {
-            try {
-              const exInstance = exampleModel.makeInstance(refId, null, false, true);
-              const exUri = `${activeFamilyConfig.rdfBase}/resource/${refId}`;
-              await preloadTiles(sparqlStore!, exUri, exInstance);
-              await exInstance.$.populate(false);
-
-              const sentence = String(await exInstance.sentence ?? '');
-              const translation = String(await exInstance.sentence_en ?? '');
-
-              let src: 'tatoeba' | 'gaois' = 'tatoeba';
-              try {
-                if (await exInstance.__has('provenance')) {
-                  const prov = await exInstance.provenance;
-                  const sourceVm = await prov?.source;
-                  const sourceLabel = sourceVm?.getDisplay
-                    ? await sourceVm.getDisplay()
-                    : String(sourceVm ?? '');
-                  if (sourceLabel.toLowerCase() === 'gaois') src = 'gaois';
-                }
-              } catch { /* source detection non-critical */ }
-
-              return { resourceId: refId, ga: sentence, en: translation, src, hl: [] as [number, number][] };
-            } catch {
-              return null;
-            }
-          })
-        );
-        for (const r of results) {
-          if (r && r.ga) externalExamples.push(r);
-        }
-      }
-    } catch (exErr) {
-      console.warn('[dictionary] external examples extraction (non-fatal):', exErr);
-    }
-
-    // Don't call instance.$.release() here — async syncTileData promises from
-    // populate are still pending and would OOB on freed WASM PseudoValues.
-    // WASM objects will be cleaned up by FinalizationRegistry or on next loadEntry.
-
-    // Use headword from: alizarin tile > caller > empty
-    const displayHeadword = headword || knownHeadword || '';
-
-    return { uri, headword: displayHeadword, pos, dialect: dialect || undefined, senses, forms, ipa: ipaValues, etymologies, cognates, externalExamples };
-  } catch (err) {
-    console.warn('[dictionary] loadEntry failed:', err);
-    return null;
-  }
-}
 
 // ---------------------------------------------------------------------------
 // v2 entry-detail path (static-assets pilot), behind a feature flag.
@@ -671,12 +446,6 @@ export async function loadEntry(uri: string, knownHeadword?: string): Promise<En
 // SparqlStore-populate path. v1 `loadEntry` above stays untouched and default.
 // ---------------------------------------------------------------------------
 
-/**
- * Feature flag: when true, entry detail is sourced from the v2 stack. Default
- * FALSE — the v1 SparqlStore path remains the shipping default. Requires
- * src-tauri built with `--features v2`.
- */
-export const USE_V2 = true;
 
 /**
  * A v2 pilot layer: a native head (for cross-layer hydrate) plus a Pagefind
@@ -721,6 +490,52 @@ export const V2_LAYERS: V2LayerConfig[] = [
     headDir: '/home/philtweir/Cód/Oscailte/Gréasán/data/tearma-v2',
     pagefindBase: '/layer-tearma/',
   },
+  {
+    // Morphology enrichment (BuNaMo via Gramadán): composes full paradigms onto the
+    // shared goi ids. Carries no senses/headwords — only `forms` + `grammar_class`.
+    // Its Pagefind index holds inflected surface forms so a form search finds the
+    // lemma (auto-ranked below headword matches). Order is precedence-neutral for the
+    // card-n `forms` nodegroup (cross-layer merge is a union), so append at the end.
+    name: 'bunamo',
+    headDir: '/home/philtweir/Cód/Oscailte/Gréasán/data/bunamo-v2',
+    pagefindBase: '/layer-bunamo/',
+  },
+  {
+    // Logainm placenames — its OWN graph (schema.org/Place), composed as a
+    // separate model in the stack (does NOT merge into the lexical_entry tree).
+    // Pagefind ga index = Irish + English name text; feature_type in meta.
+    name: 'place',
+    headDir: '/home/philtweir/Cód/Oscailte/Gréasán/data/place-v2',
+    pagefindBase: '/layer-place/',
+  },
+  {
+    // Corpus examples — OWN graph (like place): example resources + an
+    // `illustrates` nodegroup linking to goi entries. Kept as two separate heads
+    // so the licences stay distinct (Tatoeba CC BY 2.0 / Gaois CC BY 4.0). The
+    // entry page finds a headword's examples via cited_by('headword_entry').
+    name: 'example-tatoeba',
+    headDir: '/home/philtweir/Cód/Oscailte/Gréasán/data/example-tatoeba-v2',
+    pagefindBase: '/layer-example-tatoeba/',
+  },
+  {
+    name: 'example-gaois',
+    headDir: '/home/philtweir/Cód/Oscailte/Gréasán/data/example-gaois-v2',
+    pagefindBase: '/layer-example-gaois/',
+  },
+  {
+    // Person graph — seeded with the single "User" resource that authors notes.
+    name: 'person',
+    headDir: '/home/philtweir/Cód/Oscailte/Gréasán/data/person-v2',
+    pagefindBase: '/layer-person/',
+  },
+  {
+    // Note/flag graph (oa:Annotation) — subject → any resource, author → User.
+    // The MUTABLE layer: Flag ② re-emits this head on each new flag. Flags on a
+    // resource = cited_by('subject'); own graph, so it never merges into entries.
+    name: 'note',
+    headDir: '/home/philtweir/Cód/Oscailte/Gréasán/data/note-v2',
+    pagefindBase: '/layer-note/',
+  },
 ];
 
 /**
@@ -731,9 +546,77 @@ export const V2_LAYERS: V2LayerConfig[] = [
  */
 let activeV2Layers: V2LayerConfig[] = V2_LAYERS;
 
-/** Ordered active v2 layer head dirs (base first). */
+/**
+ * Layer names the user has hidden from composition — a VIEW filter, not an
+ * uninstall: the head stays on disk and toggling back is free (Pagefind
+ * instances are cached by base in `pagefind.ts`).
+ *
+ * No single layer is privileged: `ros-madair-read::Layers` resolves a per-MODEL
+ * base (the first layer that carries the queried graph), not the global head 0,
+ * and hydrate merges topmost-first across every layer that has the resource. The
+ * only hard rule is that `Layers::open` errors on a zero-dir stack — so the sole
+ * constraint enforced here is "never hide EVERY layer", not "never hide head 0".
+ * That lets wiktionary be hidden (e.g. a Scottish-Gaelic-only view over macbain).
+ */
+let hiddenLayers: ReadonlySet<string> = new Set();
+
+/** Replace the hidden-layer set. Guaranteed never to hide the whole stack. */
+export function setHiddenLayers(names: Iterable<string>): void {
+  const next = new Set(names);
+  // RM needs a non-empty stack. If a request would hide every layer (a stale
+  // persisted set, a family switch), keep the first one visible — but don't
+  // otherwise privilege it: any single remaining layer is a valid base.
+  const all = activeV2Layers.map((l) => l.name);
+  if (all.length > 0 && all.every((n) => next.has(n))) next.delete(all[0]);
+  hiddenLayers = next;
+  // A hidden layer may have been the only source of some dialect values.
+  dialectCache.clear();
+}
+
+export function getHiddenLayers(): ReadonlySet<string> {
+  return hiddenLayers;
+}
+
+/** Ordered ACTIVE v2 layer head dirs (composition order, hidden layers dropped). */
 export function currentV2HeadDirs(): string[] {
-  return activeV2Layers.map((l) => l.headDir);
+  const visible = activeV2Layers.filter((l) => !hiddenLayers.has(l.name));
+  // setHiddenLayers already guards against an all-hidden set; this is the
+  // belt-and-braces fallback so `Layers::open` never sees a zero-dir stack.
+  const stack = visible.length > 0 ? visible : activeV2Layers.slice(0, 1);
+  return stack.map((l) => l.headDir);
+}
+
+/**
+ * The Logainm `place-v2` head dir, or undefined if that layer is not active.
+ * The placenames map queries this head directly (its `spine_place`/`geo_bbox`
+ * tables carry the point geometry), NOT the composed lexical stack — see
+ * {@link geoPoints} / MapView. Tracks {@link initOfflineLayers} because it reads
+ * the ACTIVE layer set, matching how `loadEntryV2` finds the same head.
+ */
+export function placeHeadDir(): string | undefined {
+  return currentV2HeadDirs().find((d) => d.includes('place-v2'));
+}
+
+/**
+ * Which layers actually carry `uri` — "coverage at cursor", the map-legend
+ * readout for the open entry. One indexed descriptor lookup per layer, no
+ * hydration and no graph load; a layer missing the resource returns no row.
+ *
+ * Reports on ALL installed layers, hidden ones included: the sheet needs to
+ * distinguish "you turned this off" from "this has nothing to say here".
+ */
+export async function layerCoverage(uri: string): Promise<Set<string>> {
+  const hits = await Promise.all(
+    activeV2Layers.map(async (l) => {
+      try {
+        const found = await descriptors([l.headDir], [uri]);
+        return found[uri] ? l.name : null;
+      } catch {
+        return null; // unreadable head — treat as no coverage, not an error
+      }
+    }),
+  );
+  return new Set(hits.filter((n): n is string => n !== null));
 }
 
 /**
@@ -778,58 +661,113 @@ export function registerV2Layers(): void {
   dialectCache.clear();
 }
 
-/**
- * Dispatch entry loading by the `USE_V2` flag. The UI calls this; v1 `loadEntry`
- * stays the default path when `USE_V2` is false.
- */
-export function loadEntryFlagged(uri: string, knownHeadword?: string): Promise<EntryDetail | null> {
-  return USE_V2 ? loadEntryV2(uri, currentV2HeadDirs()) : loadEntry(uri, knownHeadword);
+/** Load an entry's detail via the v2 cross-layer hydrate. */
+export function loadEntryFlagged(uri: string, _knownHeadword?: string): Promise<EntryDetail | null> {
+  return loadEntryV2(uri, currentV2HeadDirs());
+}
+
+/** Unwrap a v2 localized-string value `{<lang>:{value}}` (or a bare string). */
+function exLocalStr(v: unknown): string {
+  if (v == null) return '';
+  if (typeof v === 'string') return v;
+  if (typeof v === 'object') {
+    const o = v as Record<string, any>;
+    for (const c of [o.en, o.ga, ...Object.values(o)]) {
+      if (c && typeof c === 'object' && typeof c.value === 'string') return c.value;
+    }
+    if (typeof o.value === 'string') return o.value;
+  }
+  return '';
+}
+
+/** Parse a ";"-separated "start,end" span string to tuples. */
+function parseSpanString(s: string): [number, number][] {
+  if (!s) return [];
+  const out: [number, number][] = [];
+  for (const part of s.split(';')) {
+    const [a, b] = part.split(',').map((n) => parseInt(n, 10));
+    if (Number.isFinite(a) && Number.isFinite(b) && b > a) out.push([a, b]);
+  }
+  return out;
 }
 
 export async function loadExample(resourceId: string): Promise<ExampleDetail | null> {
-  try {
-    await ensureStore();
-    const exampleModel = await exampleModelPromise!;
+  // v2: the example is a resource in one of the example heads (Tatoeba / Gaois).
+  // Hydrate it and read the headwords it illustrates — with their per-headword
+  // spans — straight from its own `illustrates` tiles (no reverse lookup, no
+  // surface-form matching). The v1 SparqlStore / core-goidelic path is retired.
+  const headDirs = currentV2HeadDirs();
+  const exampleHeads = headDirs.filter((d) => d.includes('/example-'));
+  for (const head of exampleHeads) {
+    try {
+      const tree = (await hydrateV2(head, resourceId)) as any;
+      const sentence = exLocalStr(tree?.sentence);
+      if (!sentence) continue; // resource lives in the other head
+      const translation = exLocalStr(tree.sentence_en);
+      const prov = tree.provenance || {};
+      const source = head.includes('tatoeba') ? 'Tatoeba' : 'Gaois';
+      const sourceId = exLocalStr(prov.source_id);
+      const highlights = exLocalStr(prov.highlights);
+      // Gaois collection is bilingual "ga|en" — keep the Irish side.
+      const collection = exLocalStr(prov.collection).split('|')[0];
+      const citation = exLocalStr(prov.citation);
 
-    const instance = exampleModel.makeInstance(resourceId, null, false, true);
-
-    const resourceUri = `${activeFamilyConfig.rdfBase}/resource/${resourceId}`;
-    await preloadTiles(sparqlStore!, resourceUri, instance);
-
-    await instance.$.populate(false);
-
-    const sentence = String(await instance.sentence ?? '');
-    const translation = String(await instance.sentence_en ?? '');
-
-    // Provenance — cardinality 1 semantic group
-    let source = '';
-    let sourceId = '';
-    let highlights = '';
-
-    if (await instance.__has('provenance')) {
-      const prov = await instance.provenance;
-      if (prov) {
-        const sourceVm = await prov.source;
-        source = sourceVm?.getDisplay ? await sourceVm.getDisplay() : String(sourceVm ?? '');
-        sourceId = String(await prov.source_id ?? '');
-        highlights = String(await prov.highlights ?? '');
+      // Illustrated headwords straight from the resource's own tiles.
+      const illusRaw = tree.illustrates;
+      const illus = Array.isArray(illusRaw) ? illusRaw : illusRaw ? [illusRaw] : [];
+      const rawHw = illus
+        .map((r: any) => {
+          // A resource-instance node hydrates as an array of {resourceId} (same
+          // shape as cognate_entry_id in loadEntryV2), so unwrap the first element.
+          let he = r?.headword_entry;
+          if (Array.isArray(he)) he = he[0];
+          const id = typeof he === 'string' ? he : he?.resourceId ?? he?.id ?? '';
+          return { id: String(id || ''), span: exLocalStr(r?.span) };
+        })
+        .filter((x: { id: string }) => x.id);
+      const labels = rawHw.length ? await descriptors(headDirs, rawHw.map((x: { id: string }) => x.id)) : {};
+      const headwords: Array<{ resourceId: string; headword: string; spans: [number, number][] }> = [];
+      const seen = new Set<string>();
+      for (const x of rawHw) {
+        if (seen.has(x.id)) continue;
+        seen.add(x.id);
+        const headword = labels[x.id] || '';
+        if (headword) headwords.push({ resourceId: x.id, headword, spans: parseSpanString(x.span) });
       }
+
+      // Real per-item link only where the source publishes one (Tatoeba). Gaois
+      // has no per-tuid permalink — the citation carries the provenance instead.
+      const sourceUrl = source === 'Tatoeba' && sourceId ? `https://tatoeba.org/sentences/${sourceId}` : '';
+
+      return { resourceId, sentence, translation, source, sourceId, highlights, collection, citation, sourceUrl, headwords };
+    } catch (err) {
+      console.warn('[dictionary] loadExample hydrate failed:', err);
     }
+  }
+  return null;
+}
 
-    // Compute source URL from source label + sourceId
-    const sourceLower = source.toLowerCase();
-    let sourceUrl = '';
-    if (sourceLower === 'tatoeba' && sourceId) {
-      sourceUrl = `https://tatoeba.org/sentences/${sourceId}`;
-    } else if (sourceLower === 'gaois' && sourceId) {
-      sourceUrl = `https://www.gaois.ie/crp/en/?id=${encodeURIComponent(sourceId)}`;
-    }
+export interface Flag {
+  resourceId: string;
+  text: string;
+}
 
-    // Don't release — async syncTileData promises still pending (see loadEntry comment)
-
-    return { resourceId, sentence, translation, source, sourceId, highlights, sourceUrl };
+/**
+ * Notes/flags attached to a resource — the reverse of `note.subject`. Runs
+ * note-authoritative (`subject` is a note-graph node) against the note head in
+ * the stack. Works for ANY resource (entry, example, place) — the caller just
+ * passes the resource UUID.
+ */
+export async function loadFlags(uri: string): Promise<Flag[]> {
+  try {
+    const noteHead = currentV2HeadDirs().find((d) => d.includes('/note-v2'));
+    if (!noteHead) return [];
+    const ids = await citedBy([noteHead], uri, 'subject');
+    if (!ids.length) return [];
+    const texts = await descriptors([noteHead], ids);
+    return ids.map((id) => ({ resourceId: id, text: texts[id] || '' })).filter((f) => f.text);
   } catch (err) {
-    console.warn('[dictionary] loadExample failed:', err);
-    return null;
+    console.warn('[dictionary] loadFlags failed:', err);
+    return [];
   }
 }

@@ -414,6 +414,125 @@ pub fn v2_cited_by(
         .map_err(|e| e.to_string())
 }
 
+// ---------------------------------------------------------------------------
+// Geo-point lookup (map(layer, filter) primitive) — a single indexed SQL join
+// on a head that carries the spine/geo tables, no hydration.
+//
+// For a reverse-link `node` (e.g. the place graph's `name_elements.element_entry`
+// node) and a `target` resource (the headword the user opened), return every
+// resource that cites the target through that node, each with its spine
+// `display_name` and its point geometry from `geo_bbox` (min == max for points).
+// This is the generic backing query for `MapView`: the only place-specific
+// assumption is the `spine_place`/`geo_bbox` table names of the place head — the
+// node and target are opaque UUIDs the caller has already resolved.
+// ---------------------------------------------------------------------------
+
+/// Resolve the geo-points for a `(node_uri, target_uri)` filter against a single
+/// head. `node_path` and `target_uri` are `dict.term` UUIDs already (the caller
+/// passes the `element_entry` node uuid and the headword resource uuid — no alias
+/// resolution against the graph, so this works even though the node lives in the
+/// place graph rather than the composed stack's base graph). Returns
+/// `[{id, name, lat, lng}]`, one row per citing place with geometry.
+#[tauri::command]
+pub fn v2_geo_points(
+    head_dir: String,
+    node_path: String,
+    target_uri: String,
+) -> Result<Vec<Value>, String> {
+    let conn = ros_madair_read::open_head(Path::new(&head_dir)).map_err(|e| e.to_string())?;
+    // Table names are the place head's fixed spine/geo tables, not user input;
+    // the two UUIDs are bound parameters.
+    let sql = "SELECT dt2.term AS id, sp.display_name AS name, \
+                      gb.min_lat AS lat, gb.min_lng AS lng \
+               FROM reverse_links rl \
+               JOIN dict nd  ON nd.term = ?1 \
+               JOIN dict td  ON td.term = ?2 \
+               JOIN spine_place sp ON sp.term_id = rl.source \
+               JOIN dict dt2 ON dt2.term_id = rl.source \
+               JOIN geo_bbox gb ON gb.rid = sp.rid \
+               WHERE rl.node = nd.term_id AND rl.target = td.term_id";
+    let mut stmt = conn
+        .prepare(sql)
+        .map_err(|e| format!("prepare geo query: {e}"))?;
+    let rows = stmt
+        .query_map([&node_path, &target_uri], |r| {
+            Ok(serde_json::json!({
+                "id": r.get::<_, String>(0)?,
+                "name": r.get::<_, String>(1)?,
+                "lat": r.get::<_, f64>(2)?,
+                "lng": r.get::<_, f64>(3)?,
+            }))
+        })
+        .map_err(|e| format!("geo query for {head_dir}: {e}"))?;
+    rows.collect::<Result<Vec<_>, _>>()
+        .map_err(|e| format!("geo rows: {e}"))
+}
+
+/// Re-emit a v2 head in place from an in-memory business-data JSON — the app's
+/// write path (the first one). `head_dir` is the head to (re)generate (e.g. the
+/// note/flag overlay), `graph_id` its resource model, `business_data_json` the
+/// `{"business_data":{"resources":[…]}}` string alizarin builds on the JS side.
+///
+/// The head's own `graph.json` doubles as the prebuild resource model, so we only
+/// need the resources. Emit uses the same `https://example.org/` base_uri every
+/// `regen-layer-v2` head carries, so `Layers::open` still composes the stack.
+#[cfg(all(feature = "v2", feature = "v2-emit"))]
+#[tauri::command]
+pub fn v2_emit_overlay(
+    head_dir: String,
+    graph_id: String,
+    business_data_json: String,
+) -> Result<(), String> {
+    use std::fs;
+    let head = Path::new(&head_dir);
+    let graph_json = head.join("graph.json");
+    if !graph_json.is_file() {
+        return Err(format!("v2_emit_overlay: no graph.json at {head_dir}"));
+    }
+    // Temp prebuild dir beside the head.
+    let prebuild = head.with_file_name(format!(".prebuild-{graph_id}"));
+    let _ = fs::remove_dir_all(&prebuild);
+    let models = prebuild.join("graphs/resource_models");
+    fs::create_dir_all(&models).map_err(|e| e.to_string())?;
+    fs::create_dir_all(prebuild.join("business_data")).map_err(|e| e.to_string())?;
+    let model_dst = models.join(format!("{graph_id}.json"));
+    fs::copy(&graph_json, &model_dst).map_err(|e| e.to_string())?;
+    fs::write(
+        prebuild.join(format!("business_data/{graph_id}.json")),
+        &business_data_json,
+    )
+    .map_err(|e| e.to_string())?;
+    fs::write(
+        prebuild.join("manifest.json"),
+        r#"{"base_uri":"https://flaxandteal.org/ontology/goidelic#","source":"note","source_tag":"NO","built":"1970-01-01T00:00:00Z","license":"CC0 (app-generated)"}"#,
+    )
+    .map_err(|e| e.to_string())?;
+
+    // Emit clears head_dir, so re-emit in place then restore graph.json.
+    let _ = fs::remove_dir_all(head);
+    fs::create_dir_all(head).map_err(|e| e.to_string())?;
+    ros_madair_emit::emit(
+        prebuild.to_str().ok_or("non-utf8 prebuild path")?,
+        head.to_str().ok_or("non-utf8 head path")?,
+        "https://example.org/",
+    )
+    .map_err(|e| format!("emit: {e}"))?;
+    fs::copy(&model_dst, head.join("graph.json")).map_err(|e| e.to_string())?;
+    let _ = fs::remove_dir_all(&prebuild);
+    Ok(())
+}
+
+/// Stub when built without the emit crate (`v2` but not `v2-emit`).
+#[cfg(all(feature = "v2", not(feature = "v2-emit")))]
+#[tauri::command]
+pub fn v2_emit_overlay(
+    _head_dir: String,
+    _graph_id: String,
+    _business_data_json: String,
+) -> Result<(), String> {
+    Err("v2_emit_overlay: this build lacks the v2-emit feature".to_string())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

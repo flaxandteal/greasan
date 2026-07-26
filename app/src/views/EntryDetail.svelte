@@ -1,14 +1,59 @@
 <script lang="ts">
-  import { currentEntry, loading, familyConfig, starredEntries, toggleStar } from '../lib/store';
-  import { loadEntryFlagged, type EntryDetail } from '../lib/dictionary';
-  import { dialectCode } from '../lib/family';
+  import { currentEntry, loading, familyConfig, starredEntries, toggleStar, openMap } from '../lib/store';
+  import { loadEntryFlagged, placeHeadDir, type EntryDetail } from '../lib/dictionary';
+  import { dialectCode, sourceLabelSwatch } from '../lib/family';
   import { t } from '../lib/i18n';
+  import { buildParadigm, posKind, type FlatGroup } from '../lib/paradigm';
   import ExampleList from './ExampleList.svelte';
+  import LayerPill from './LayerPill.svelte';
+  import FlagButton from './FlagButton.svelte';
 
   let entry = $derived($currentEntry as EntryDetail | null);
   /** True when the headword contains letters whose glyphs descend below the baseline. */
   let hasDescenders = $derived(entry ? /[gjpqyçþðĝĵ]/i.test(entry.headword) : false);
   let starred = $derived(entry ? $starredEntries.some(e => e.uri === entry!.uri) : false);
+  // Top-bar dialect code. Derived from the COMPOSED senses (which carry each
+  // contributing layer's dialect), so a lexeme with e.g. Irish senses from
+  // wiktionary + Scottish senses from macbain shows "G" (both Goidelic branches)
+  // rather than whichever single dialect the entry-level tag happened to hold.
+  let entryDialectCode = $derived.by(() => {
+    if (!entry) return '';
+    const branches = new Set<string>();
+    for (const s of entry.senses ?? []) {
+      if (!s.dialect) continue;
+      const c = dialectCode($familyConfig.id, s.dialect) || s.dialect;
+      if (c) branches.add(c.split('.')[0]);
+    }
+    if (branches.size > 1) return 'G';
+    return dialectCode($familyConfig.id, entry.dialect || '') || '';
+  });
+
+  // Structured paradigm (noun grid / verb tense-accordion / adjective / flat fallback).
+  let paradigm = $derived(entry ? buildParadigm(entry.forms, entry.pos) : null);
+
+  // Person-slot → Irish pronoun label (content, so not localised); base/autonomous via i18n.
+  const PRONOUN: Record<string, string> = {
+    '1sg': 'mé', '2sg': 'tú', '3sg': 'sé/sí', '1pl': 'muid', '2pl': 'sibh', '3pl': 'siad',
+  };
+  function personLabel(p: string): string {
+    return PRONOUN[p] ?? $t('forms.' + p);
+  }
+  /** A leftover cell qualifier: gender → m/f, otherwise the raw concept label. */
+  function tagLabel(tag: string): string {
+    return tag === 'masculine' ? 'm' : tag === 'feminine' ? 'f' : tag;
+  }
+  const ORDINAL = ['', '1st', '2nd', '3rd', '4th', '5th'];
+  /** Compact class badge for the title: 'm1' (noun), 'a1' (adj), '1st conj.' (verb). */
+  let classBadge = $derived.by(() => {
+    if (!entry) return '';
+    const g = entry.gender === 'masculine' ? 'm' : entry.gender === 'feminine' ? 'f' : '';
+    const c = entry.grammarClass ?? '';
+    const kind = posKind(entry.pos);
+    if (kind === 'noun') return (g + c) || g;
+    if (kind === 'adjective') return c ? 'a' + c : '';
+    if (kind === 'verb') return c && ORDINAL[+c] ? ORDINAL[+c] + ' conj.' : '';
+    return g;
+  });
 
   function handleStar() {
     if (!entry) return;
@@ -26,24 +71,29 @@
     history.back();
   }
 
+  // The place graph's `name_elements.element_entry` node uuid — the reverse-link
+  // node whose sources are Logainm placenames constituted by this headword. Passed
+  // to MapView as an opaque UUID (no alias resolution; the node lives in the place
+  // graph, not this stack's base graph).
+  const ELEMENT_ENTRY_NODE_UUID = '49436367-b92b-5157-8cf5-a81086195ad6';
+
+  /** Open the placenames map for the current entry; `selected` focuses one place. */
+  function openPlacenamesMap(selected?: string) {
+    if (!entry) return;
+    const headDir = placeHeadDir();
+    if (!headDir) return; // place layer not active — no map to show
+    openMap({
+      layer: { headDir, label: 'Logainm' },
+      filter: { nodeUri: ELEMENT_ENTRY_NODE_UUID, targetUri: entry.uri, label: entry.headword },
+      selected,
+    });
+  }
+  /** True only when the place layer is installed (so the map has a head to query). */
+  let hasPlaceLayer = $derived(!!placeHeadDir());
+
   function toggleGroup(key: string) {
     openGroup = openGroup === key ? null : key;
   }
-
-  interface FormGroup {
-    key: string;
-    title: string;
-    match: (tags: string[]) => boolean;
-  }
-
-  const formGroups: FormGroup[] = [
-    { key: 'nominative', title: 'Nominative', match: (tags) => tags.some(tg => tg.toLowerCase().includes('nominative')) },
-    { key: 'genitive', title: 'Genitive', match: (tags) => tags.some(tg => tg.toLowerCase().includes('genitive')) },
-    { key: 'dative', title: 'Dative', match: (tags) => tags.some(tg => tg.toLowerCase().includes('dative')) },
-    { key: 'vocative', title: 'Vocative', match: (tags) => tags.some(tg => tg.toLowerCase().includes('vocative')) },
-    { key: 'lenited', title: 'Lenited', match: (tags) => tags.some(tg => tg.toLowerCase().includes('lenited') || tg.toLowerCase().includes('lenition')) },
-    { key: 'eclipsed', title: 'Eclipsed', match: (tags) => tags.some(tg => tg.toLowerCase().includes('eclipsed') || tg.toLowerCase().includes('eclipsis')) },
-  ];
 
   async function selectEntry(uri: string, headword: string) {
     loading.set(true);
@@ -64,28 +114,6 @@
     return [...map.entries()].map(([language, cognates]) => ({ language, cognates }));
   }
 
-  function groupedForms(forms: EntryDetail['forms']) {
-    const used = new Set<number>();
-    const groups: Array<{ key: string; title: string; items: EntryDetail['forms'] }> = [];
-
-    for (const g of formGroups) {
-      const items = forms.filter((f, i) => !used.has(i) && g.match(f.tags));
-      if (items.length) {
-        items.forEach(item => {
-          const idx = forms.indexOf(item);
-          if (idx >= 0) used.add(idx);
-        });
-        groups.push({ key: g.key, title: g.title, items });
-      }
-    }
-
-    const other = forms.filter((_, i) => !used.has(i));
-    if (other.length) {
-      groups.push({ key: 'other', title: 'Other', items: other });
-    }
-
-    return groups;
-  }
 </script>
 
 {#if entry}
@@ -103,11 +131,13 @@
         </div>
         <div class="ge-navbar-title" style="color:rgba(246,244,235,0.65);font-size:13px;font-weight:500;letter-spacing:0.16em;text-transform:uppercase;">{$t('entry.title')}</div>
         <div class="ge-navbar-side right">
+          <LayerPill tone="var(--cream)" />
           <button class="ge-iconbtn" aria-label={starred ? $t('entry.unstar') : $t('entry.star')} style="color:var(--cream);" onclick={handleStar}>
             <svg width="20" height="20" viewBox="0 0 24 24" fill={starred ? 'currentColor' : 'none'} stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
               <path d="M12 3l2.7 5.5 6.1.9-4.4 4.3 1 6.1L12 17l-5.4 2.8 1-6.1L3.2 9.4l6.1-.9z"/>
             </svg>
           </button>
+          <FlagButton resourceUri={entry.uri} tone="var(--cream)" subjectName={entry.headword} subjectGraph="Ceannfhocal · Headword" subjectKind="entry" />
         </div>
       </div>
 
@@ -117,8 +147,11 @@
           {#if entry.pos}
             <span style="font-style:italic;">{entry.pos}</span>
           {/if}
-          {#if entry.dialect && dialectCode($familyConfig.id, entry.dialect)}
-            <span style="font-size:11px;letter-spacing:0.08em;font-weight:600;background:rgba(246,244,235,0.12);padding:2px 7px;border-radius:4px;">{dialectCode($familyConfig.id, entry.dialect)}</span>
+          {#if classBadge}
+            <span style="font-size:12px;font-weight:700;background:rgba(246,244,235,0.16);padding:2px 8px;border-radius:4px;font-variant:small-caps;letter-spacing:0.02em;">{classBadge}</span>
+          {/if}
+          {#if entryDialectCode}
+            <span style="font-size:11px;letter-spacing:0.08em;font-weight:600;background:rgba(246,244,235,0.12);padding:2px 7px;border-radius:4px;">{entryDialectCode}</span>
           {/if}
         </div>
 
@@ -140,6 +173,8 @@
       <div style="padding:0 16px;">
         <div class="ge-list">
           {#each entry.senses as sense, i}
+            {@const dcode = sense.dialect ? dialectCode($familyConfig.id, sense.dialect) || sense.dialect : ''}
+            {@const sw = sense.sourceLabel ? sourceLabelSwatch($familyConfig.id, sense.sourceLabel) : ''}
             <div class="ge-list-row" style="align-items:flex-start;">
               <span class="ge-sense-num">{i + 1}</span>
               <div class="row-main">
@@ -150,45 +185,144 @@
                   </div>
                 {/if}
               </div>
-              {#if sense.dialect}
-                <span class="ge-layer-tag" style="background:transparent;border:1px solid currentColor;opacity:0.75;" title="Dialect">{sense.dialect}</span>
-              {/if}
-              {#if sense.sourceLabel}
-                <span class="ge-layer-tag">{sense.sourceLabel}</span>
-              {/if}
+              <!-- Two fixed-width slots so dialect and source line up as columns
+                   down the sense list, even when a sense is missing one. -->
+              <div class="ge-sense-tags">
+                <span class="ge-sense-tag dialect" class:empty={!dcode} class:gd={dcode.split('.')[0] === 'GD'} title={sense.dialect ?? ''}>{dcode}</span>
+                <span class="ge-sense-tag source" class:empty={!sense.sourceLabel} class:tinted={!!sw} style={sw ? `--sw:${sw}` : ''}>{sense.sourceLabel ?? ''}</span>
+              </div>
             </div>
           {/each}
         </div>
       </div>
     {/if}
 
-    <!-- Forms accordion -->
-    {#if entry.forms.length > 0}
-      <div class="ge-block-title">{$t('entry.forms')}</div>
-      <div style="padding:0 16px;">
-        <div class="ge-list" style="padding:0;">
-          {#each groupedForms(entry.forms) as group}
-            <div class="ge-acc" class:open={openGroup === group.key}>
-              <button class="ge-acc-head" onclick={() => toggleGroup(group.key)}>
+    <!-- Leftover forms (Wiktionary lenited/eclipsed/etc. not placed in the grid) -->
+    {#snippet otherForms(other: FlatGroup[])}
+      {#if other.length > 0}
+        <div class="ge-list" style="padding:0;margin-top:8px;">
+          {#each other as group}
+            <div class="ge-acc" class:open={openGroup === 'other-' + group.key}>
+              <button class="ge-acc-head" onclick={() => toggleGroup('other-' + group.key)}>
                 <span class="chev">
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
-                    <path d="M9 18l6-6-6-6"/>
-                  </svg>
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18l6-6-6-6"/></svg>
                 </span>
-                {group.title}
+                {$t('forms.' + group.key) === 'forms.' + group.key ? group.title : $t('forms.' + group.key)}
                 <span class="count">{group.items.length}</span>
               </button>
               <div class="ge-acc-body">
                 {#each group.items as form}
                   <div class="ge-form-line">
                     <span class="gf-word">{form.writtenRep}</span>
-                    <span class="gf-tags">{form.tags.filter(t => t.toLowerCase() !== group.title.toLowerCase()).join(' · ')}</span>
+                    <span class="gf-tags">{form.tags.map(tagLabel).join(' · ')}</span>
                   </div>
                 {/each}
               </div>
             </div>
           {/each}
         </div>
+      {/if}
+    {/snippet}
+
+    <!-- Forms / paradigm -->
+    {#if paradigm && (paradigm.kind !== 'flat' || paradigm.groups.length > 0)}
+      <div class="ge-block-title">{$t('entry.forms')}</div>
+      <div style="padding:0 16px;">
+
+        {#if paradigm.kind === 'noun' || paradigm.kind === 'adjective'}
+          <!-- number × case grid -->
+          <table class="ge-para">
+            <thead>
+              <tr>
+                <th></th>
+                <th>{$t('forms.singular')}</th>
+                {#if paradigm.hasPlural}<th>{$t('forms.plural')}</th>{/if}
+              </tr>
+            </thead>
+            <tbody>
+              {#each paradigm.rows as row}
+                <tr>
+                  <th class="ge-para-axis">{$t('forms.' + row.case)}</th>
+                  <td>
+                    {#each row.sg as c}
+                      <span class="ge-para-cell">{c.text}{#if c.extra.length}<small>{c.extra.map(tagLabel).join(' · ')}</small>{/if}</span>
+                    {/each}
+                  </td>
+                  {#if paradigm.hasPlural}
+                    <td>
+                      {#each row.pl as c}
+                        <span class="ge-para-cell">{c.text}{#if c.extra.length}<small>{c.extra.map(tagLabel).join(' · ')}</small>{/if}</span>
+                      {/each}
+                    </td>
+                  {/if}
+                </tr>
+              {/each}
+            </tbody>
+          </table>
+          {#if paradigm.kind === 'adjective' && paradigm.comparison.length > 0}
+            <div class="ge-para-sub">{$t('forms.comparison')}</div>
+            <div class="ge-para-inline">
+              {#each paradigm.comparison as c}<span class="ge-para-cell">{c.text}</span>{/each}
+            </div>
+          {/if}
+          {@render otherForms(paradigm.other)}
+
+        {:else if paradigm.kind === 'verb'}
+          {#if paradigm.principalParts.length > 0}
+            <div class="ge-para-pp">
+              {#each paradigm.principalParts as pp}
+                <span><em>{$t(pp.key === 'verbal-noun' ? 'forms.verbalNoun' : 'forms.verbalAdjective')}</em> {pp.text}</span>
+              {/each}
+            </div>
+          {/if}
+          <div class="ge-list" style="padding:0;">
+            {#each paradigm.tenses as tsec}
+              <div class="ge-acc" class:open={openGroup === tsec.tense}>
+                <button class="ge-acc-head" onclick={() => toggleGroup(tsec.tense)}>
+                  <span class="chev">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18l6-6-6-6"/></svg>
+                  </span>
+                  {$t('forms.' + tsec.tense)}
+                  <span class="count">{tsec.rows.length}</span>
+                </button>
+                <div class="ge-acc-body">
+                  {#each tsec.rows as r}
+                    <div class="ge-form-line">
+                      <span class="ge-para-person">{personLabel(r.person)}</span>
+                      <span class="gf-word">{r.forms.map(f => f.text).join(', ')}</span>
+                    </div>
+                  {/each}
+                </div>
+              </div>
+            {/each}
+          </div>
+          {@render otherForms(paradigm.other)}
+
+        {:else}
+          <!-- flat fallback (non-noun/verb/adj, or untagged forms) -->
+          <div class="ge-list" style="padding:0;">
+            {#each paradigm.groups as group}
+              <div class="ge-acc" class:open={openGroup === group.key}>
+                <button class="ge-acc-head" onclick={() => toggleGroup(group.key)}>
+                  <span class="chev">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18l6-6-6-6"/></svg>
+                  </span>
+                  {$t('forms.' + group.key) === 'forms.' + group.key ? group.title : $t('forms.' + group.key)}
+                  <span class="count">{group.items.length}</span>
+                </button>
+                <div class="ge-acc-body">
+                  {#each group.items as form}
+                    <div class="ge-form-line">
+                      <span class="gf-word">{form.writtenRep}</span>
+                      <span class="gf-tags">{form.tags.map(tagLabel).join(' · ')}</span>
+                    </div>
+                  {/each}
+                </div>
+              </div>
+            {/each}
+          </div>
+        {/if}
+
       </div>
     {/if}
 
@@ -203,7 +337,11 @@
                 <div class="ge-etym-prose">{etym.text}</div>
               </div>
               {#if etym.sourceLabel}
-                <span class="ge-layer-tag">{etym.sourceLabel}</span>
+                {@const sw = sourceLabelSwatch($familyConfig.id, etym.sourceLabel)}
+                <!-- Same chip as the sense source column: fixed width, swatch-tinted. -->
+                <div class="ge-sense-tags">
+                  <span class="ge-sense-tag source" class:tinted={!!sw} style={sw ? `--sw:${sw}` : ''}>{etym.sourceLabel}</span>
+                </div>
               {/if}
             </div>
           {/each}
@@ -235,6 +373,37 @@
       </div>
     {/if}
 
+    <!-- Placenames (reverse element_entry lookup into the Logainm place layer) -->
+    {#if entry.placenames && entry.placenames.count > 0}
+      <div class="ge-block-title ge-placenames-head">
+        <span>{$t('entry.placenames')}</span>
+        {#if hasPlaceLayer}
+          <button class="ge-placenames-map" onclick={() => openPlacenamesMap()}>
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M9 4 3 6v14l6-2 6 2 6-2V4l-6 2-6-2Z"/><path d="M9 4v14M15 6v14"/></svg>
+            {$t('map.viewOnMap')}
+          </button>
+        {/if}
+      </div>
+      <div style="padding:0 16px;">
+        <div class="ge-list">
+          <div class="ge-placenames-count">{$t('entry.placenamesCount', { count: entry.placenames.count.toLocaleString() })}</div>
+          <div class="ge-placenames-chips">
+            {#each entry.placenames.sample as pl}
+              {#if hasPlaceLayer}
+                <button class="ge-placename ge-placename-btn" onclick={() => openPlacenamesMap(pl.resourceId)}>{pl.name}</button>
+              {:else}
+                <span class="ge-placename">{pl.name}</span>
+              {/if}
+            {/each}
+            {#if entry.placenames.count > entry.placenames.sample.length}
+              <span class="ge-placename-more">+{(entry.placenames.count - entry.placenames.sample.length).toLocaleString()}…</span>
+            {/if}
+          </div>
+          <div class="ge-placenames-src">{$t('entry.placenamesSource')}</div>
+        </div>
+      </div>
+    {/if}
+
     <!-- External examples -->
     {#if entry.externalExamples.length > 0}
       <div class="ge-block-title">{$t('entry.examples')}</div>
@@ -243,6 +412,65 @@
       </div>
     {/if}
 
+
     <div style="padding-bottom:32px;"></div>
   </div>
 {/if}
+
+<style>
+  /* Paradigm grid (nouns / adjectives) */
+  .ge-para { width: 100%; border-collapse: collapse; margin: 4px 0 2px; }
+  .ge-para th, .ge-para td { text-align: left; padding: 7px 10px; vertical-align: top; }
+  .ge-para thead th {
+    font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em;
+    color: var(--fg-soft); font-weight: 600; border-bottom: 1px solid color-mix(in srgb, var(--fg-soft) 30%, transparent);
+  }
+  .ge-para tbody tr + tr { border-top: 1px solid color-mix(in srgb, var(--fg-soft) 18%, transparent); }
+  .ge-para-axis {
+    font-size: 12px; text-transform: uppercase; letter-spacing: 0.05em;
+    color: var(--fg-soft); font-weight: 600; white-space: nowrap;
+  }
+  .ge-para-cell { display: inline-flex; align-items: baseline; gap: 5px; margin-right: 12px; color: var(--fg-default); }
+  .ge-para-cell:last-child { margin-right: 0; }
+  .ge-para-cell small { color: var(--fg-soft); font-size: 11px; }
+
+  /* Adjective comparison + section subheads */
+  .ge-para-sub {
+    font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em;
+    color: var(--fg-soft); font-weight: 600; margin: 12px 0 2px;
+  }
+  .ge-para-inline { display: flex; flex-wrap: wrap; gap: 12px; padding: 2px 0 4px; }
+
+  /* Verb principal parts */
+  .ge-para-pp {
+    display: flex; flex-wrap: wrap; gap: 16px;
+    padding: 8px 0 10px; color: var(--fg-default);
+  }
+  .ge-para-pp em { color: var(--fg-soft); font-style: italic; font-size: 12px; margin-right: 4px; }
+
+  /* Verb conjugation person label */
+  .ge-para-person { min-width: 54px; color: var(--fg-soft); font-style: italic; }
+
+  /* Placenames (reverse element_entry lookup) */
+  .ge-placenames-count { font-size: 13px; color: var(--fg-muted); padding: 8px 0 2px; }
+  .ge-placenames-chips { display: flex; flex-wrap: wrap; gap: 6px; padding: 2px 0 4px; }
+  .ge-placename {
+    font-size: 14px; padding: 3px 10px; border-radius: 13px;
+    background: color-mix(in srgb, var(--fg-soft) 14%, transparent); color: var(--fg-default);
+  }
+  .ge-placename-more { font-size: 13px; color: var(--fg-soft); align-self: center; }
+  .ge-placenames-src { font-size: 11px; color: var(--fg-soft); padding: 6px 0 2px; font-style: italic; }
+
+  /* Placenames block header with the "Map" affordance */
+  .ge-placenames-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+  .ge-placenames-map {
+    display: inline-flex; align-items: center; gap: 5px;
+    border: 0; cursor: pointer; text-transform: none; letter-spacing: 0;
+    padding: 4px 10px; border-radius: var(--pill-radius, 500px);
+    background: var(--teal-deep); color: var(--cream);
+    font-size: 12px; font-weight: 600;
+  }
+  /* Tappable placename chip (opens the map focused on that place) */
+  .ge-placename-btn { border: 0; cursor: pointer; font-family: inherit; }
+  .ge-placename-btn:hover { background: color-mix(in srgb, var(--fg-soft) 24%, transparent); }
+</style>

@@ -2,6 +2,14 @@ mod builder_plugin;
 mod index_files;
 mod pagefind_zip;
 mod tbx_parser;
+
+/// Vector basemap (PMTiles) byte-range access for the offline map — reads the
+/// bundled `goidelic.pmtiles`. Independent of the `v2` feature.
+mod basemap;
+
+/// Debug-only localhost navigation channel (adb-driven). `nav-server` feature.
+#[cfg(feature = "nav-server")]
+mod navserver;
 /// v2 static-assets pilot (ros-madair-query + SQLite head + native tile
 /// hydration). Off by default; `--features v2`.
 #[cfg(feature = "v2")]
@@ -32,6 +40,8 @@ pub fn run() {
             // populated its context, so this is ready. No-op off Android.
             #[cfg(target_os = "android")]
             android_ctx::init_from_tao();
+            #[cfg(feature = "nav-server")]
+            navserver::start(_app.handle().clone());
             Ok(())
         })
         .plugin(tauri_plugin_opener::init())
@@ -53,6 +63,8 @@ pub fn run() {
         builder_plugin::check_local_index,
         builder_plugin::remove_layer_files,
         builder_plugin::layer_has_pagefind,
+        basemap::basemap_range,
+        basemap::basemap_available,
     ]);
     #[cfg(feature = "v2")]
     let builder = builder.invoke_handler(tauri::generate_handler![
@@ -62,6 +74,8 @@ pub fn run() {
         builder_plugin::check_local_index,
         builder_plugin::remove_layer_files,
         builder_plugin::layer_has_pagefind,
+        basemap::basemap_range,
+        basemap::basemap_available,
         v2::v2_hydrate,
         v2::v2_query,
         v2::v2_query_layers,
@@ -69,6 +83,8 @@ pub fn run() {
         v2::v2_closure,
         v2::v2_descriptors,
         v2::v2_cited_by,
+        v2::v2_geo_points,
+        v2::v2_emit_overlay,
         offline::v2_prepare_offline,
     ]);
 

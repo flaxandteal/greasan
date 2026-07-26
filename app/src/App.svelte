@@ -2,16 +2,19 @@
   import { App } from 'konsta/svelte';
   import { onMount } from 'svelte';
   import { get } from 'svelte/store';
-  import { currentEntry, currentExample, wasmReady, activeTab, darkMode, density, listStyle, bootstrapLayers, pushRecent, overlayView, preparingDictionary } from './lib/store';
+  import { currentEntry, currentExample, wasmReady, activeTab, darkMode, density, listStyle, bootstrapLayers, pushRecent, overlayView, preparingDictionary, mapState } from './lib/store';
   import { t } from './lib/i18n';
   import Search from './views/Search.svelte';
   import EntryDetail from './views/EntryDetail.svelte';
   import ExampleDetailView from './views/ExampleDetail.svelte';
+  import MapView from './views/MapView.svelte';
   import Settings from './views/Settings.svelte';
   import Starred from './views/Starred.svelte';
   import TabBar from './views/TabBar.svelte';
   import LicenseToast from './views/LicenseToast.svelte';
+  import LayerSheet from './views/LayerSheet.svelte';
   import Faq from './views/Faq.svelte';
+  import FlagsPage from './views/FlagsPage.svelte';
 
   let navigatingBack = false;
   let showLicenseInSettings = $state(false);
@@ -49,10 +52,19 @@
       }
     });
 
-    // Pop history → navigate back through views
+    const unsubMap = mapState.subscribe((val) => {
+      if (val && !navigatingBack) {
+        history.pushState({ view: 'map' }, '');
+      }
+    });
+
+    // Pop history → navigate back through views. Map sits on top of the entry,
+    // so it unwinds first.
     function onPopState() {
       navigatingBack = true;
-      if (get(currentExample)) {
+      if (get(mapState)) {
+        mapState.set(null);
+      } else if (get(currentExample)) {
         currentExample.set(null);
       } else if (get(currentEntry)) {
         currentEntry.set(null);
@@ -65,6 +77,7 @@
     return () => {
       unsubEntry();
       unsubExample();
+      unsubMap();
       window.removeEventListener('popstate', onPopState);
     };
   });
@@ -72,8 +85,12 @@
 
 <App theme="ios" darkMode={$darkMode === 'dark'}>
   <div class="ge-app" data-mode={$darkMode} data-density={$density} data-list={$listStyle}>
-    {#if $overlayView === 'faq'}
+    {#if $mapState}
+      <MapView layer={$mapState.layer} filter={$mapState.filter} selected={$mapState.selected} />
+    {:else if $overlayView === 'faq'}
       <Faq />
+    {:else if $overlayView === 'flags'}
+      <FlagsPage />
     {:else if $currentExample}
       <ExampleDetailView />
     {:else if $currentEntry}
@@ -88,7 +105,7 @@
       <Settings showLicenseSection={showLicenseInSettings} />
     {/if}
 
-    {#if !$currentEntry && !$currentExample && !$overlayView}
+    {#if !$currentEntry && !$currentExample && !$overlayView && !$mapState}
       <TabBar />
     {/if}
 
@@ -105,6 +122,8 @@
         <div style="font-size:var(--fs-small,13px);color:var(--fg-soft,#888);max-width:280px;">Unpacking offline data. This runs once, on first launch.</div>
       </div>
     {/if}
+
+    <LayerSheet />
 
     <LicenseToast onShowFull={openLicenseSettings} />
   </div>
