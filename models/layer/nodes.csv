@@ -1,0 +1,28 @@
+parent_alias,alias,name,datatype,cardinality,ontology_class,parent_property,description,collection_name,required,searchable,exportable,sortorder
+,name,Name,string,1,https://schema.org/name,https://schema.org/name,Human-readable layer name (the resource descriptor),,true,true,true,1
+,slug,Slug,string,1,https://schema.org/identifier,https://schema.org/identifier,Dialect-neutral layer slug (as used across the stack),,false,true,true,2
+,icon,Icon,string,1,https://schema.org/image,https://schema.org/image,Layer icon — an inline SVG or a bundled asset reference,,false,false,true,3
+,layer_type,Layer Type,concept-list,1,https://schema.org/about,https://schema.org/about,"What the layer contributes (Grammar, Etymology, Glosses, …)",Layer Types,false,true,true,4
+,layer_format,Layer Format,concept-list,1,https://schema.org/encodingFormat,https://schema.org/encodingFormat,"Upstream formats the layer is available in (TBX, RM, …)",Layer Formats,false,true,true,5
+,licensing,Licensing,semantic,1,https://schema.org/license,https://schema.org/license,Licence and the required visible attribution,,false,false,true,6
+licensing,licence,Licence,concept,1,https://schema.org/license,https://schema.org/license,The licence under which the layer is provided,Licences,false,true,true,1
+licensing,attribution,Attribution,string,1,https://schema.org/creditText,https://schema.org/creditText,The visible credit line to display (may hold multiple credits),,false,false,true,2
+,description,Description,semantic,1,https://schema.org/description,https://schema.org/description,Typed rich-text description,,false,false,true,7
+description,description_type,Description Type,concept,1,https://schema.org/additionalType,https://schema.org/additionalType,The kind of description,Description Types,false,false,true,1
+description,description_text,Description Text,string,1,https://schema.org/description,https://schema.org/description,Rich-text (markdown) description body,,false,true,true,2
+,links,Links,semantic,n,https://schema.org/subjectOf,https://schema.org/subjectOf,"Related links (homepage, source, documentation, …)",,false,false,true,8
+links,link_title,Link Title,string,1,https://schema.org/name,https://schema.org/name,Human-readable link label,,false,true,true,1
+links,link_url,Link URL,string,1,https://schema.org/url,https://schema.org/url,The link target,,false,false,true,2
+links,link_type,Link Type,concept,1,https://schema.org/additionalType,https://schema.org/additionalType,"Kind of link (homepage, source, licence, documentation, …)",Link Types,false,false,true,3
+,statistics,Statistics,semantic,1,https://flaxandteal.org/ontology/goidelic#statistics,https://flaxandteal.org/ontology/goidelic#statistics,Build-generated layer statistics,,false,false,true,9
+statistics,resource_count,Resource Count,string,1,https://flaxandteal.org/ontology/goidelic#resourceCount,https://flaxandteal.org/ontology/goidelic#resourceCount,Number of resources in the layer (build-generated),,false,false,true,1
+statistics,statistics_block,Statistics Block,string,1,https://flaxandteal.org/ontology/goidelic#statisticsBlock,https://flaxandteal.org/ontology/goidelic#statisticsBlock,Build-generated statistics as a JSON block,,false,false,true,2
+,integration,Integration,semantic,1,https://flaxandteal.org/ontology/goidelic#integration,https://flaxandteal.org/ontology/goidelic#integration,Structured config to load the layer into Gréasán,,false,false,true,10
+integration,integration_slug,Integration Slug,string,1,https://flaxandteal.org/ontology/goidelic#integrationSlug,https://flaxandteal.org/ontology/goidelic#integrationSlug,The head slug Gréasán loads for this layer,,false,false,true,1
+integration,default_on,Default On,string,1,https://flaxandteal.org/ontology/goidelic#defaultOn,https://flaxandteal.org/ontology/goidelic#defaultOn,Whether the layer is loaded by default (true/false),,false,false,true,2
+integration,swatch,Swatch,string,1,https://flaxandteal.org/ontology/goidelic#swatch,https://flaxandteal.org/ontology/goidelic#swatch,Layer swatch colour token,,false,false,true,3
+integration,config_block,Config Block,string,1,https://flaxandteal.org/ontology/goidelic#configBlock,https://flaxandteal.org/ontology/goidelic#configBlock,Structured typed integration config as a JSON block,,false,false,true,4
+integration,download,Download,semantic,n,https://flaxandteal.org/ontology/goidelic#download,https://flaxandteal.org/ontology/goidelic#download,Automatable per-format download details (a subset of the layer formats),,false,false,true,5
+download,download_format,Format,concept,1,https://schema.org/encodingFormat,https://schema.org/encodingFormat,The format this download provides,Layer Formats,false,false,true,1
+download,download_url,Download URL,string,1,https://schema.org/contentUrl,https://schema.org/contentUrl,The download URL,,false,false,true,2
+download,download_notes,Notes,string,1,https://schema.org/description,https://schema.org/description,Notes about this download / format,,false,false,true,3

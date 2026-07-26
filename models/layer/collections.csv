@@ -1,0 +1,39 @@
+collection_name,concept_label,parent_label,sort_order
+Layer Types,Grammar,,1
+Layer Types,Morphology,,2
+Layer Types,Etymology,,3
+Layer Types,Glosses,,4
+Layer Types,Senses,,5
+Layer Types,Pronunciation,,6
+Layer Types,Terminology,,7
+Layer Types,Cognates,,8
+Layer Types,Examples,,9
+Layer Types,Placenames,,10
+Layer Types,Annotations,,11
+Layer Types,Basemap,,12
+Layer Formats,RM,,1
+Layer Formats,TBX,,2
+Layer Formats,Arches JSON,,3
+Layer Formats,CSV,,4
+Layer Formats,JSON,,5
+Layer Formats,SKOS,,6
+Layer Formats,OWL,,7
+Layer Formats,PMTiles,,8
+Licences,CC BY 4.0,,1
+Licences,CC BY-SA 4.0,,2
+Licences,CC BY 2.0,,3
+Licences,CC0 1.0,,4
+Licences,ODbL 1.0,,5
+Licences,OGL 3.0,,6
+Licences,Public Domain,,7
+Licences,Proprietary,,8
+Description Types,Overview,,1
+Description Types,Methodology,,2
+Description Types,Coverage,,3
+Description Types,Caveats,,4
+Link Types,Homepage,,1
+Link Types,Source,,2
+Link Types,Licence,,3
+Link Types,Documentation,,4
+Link Types,Download,,5
+Link Types,Citation,,6
