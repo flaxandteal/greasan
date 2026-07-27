@@ -134,7 +134,7 @@
   }
 
   interface Palette {
-    paper: string; land: string; coast: string; water: string;
+    paper: string; land: string; coast: string; water: string; label: string;
     teal: string; gold: string; ring: string;
   }
   function palette(): Palette {
@@ -143,6 +143,7 @@
       land: token('--map-land', '#FBF9F2'),
       coast: token('--map-coast', '#334B4E'),
       water: token('--map-water', '#DCE6E5'),
+      label: token('--map-label', '#6E7C7E'),
       teal: token('--teal-mid', '#4B7A81'),
       gold: token('--gold-deep', '#B39B52'),
       ring: token('--paper', '#FFFFFF'),
@@ -153,9 +154,10 @@
   function baseStyle(pal: Palette): any {
     return {
       version: 8,
-      // No glyphs, no sprite, no tile sources — nothing to fetch. A single
-      // background layer paints the theme paper colour; our GeoJSON layers are
-      // added on `load` once the sources exist.
+      // Bundled SDF glyphs (public/glyphs/, served same-origin — no external
+      // fetch) for the basemap labels; no sprite, no tile sources. A single
+      // background layer paints the theme paper; layers are added on `load`.
+      glyphs: '/glyphs/{fontstack}/{range}.pbf',
       sources: {},
       layers: [
         { id: 'bg', type: 'background', paint: { 'background-color': pal.paper } },
@@ -186,9 +188,9 @@
     };
   }
 
-  // Greyscale OSM vector basemap (OpenMapTiles schema). Fill/line only — the
-  // offline style bundles no glyphs, so labels are a follow-up. Themed via the
-  // --map-* tokens so it tracks light/dark. Sits at the bottom, under the points.
+  // Greyscale OSM vector basemap (OpenMapTiles schema), themed via the --map-*
+  // tokens so it tracks light/dark. Fill/line geometry plus tonal, bilingual
+  // settlement labels. Sits at the bottom, under the points.
   function addBasemapLayers(pal: Palette) {
     if (!map) return;
     map.addSource('basemap', { type: 'vector', url: 'pmtiles://goidelic' } as any);
@@ -204,6 +206,53 @@
     map.addLayer({ id: 'bm-road', type: 'line', source: 'basemap', 'source-layer': 'transportation',
       minzoom: 7, paint: { 'line-color': pal.coast,
         'line-width': ['interpolate', ['linear'], ['zoom'], 7, 0.3, 11, 1.1], 'line-opacity': 0.3 } } as any);
+    // Tonal, bilingual settlement labels: name:ga stacked over the local name
+    // where they differ (needs tiles built with --languages; falls back to
+    // `name`). Grey text + paper halo so labels read as context, not competing
+    // with the Logainm dots.
+    map.addLayer({ id: 'bm-place', type: 'symbol', source: 'basemap', 'source-layer': 'place',
+      minzoom: 7,
+      filter: ['in', ['get', 'class'], ['literal', ['city', 'town', 'village', 'hamlet', 'suburb']]],
+      layout: {
+        'text-field': ['case',
+          ['all', ['has', 'name:ga'], ['has', 'name'], ['!=', ['get', 'name:ga'], ['get', 'name']]],
+          ['format', ['get', 'name:ga'], {}, '\n', {}, ['get', 'name'], { 'font-scale': 0.82 }],
+          ['coalesce', ['get', 'name:ga'], ['get', 'name']]],
+        'text-font': ['KumbhSans'],
+        'text-size': ['interpolate', ['linear'], ['zoom'], 7, 10, 11, 13],
+        'text-max-width': 7, 'text-padding': 4, 'text-line-height': 1.1,
+        // Priority by settlement rank: cities/towns win label collisions so the
+        // smaller places (village/hamlet/suburb) fill the gaps instead of being
+        // dropped arbitrarily. Lower sort-key = placed first = survives.
+        'symbol-sort-key': ['match', ['get', 'class'],
+          'city', 0, 'town', 1, 'village', 2, 'hamlet', 3, 'suburb', 4, 5] as any,
+      },
+      paint: {
+        'text-color': pal.label, 'text-halo-color': pal.paper,
+        'text-halo-width': 1.2, 'text-opacity': 0.92,
+      } } as any);
+
+    // Road / street names — data is in the tiles (transportation_name, z6-12,
+    // with name:ga) but had no layer, so nothing rendered below town level.
+    // Line-placed, bilingual (name:ga → name), major classes prioritised. path/
+    // track/service excluded to keep the placename map uncluttered.
+    map.addLayer({ id: 'bm-road-label', type: 'symbol', source: 'basemap',
+      'source-layer': 'transportation_name',
+      minzoom: 11,
+      filter: ['!', ['in', ['get', 'class'], ['literal', ['path', 'track', 'service', 'ferry']]]] as any,
+      layout: {
+        'symbol-placement': 'line',
+        'text-field': ['coalesce', ['get', 'name:ga'], ['get', 'name']] as any,
+        'text-font': ['KumbhSans'],
+        'text-size': ['interpolate', ['linear'], ['zoom'], 11, 9, 14, 11.5],
+        'text-max-angle': 30, 'symbol-spacing': 250, 'text-padding': 2,
+        'symbol-sort-key': ['match', ['get', 'class'],
+          'motorway', 0, 'trunk', 1, 'primary', 2, 'secondary', 3, 'tertiary', 4, 'minor', 5, 6] as any,
+      },
+      paint: {
+        'text-color': pal.label, 'text-halo-color': pal.paper,
+        'text-halo-width': 1.2, 'text-opacity': 0.9,
+      } } as any);
   }
 
   function addLayers(pal: Palette) {
@@ -284,6 +333,10 @@
       map.setPaintProperty('bm-waterway', 'line-color', pal.water);
       map.setPaintProperty('bm-boundary', 'line-color', pal.coast);
       map.setPaintProperty('bm-road', 'line-color', pal.coast);
+      map.setPaintProperty('bm-place', 'text-color', pal.label);
+      map.setPaintProperty('bm-place', 'text-halo-color', pal.paper);
+      map.setPaintProperty('bm-road-label', 'text-color', pal.label);
+      map.setPaintProperty('bm-road-label', 'text-halo-color', pal.paper);
     } else {
       map.setPaintProperty('outline-fill', 'fill-color', pal.land);
       map.setPaintProperty('outline-line', 'line-color', pal.coast);
