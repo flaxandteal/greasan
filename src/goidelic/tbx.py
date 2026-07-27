@@ -157,6 +157,28 @@ def extract_gender(raw_pos: str) -> list[str]:
     return TEARMA_GENDER_MAP.get(raw_pos.strip(), [])
 
 
+# Declension is STATED in the Téarma gender code: fir1..fir5 / bain2..bain5
+# (noun) and a1..a3 (adjective). The trailing digit is the class. Verb
+# conjugation is NOT stated (only br/v) — inferring it is deferred to the
+# grammar-class-inference session (see the hand-off), so it stays "" here.
+_DECLENSION = {
+    "fir1": "1", "a1": "1",
+    "fir2": "2", "bain2": "2", "a2": "2",
+    "fir3": "3", "bain3": "3", "a3": "3",
+    "fir4": "4", "bain4": "4",
+    "fir5": "5", "bain5": "5",
+}
+
+
+def extract_declension(raw_pos: str) -> str:
+    """Noun/adjective declension class from the POS code, or "" if none.
+
+    Mirror of the Rust ``extract_declension`` in ``tbx_parser.rs`` — keep the two
+    in step so the build path and the on-device path emit identical grammar_class.
+    """
+    return _DECLENSION.get(raw_pos.strip(), "")
+
+
 def _clean_domain(text: str) -> str:
     """Clean HTML entity leftovers from domain strings.
 
@@ -328,6 +350,7 @@ def parse_term_entry(entry: ET.Element) -> list[dict]:
                 "dialect": "Irish (General)",
                 "pos": pos,
                 "raw_pos": raw_pos,
+                "grammar_class": extract_declension(raw_pos),
                 "pronunciations": [],
                 "senses": senses,
                 "forms": forms,

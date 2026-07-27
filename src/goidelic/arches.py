@@ -14,6 +14,7 @@ COLUMNS = [
     "ResourceID",
     "headword",
     "part_of_speech",
+    "grammar_class",
     "dialect",
     "ipa_value",
     "pronunciation_dialect",
@@ -60,6 +61,7 @@ def entry_to_rows(entry: dict) -> list[dict[str, str]]:
         if i == 0:
             row["headword"] = entry.get("headword", "")
             row["part_of_speech"] = entry.get("part_of_speech", "")
+            row["grammar_class"] = entry.get("grammar_class", "")
             row["dialect"] = entry.get("dialect", "")
             # Domain is concept-list (cardinality n), pipe-separated
             if domains:

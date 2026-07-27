@@ -42,6 +42,24 @@ fn extract_gender(raw: &str) -> Option<&'static str> {
     }
 }
 
+/// The declension class encoded in the Téarma POS code. Téarma states the
+/// declension in the gender abbreviation itself — `fir1`..`fir5` (masculine
+/// noun) and `bain2`..`bain5` (feminine noun), plus `a1`..`a3` for adjective
+/// declension. The trailing digit IS the class, so we keep it as `grammar_class`
+/// (`goidelic#grammaticalClass`, same node BuNaMo populates) rather than
+/// discarding it and later re-guessing from lemma+gender. Bare `fir`/`bain`
+/// (no digit) carry no class → None.
+fn extract_declension(raw: &str) -> Option<&'static str> {
+    match raw.trim() {
+        "fir1" | "a1" => Some("1"),
+        "fir2" | "bain2" | "a2" => Some("2"),
+        "fir3" | "bain3" | "a3" => Some("3"),
+        "fir4" | "bain4" => Some("4"),
+        "fir5" | "bain5" => Some("5"),
+        _ => None,
+    }
+}
+
 // ---------------------------------------------------------------------------
 // Domain mapping (Téarma subject fields → UNESCO Thesaurus labels)
 // ---------------------------------------------------------------------------
@@ -152,6 +170,9 @@ pub struct Form {
 pub struct TbxRecord {
     pub word: String,
     pub pos: String,
+    /// Declension/conjugation class from the POS code ("1".."5"), or empty when
+    /// the source gives none. See {@link extract_declension}.
+    pub grammar_class: String,
     pub dialect: String,
     pub senses: Vec<Sense>,
     pub forms: Vec<Form>,
@@ -480,9 +501,20 @@ fn parse_single_entry(xml: &str) -> Result<Vec<TbxRecord>, String> {
                 None => Vec::new(),
             };
 
+            // Noun/adjective declension is STATED in the POS code, so we extract
+            // it. Verb conjugation is NOT stated by Téarma and is left empty here
+            // — inferring it (and guessing the bare-fir/bain noun gap) is the
+            // separate grammar-class-inference session's job. See the hand-off.
+            let grammar_class = if tg.raw_pos.is_empty() {
+                String::new()
+            } else {
+                extract_declension(&tg.raw_pos).unwrap_or("").to_string()
+            };
+
             records.push(TbxRecord {
                 word: tg.headword.clone(),
                 pos: pos.to_string(),
+                grammar_class,
                 dialect: "Irish (General)".to_string(),
                 senses,
                 forms,
@@ -566,6 +598,9 @@ const CSV_COLUMNS: &[&str] = &[
     "cognate_language",
     "cognate_entry_id",
     "related_entries",
+    // Appended last so the positional row writes below stay put. Matches the
+    // `grammar_class` node on the lexical_entry model (BuNaMo emits it too).
+    "grammar_class",
 ];
 
 /// Convert parsed TBX records into business-data CSV.
@@ -603,6 +638,8 @@ pub fn records_to_csv(records: &[TbxRecord], source_label: &str) -> Result<Strin
                 if !rec.categories.is_empty() {
                     row[10] = csv_escape(&rec.categories.join("|"));
                 }
+                // grammar_class is the appended final column.
+                *row.last_mut().unwrap() = csv_escape(&rec.grammar_class);
             }
 
             if i < rec.senses.len() {
