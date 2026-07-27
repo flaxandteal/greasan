@@ -18,11 +18,12 @@ OUT_DIR="$REPO/app/src-tauri/basemap" # staged for APK bundling
 OUT="$OUT_DIR/goidelic.pmtiles"
 
 # Geofabrik area. Stage 1: ireland-and-northern-ireland. Stage 2: british-isles.
-# maxzoom 12 = street-level context; measured footprint ~46 MB (Ireland), the
-# last zoom that stays affordable once AREA widens to british-isles. z13 ~114 MB
-# (Ireland) / ~250-350 MB (british-isles) is overkill for a placename-marker map.
+# maxzoom 13 — z12 was too sparse to name residential streets (OSM tags many
+# only at z13-14). Measured footprint (Ireland): z12 ~38 MB, z13 ~114 MB. Costs
+# more bundle but that is where street-level naming lives; revisit when AREA
+# widens to british-isles (~2-3x → keep an eye on APK size).
 AREA="${BASEMAP_AREA:-ireland-and-northern-ireland}"
-MAXZOOM="${BASEMAP_MAXZOOM:-12}"
+MAXZOOM="${BASEMAP_MAXZOOM:-13}"
 JAR="$TOOLS/planetiler.jar"
 JAR_URL="https://github.com/onthegomap/planetiler/releases/latest/download/planetiler.jar"
 
