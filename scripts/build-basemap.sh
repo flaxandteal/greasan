@@ -18,8 +18,11 @@ OUT_DIR="$REPO/app/src-tauri/basemap" # staged for APK bundling
 OUT="$OUT_DIR/goidelic.pmtiles"
 
 # Geofabrik area. Stage 1: ireland-and-northern-ireland. Stage 2: british-isles.
+# maxzoom 12 = street-level context; measured footprint ~46 MB (Ireland), the
+# last zoom that stays affordable once AREA widens to british-isles. z13 ~114 MB
+# (Ireland) / ~250-350 MB (british-isles) is overkill for a placename-marker map.
 AREA="${BASEMAP_AREA:-ireland-and-northern-ireland}"
-MAXZOOM="${BASEMAP_MAXZOOM:-11}"
+MAXZOOM="${BASEMAP_MAXZOOM:-12}"
 JAR="$TOOLS/planetiler.jar"
 JAR_URL="https://github.com/onthegomap/planetiler/releases/latest/download/planetiler.jar"
 
@@ -38,6 +41,7 @@ echo "[basemap] free disk before: $(df -h "$REPO" | awk 'NR==2{print $4}')"
 java -Xmx3g -jar "$JAR" \
   --area="$AREA" \
   --maxzoom="$MAXZOOM" \
+  --languages=en,ga,gd \
   --download \
   --download-dir="$TOOLS/data" \
   --tmpdir="$TOOLS/tmp" \
