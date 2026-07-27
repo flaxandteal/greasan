@@ -48,7 +48,6 @@ vi.mock('./pagefind', () => ({
 
 import {
   setHiddenLayers,
-  getHiddenLayers,
   currentV2HeadDirs,
   layerCoverage,
   registerV2Layers,
@@ -63,6 +62,11 @@ const OVERLAY = V2_LAYERS[1].name;
 const headDirOf = (name: string) => V2_LAYERS.find(l => l.name === name)!.headDir;
 const pfBaseOf = (name: string) => V2_LAYERS.find(l => l.name === name)!.pagefindBase;
 
+// The composed head-dir stack: every layer EXCEPT the `layer` catalogue meta-head
+// (queried on its own, never composed) and any hidden ones, in declared order.
+const composable = (hidden: string[] = []) =>
+  V2_LAYERS.filter(l => l.name !== 'layer' && !hidden.includes(l.name)).map(l => l.headDir);
+
 describe('layer visibility', () => {
   beforeEach(() => {
     setHiddenLayers([]);
@@ -71,25 +75,26 @@ describe('layer visibility', () => {
     mockDescriptors.mockReset();
   });
 
-  it('never hides the base layer, however hard you ask', () => {
-    setHiddenLayers([BASE, OVERLAY]);
-    // headDirs[0] carries the graph + registry; hiding it would break hydrate.
-    expect(getHiddenLayers().has(BASE)).toBe(false);
-    expect(getHiddenLayers().has(OVERLAY)).toBe(true);
-    expect(currentV2HeadDirs()).toContain(headDirOf(BASE));
+  it('never composes an empty stack, even if every layer is hidden', () => {
+    // RM's Layers::open rejects a zero-dir stack, so setHiddenLayers keeps one
+    // layer visible when a (stale/all-hidden) set would blank everything.
+    setHiddenLayers(V2_LAYERS.map(l => l.name));
+    expect(currentV2HeadDirs().length).toBe(1);
+  });
+
+  it('excludes the `layer` catalogue meta-head from the composed stack', () => {
+    expect(currentV2HeadDirs()).not.toContain(headDirOf('layer'));
   });
 
   it('drops hidden overlays from the composed head dirs, preserving order', () => {
     setHiddenLayers([OVERLAY]);
-    expect(currentV2HeadDirs()).toEqual(
-      V2_LAYERS.filter(l => l.name !== OVERLAY).map(l => l.headDir),
-    );
+    expect(currentV2HeadDirs()).toEqual(composable([OVERLAY]));
   });
 
   it('restores the full stack when unhidden', () => {
     setHiddenLayers([OVERLAY]);
     setHiddenLayers([]);
-    expect(currentV2HeadDirs()).toEqual(V2_LAYERS.map(l => l.headDir));
+    expect(currentV2HeadDirs()).toEqual(composable());
   });
 
   it('excludes hidden layers from Pagefind search', async () => {

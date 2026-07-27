@@ -9,9 +9,16 @@
   // borrow anything spatial — opacity and blending mean nothing when layers
   // merge into one entry rather than tiling a plane, and the app's genuinely
   // geographic axis is dialect, not source.
-  import { layerStack, toggleLayerVisibility, layerSheetOpen, currentEntry, activeTab } from '../lib/store';
+  import { layerStack, toggleLayerVisibility, layerSheetOpen, currentEntry, activeTab, currentLayer } from '../lib/store';
   import { layerCoverage } from '../lib/dictionary';
+  import { loadLayerBySlug } from '../lib/layers-catalogue';
   import { t } from '../lib/i18n';
+
+  /** Tap a layer's label → its full description page (from the catalogue). */
+  async function openDetail(name: string) {
+    const l = await loadLayerBySlug(name);
+    if (l) { layerSheetOpen.set(false); currentLayer.set(l); }
+  }
 
   // Coverage-at-cursor: which layers actually carry the open entry. Null when
   // no entry is open (nothing to be covered) or the lookup failed — in both
@@ -66,30 +73,34 @@
 
       {#each rows as l (l.name)}
         {@const absent = coverage !== null && !coverage.has(l.name)}
-        <button
-          class="row"
-          class:off={!l.visible}
-          disabled={l.base}
-          aria-pressed={l.visible}
-          onclick={() => toggleLayerVisibility(l.name)}
-        >
-          <span class="swatch" style="background:{l.swatch}"></span>
-          <span class="row-body">
-            <span class="row-label">{l.label}</span>
-            {#if l.base}
-              <span class="row-sub">{$t('layers.base')}</span>
-            {:else if absent}
-              <span class="row-sub absent">{$t('layers.noEntry')}</span>
-            {/if}
-          </span>
-          <span class="eye" aria-hidden="true">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
-              <path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7z"/>
-              <circle cx="12" cy="12" r="3"/>
-              {#if !l.visible}<path d="M3 3l18 18"/>{/if}
-            </svg>
-          </span>
-        </button>
+        <div class="row" class:off={!l.visible}>
+          <button class="row-open" onclick={() => openDetail(l.name)}>
+            <span class="swatch" style="background:{l.swatch}"></span>
+            <span class="row-body">
+              <span class="row-label">{l.label}</span>
+              {#if l.base}
+                <span class="row-sub">{$t('layers.base')}</span>
+              {:else if absent}
+                <span class="row-sub absent">{$t('layers.noEntry')}</span>
+              {/if}
+            </span>
+          </button>
+          <button
+            class="eye-btn"
+            disabled={l.base}
+            aria-pressed={l.visible}
+            aria-label={$t('layers.aria')}
+            onclick={() => toggleLayerVisibility(l.name)}
+          >
+            <span class="eye" aria-hidden="true">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7z"/>
+                <circle cx="12" cy="12" r="3"/>
+                {#if !l.visible}<path d="M3 3l18 18"/>{/if}
+              </svg>
+            </span>
+          </button>
+        </div>
       {/each}
 
       <div class="sheet-foot">
@@ -165,6 +176,16 @@
 
   .row:hover:not(:disabled) { background: var(--srf-card-alt); }
   .row:disabled { cursor: default; }
+  .row-open {
+    flex: 1; min-width: 0; display: flex; align-items: center; gap: 12px;
+    background: transparent; border: 0; padding: 0; margin: 0;
+    font: inherit; color: inherit; text-align: left; cursor: pointer;
+  }
+  .eye-btn {
+    background: transparent; border: 0; padding: 4px; margin: 0;
+    color: inherit; cursor: pointer; display: inline-flex; flex-shrink: 0;
+  }
+  .eye-btn:disabled { cursor: default; opacity: 0.6; }
 
   /* Hidden: the whole row recedes and the swatch drains. Distinct from
      `.absent`, which dims nothing — "off" and "nothing here" must not look

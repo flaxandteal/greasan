@@ -242,7 +242,7 @@ async function getAvailableDialects(pf: PagefindInstance, base: string): Promise
  * discovered via the reverse-lookup on a word entry, not by searching for them.
  * (Flip this — remove `place` — when we add dedicated place search.)
  */
-const NON_SEARCH_LAYERS: ReadonlySet<string> = new Set(['place', 'example-tatoeba', 'example-gaois', 'person', 'note']);
+const NON_SEARCH_LAYERS: ReadonlySet<string> = new Set(['place', 'example-tatoeba', 'example-gaois', 'person', 'note', 'layer']);
 
 function allPagefindBasesForLang(lang: SearchLang): string[] {
   const bases: string[] = [];
@@ -536,6 +536,13 @@ export const V2_LAYERS: V2LayerConfig[] = [
     headDir: '/home/philtweir/Cód/Oscailte/Gréasán/data/note-v2',
     pagefindBase: '/layer-note/',
   },
+  {
+    // Layer catalogue — describes each layer (licence, types, stats, …). Queried
+    // on its own for the layer UI; not searched, not shown as a toggleable layer.
+    name: 'layer',
+    headDir: '/home/philtweir/Cód/Oscailte/Gréasán/data/layer-v2',
+    pagefindBase: '/layer-layer/',
+  },
 ];
 
 /**
@@ -579,7 +586,9 @@ export function getHiddenLayers(): ReadonlySet<string> {
 
 /** Ordered ACTIVE v2 layer head dirs (composition order, hidden layers dropped). */
 export function currentV2HeadDirs(): string[] {
-  const visible = activeV2Layers.filter((l) => !hiddenLayers.has(l.name));
+  // The `layer` catalogue is a META head (describes layers) — queried on its own
+  // via layerCatalogueHeadDir(), never composed into the lexical/place stack.
+  const visible = activeV2Layers.filter((l) => l.name !== 'layer' && !hiddenLayers.has(l.name));
   // setHiddenLayers already guards against an all-hidden set; this is the
   // belt-and-braces fallback so `Layers::open` never sees a zero-dir stack.
   const stack = visible.length > 0 ? visible : activeV2Layers.slice(0, 1);
@@ -595,6 +604,11 @@ export function currentV2HeadDirs(): string[] {
  */
 export function placeHeadDir(): string | undefined {
   return currentV2HeadDirs().find((d) => d.includes('place-v2'));
+}
+
+/** The `layer-v2` catalogue head dir (meta layer), or undefined if not active. */
+export function layerCatalogueHeadDir(): string | undefined {
+  return activeV2Layers.find((l) => l.name === 'layer')?.headDir;
 }
 
 /**

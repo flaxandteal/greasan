@@ -6,8 +6,10 @@
   import { overlayView, currentEntry, currentExample, loading } from '../lib/store';
   import { loadNotes, editFlag, deleteFlag, exportBusinessData, type NoteRec } from '../lib/flags-write';
   import { loadEntryFlagged, loadExample } from '../lib/dictionary';
+  import { t } from '../lib/i18n';
   import { save } from '@tauri-apps/plugin-dialog';
   import { writeTextFile } from '@tauri-apps/plugin-fs';
+
 
   let notes = $state<NoteRec[]>(loadNotes());
   let busy = $state(false);
@@ -69,14 +71,14 @@
 <div class="ge-page">
   <div class="ge-navbar">
     <div class="ge-navbar-side">
-      <button class="ge-back" onclick={goBack} aria-label="Ar ais · Back">
+      <button class="ge-back" onclick={goBack} aria-label={$t('nav.back')}>
         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg>
-        Cuardaigh
+        {$t('nav.search')}
       </button>
     </div>
-    <div class="ge-navbar-title">Bratacha · Flags</div>
+    <div class="ge-navbar-title">{$t('flag.title')}</div>
     <div class="ge-navbar-side right">
-      <button class="ge-iconbtn" aria-label="Easpórtáil · Export" onclick={onExport} disabled={busy || notes.length === 0}>
+      <button class="ge-iconbtn" aria-label={$t('flag.export')} onclick={onExport} disabled={busy || notes.length === 0}>
         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12"/><path d="M8 11l4 4 4-4"/><path d="M4 17v2a2 2 0 002 2h12a2 2 0 002-2v-2"/></svg>
       </button>
     </div>
@@ -84,14 +86,14 @@
 
   <div class="ge-flags-body">
     {#if notes.length === 0}
-      <div class="ge-flags-empty">Gan bratacha fós · No flags yet.</div>
+      <div class="ge-flags-empty">{$t('flag.empty')}</div>
     {:else}
       {#each notes as n (n.rid)}
         <div class="ge-flag-card" class:busy>
           <button class="ge-flag-card-main" onclick={() => openSubject(n)} disabled={busy || editingRid === n.rid}>
             <div class="ge-flag-card-head">
               <span class="ge-flag-card-name">{n.subjectName || '—'}</span>
-              {#if n.subjectGraph}<span class="ge-flag-card-graph">{n.subjectGraph}</span>{/if}
+              {#if n.subjectKind}<span class="ge-flag-card-graph">{$t(`flag.subject.${n.subjectKind}`)}</span>{:else if n.subjectGraph}<span class="ge-flag-card-graph">{n.subjectGraph}</span>{/if}
             </div>
             {#if editingRid === n.rid}
               <!-- svelte-ignore a11y_no_static_element_interactions -->
@@ -108,15 +110,15 @@
           </button>
           <div class="ge-flag-card-actions">
             {#if editingRid === n.rid}
-              <button class="ge-flag-act" onclick={() => saveEdit(n.rid)} disabled={busy} aria-label="Sábháil · Save">
+              <button class="ge-flag-act" onclick={() => saveEdit(n.rid)} disabled={busy} aria-label={$t('flag.save')}>
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12l5 5L20 7"/></svg>
               </button>
             {:else}
-              <button class="ge-flag-act" onclick={() => startEdit(n)} disabled={busy} aria-label="Cuir in eagar · Edit">
+              <button class="ge-flag-act" onclick={() => startEdit(n)} disabled={busy} aria-label={$t('flag.edit')}>
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 013 3L7 19l-4 1 1-4z"/></svg>
               </button>
             {/if}
-            <button class="ge-flag-act del" onclick={() => onDelete(n.rid)} disabled={busy} aria-label="Scrios · Delete">
+            <button class="ge-flag-act del" onclick={() => onDelete(n.rid)} disabled={busy} aria-label={$t('flag.delete')}>
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18M8 6V4h8v2M6 6l1 14h10l1-14"/></svg>
             </button>
           </div>

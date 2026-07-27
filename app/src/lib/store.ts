@@ -30,6 +30,8 @@ export const searchLang = persisted<SearchLang>('ge:searchLang', 'ga');
 export const searchResults = writable<Array<{ uri: string; headword: string; pos: string; gloss?: string }>>([]);
 export const currentEntry = writable<any | null>(null);
 export const currentExample = writable<ExampleDetail | null>(null);
+/** The open Layer description page, or null. */
+export const currentLayer = writable<import('./layers-catalogue').LayerEntry | null>(null);
 export const loading = writable(false);
 
 export const wasmReady = readable(false, (set) => {
@@ -185,7 +187,8 @@ export interface LayerStackItem {
 export const layerStack = derived(
   [layers, hiddenLayerNames, activeFamily],
   ([$layers, $hidden, $family]): LayerStackItem[] => {
-    const items: LayerStackItem[] = $layers.map((l) => ({
+    // The `layer` catalogue is a META head — never a toggleable stack layer.
+    const items: LayerStackItem[] = $layers.filter((l) => l.name !== 'layer').map((l) => ({
       name: l.name,
       label: FAMILIES[$family]?.layerPresentation?.[l.name]?.label ?? l.name,
       swatch: layerSwatch($family, l.name),

@@ -90,7 +90,7 @@
   </div>
   <div class="ge-navbar-title">{$t('search.title')}</div>
   <div class="ge-navbar-side right">
-    <button class="ge-iconbtn" aria-label="Bratacha · Flags" onclick={() => overlayView.set('flags')}>
+    <button class="ge-iconbtn" aria-label={$t('flag.title')} onclick={() => overlayView.set('flags')}>
       <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
         <path d="M4 21V7M4 7h8l-1.4 2.5L12 12H4"/>
         <path d="M8 16V3M8 3h8l-1.4 2.5L16 8H8"/>

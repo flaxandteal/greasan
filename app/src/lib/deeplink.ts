@@ -14,8 +14,9 @@
 //   greasan://flags              open the flags page
 //   greasan://faq                open the FAQ overlay
 import { listen } from '@tauri-apps/api/event';
-import { currentEntry, currentExample, overlayView, layerSheetOpen, openMap, loading } from './store';
+import { currentEntry, currentExample, currentLayer, overlayView, layerSheetOpen, openMap, loading } from './store';
 import { search, loadEntryFlagged, loadExample, placeHeadDir } from './dictionary';
+import { loadLayerBySlug } from './layers-catalogue';
 
 // The place graph's `name_elements.element_entry` reverse-link node — the same
 // UUID EntryDetail uses to plot the placenames constituted by a headword.
@@ -52,6 +53,12 @@ async function openExample(id: string): Promise<void> {
   finally { loading.set(false); }
 }
 
+async function openLayer(slug: string): Promise<void> {
+  loading.set(true);
+  try { const l = await loadLayerBySlug(slug); if (l) currentLayer.set(l); }
+  finally { loading.set(false); }
+}
+
 /** Route one greasan:// URL. Unknown/unparseable URLs are ignored (logged). */
 export async function handleDeepLink(url: string): Promise<void> {
   let u: URL;
@@ -63,6 +70,7 @@ export async function handleDeepLink(url: string): Promise<void> {
     case 'word': case 'entry': await openWord(arg); break;
     case 'map': await openWordMap(arg); break;
     case 'example': await openExample(arg); break;
+    case 'layer': await openLayer(arg); break;
     case 'layers': layerSheetOpen.set(true); break;
     case 'flags': overlayView.set('flags'); break;
     case 'faq': overlayView.set('faq'); break;

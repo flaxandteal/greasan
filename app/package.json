@@ -10,6 +10,7 @@
     "build:search": "echo 'build-search-index not yet implemented'",
     "preview": "vite preview",
     "check": "svelte-check --tsconfig ./tsconfig.app.json && tsc -p tsconfig.node.json",
+    "check:i18n": "node scripts/check-i18n.mjs",
     "test": "vitest run",
     "test:watch": "vitest",
     "tauri": "tauri",

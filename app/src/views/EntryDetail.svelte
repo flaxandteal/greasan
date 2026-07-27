@@ -137,7 +137,7 @@
               <path d="M12 3l2.7 5.5 6.1.9-4.4 4.3 1 6.1L12 17l-5.4 2.8 1-6.1L3.2 9.4l6.1-.9z"/>
             </svg>
           </button>
-          <FlagButton resourceUri={entry.uri} tone="var(--cream)" subjectName={entry.headword} subjectGraph="Ceannfhocal · Headword" subjectKind="entry" />
+          <FlagButton resourceUri={entry.uri} tone="var(--cream)" subjectName={entry.headword} subjectKind="entry" />
         </div>
       </div>
 

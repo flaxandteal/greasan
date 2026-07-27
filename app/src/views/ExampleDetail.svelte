@@ -90,9 +90,7 @@
     !!example?.sourceUrl && (example?.source || '').toLowerCase() === 'tatoeba',
   );
   let licenceLine = $derived(
-    isGaois
-      ? 'Gaois Parallel Corpus of Legislation — Fiontar & Scoil na Gaeilge, DCU. Legislation © Government of Ireland. CC BY 4.0. A language resource, not an authoritative legal resource.'
-      : 'Tatoeba — CC BY 2.0.',
+    isGaois ? $t('example.licenceGaois') : $t('example.licenceTatoeba'),
   );
 </script>
 
@@ -111,7 +109,7 @@
         </div>
         <div class="ge-navbar-title" style="color:rgba(246,244,235,0.65);font-size:13px;font-weight:500;letter-spacing:0.16em;text-transform:uppercase;">{$t('example.title')}</div>
         <div class="ge-navbar-side right">
-          <FlagButton resourceUri={example.resourceId} tone="var(--cream)" subjectName={example.sentence} subjectGraph="Sampla · Example" subjectKind="example" />
+          <FlagButton resourceUri={example.resourceId} tone="var(--cream)" subjectName={example.sentence} subjectKind="example" />
         </div>
       </div>
 
@@ -139,7 +137,7 @@
          of the entry graph's external_examples link), NOT from string-matching the
          sentence — so mutations (lenition/eclipsis/inflection) can't break them. -->
     {#if example.headwords && example.headwords.length}
-      <div class="ge-block-title">Ceannfhocail · Headwords</div>
+      <div class="ge-block-title">{$t('example.headwords')}</div>
       <div style="padding:0 16px 4px;">
         <div class="ge-ex-chips">
           {#each example.headwords as hw}
@@ -158,7 +156,7 @@
             <div class="row-main">
               {#if example.source}
                 <div class="ge-list-title">
-                  {sourceLabel(example.source)}{#if isGaois}<span style="font-weight:400;color:var(--fg-soft);"> · Parallel Corpus of Legislation</span>{/if}
+                  {sourceLabel(example.source)}{#if isGaois}<span style="font-weight:400;color:var(--fg-soft);"> · {$t('example.gaoisSuffix')}</span>{/if}
                 </div>
               {/if}
               {#if example.collection}

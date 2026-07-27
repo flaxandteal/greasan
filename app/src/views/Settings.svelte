@@ -1,13 +1,21 @@
 <script lang="ts">
   import { darkMode, density, listStyle, visibleDialects, activeFamily, familyConfig, setActiveFamily, layers, importLayer, installPackage, removeLayer, buildProgress, recentLimit, recentEntries, showLicenseToast } from '../lib/store';
   import { FAMILIES, type FamilyId, type SuggestedLayer } from '../lib/family';
-  import { t } from '../lib/i18n';
+  import { t, localePreference } from '../lib/i18n';
   import { diagEntries, diagTotalMs, diagTotalBytes, diagReset } from '../lib/diagnostics';
   import { open } from '@tauri-apps/plugin-dialog';
-
-
+  import { onMount } from 'svelte';
+  import LayerBlockCard from './LayerBlockCard.svelte';
+  import { loadLayerCatalogue, type LayerEntry } from '../lib/layers-catalogue';
 
   const familyIds = Object.keys(FAMILIES) as FamilyId[];
+
+  // Layer catalogue — rich metadata for installed/available layers (block cards).
+  let catalogue = $state<LayerEntry[]>([]);
+  onMount(() => { loadLayerCatalogue().then((c) => (catalogue = c)).catch(() => {}); });
+  function catEntry(name: string): LayerEntry | undefined {
+    return catalogue.find((e) => e.slug === name || e.integrationSlug === name || e.integrationSlug === `${name}-v2`);
+  }
 
   function toggleDialect(value: string) {
     visibleDialects.update(current => {
@@ -99,6 +107,12 @@
     { value: 'dark' as const, key: 'settings.modeDark' },
   ];
 
+  const languageOptions = [
+    { value: 'system' as const, key: 'settings.langSystem' },
+    { value: 'ga' as const, key: 'settings.langIrish' },
+    { value: 'en' as const, key: 'settings.langEnglish' },
+  ];
+
   interface Props {
     showLicenseSection?: boolean;
   }
@@ -145,18 +159,23 @@
     {#if $layers.length > 0}
       <div style="margin-bottom:8px;">
         {#each $layers as layer}
-          <div class="ge-layer-row">
-            <span class="ge-layer-label">{layer.name}</span>
-            <button
-              class="ge-layer-action"
-              onclick={() => handleRemoveLayer(layer.name)}
-              aria-label="Remove layer"
-            >
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <path d="M18 6L6 18M6 6l12 12"/>
-              </svg>
-            </button>
-          </div>
+          {@const ce = catEntry(layer.name)}
+          {#if ce}
+            <LayerBlockCard layer={ce} actionLabel={$t('settings.removeLayer')} onAction={() => handleRemoveLayer(layer.name)} />
+          {:else}
+            <div class="ge-layer-row">
+              <span class="ge-layer-label">{layer.name}</span>
+              <button
+                class="ge-layer-action"
+                onclick={() => handleRemoveLayer(layer.name)}
+                aria-label={$t('settings.removeLayer')}
+              >
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M18 6L6 18M6 6l12 12"/>
+                </svg>
+              </button>
+            </div>
+          {/if}
         {/each}
       </div>
     {:else}
@@ -307,6 +326,21 @@
           class="ge-seg"
           class:active={$listStyle === opt.value}
           onclick={() => listStyle.set(opt.value)}
+        >
+          {$t(opt.key)}
+        </button>
+      {/each}
+    </div>
+  </div>
+
+  <div class="ge-block-title">{$t('settings.language')}</div>
+  <div style="padding:0 16px;">
+    <div class="ge-segs">
+      {#each languageOptions as opt}
+        <button
+          class="ge-seg"
+          class:active={$localePreference === opt.value}
+          onclick={() => localePreference.set(opt.value)}
         >
           {$t(opt.key)}
         </button>

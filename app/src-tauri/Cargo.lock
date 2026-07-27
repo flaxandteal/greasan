@@ -4165,6 +4165,7 @@ dependencies = [
  "alizarin-core",
  "rmp-serde",
  "ros-madair-format",
+ "ros-madair-handlers",
  "ros-madair-query",
  "rusqlite",
  "serde_json",

@@ -110,6 +110,14 @@ const CORPORA: &[CorpusSpec] = &[
         index: "note-v2",
         langs: &[],
     },
+    CorpusSpec {
+        // Layer catalogue — metadata describing each data layer. Queried on its
+        // own for the layer UI; not composed into the lexical stack. No pagefind.
+        name: "layer",
+        head: "layer-v2",
+        index: "layer-v2",
+        langs: &[],
+    },
 ];
 
 /// One resolved layer returned to the frontend after first-run prep.

@@ -16,6 +16,7 @@ const en: Record<string, string> = {
   'search.typeToSearch': 'Type to search',
   'search.settings': 'Settings',
   'search.info': 'Info',
+  'search.flags': 'Flags',
   'search.noLayers': 'Install a dictionary layer in Settings to get started.',
   'search.goToSettings': 'Open Settings',
 
@@ -44,6 +45,7 @@ const en: Record<string, string> = {
   'map.viewOnLogainm': 'View on Logainm',
   'map.loadingDetail': 'Loading place details…',
   'map.constituentWords': 'Constituent words',
+  'map.basemapAttribution': '© OpenMapTiles © OpenStreetMap contributors',
 
   // Form groups
   'forms.nominative': 'Nominative',
@@ -73,6 +75,34 @@ const en: Record<string, string> = {
   'example.translation': 'Translation',
   'example.source': 'Source',
   'example.viewSource': 'View source \u2192',
+  'example.headwords': 'Headwords',
+  'example.gaoisSuffix': 'Parallel Corpus of Legislation',
+  'example.licenceTatoeba': 'Tatoeba \u2014 CC BY 2.0.',
+  'example.licenceGaois': 'Gaois Parallel Corpus of Legislation \u2014 Fiontar & Scoil na Gaeilge, DCU. Legislation \u00a9 Government of Ireland. CC BY 4.0. A language resource, not an authoritative legal resource.',
+
+  // Flags (notes on entries / examples / places)
+  'flag.title': 'Flags',
+  'flag.add': 'Add',
+  'flag.addNote': 'Add a note\u2026',
+  'flag.edit': 'Edit',
+  'flag.save': 'Save',
+  'flag.delete': 'Delete',
+  'flag.close': 'Close',
+  'flag.export': 'Export',
+  'flag.empty': 'No flags yet.',
+  'flag.subject.entry': 'Headword',
+  'flag.subject.example': 'Example',
+  'flag.subject.place': 'Place',
+
+  // Layer detail page
+  'layerDetail.title': 'Layer',
+  'layerDetail.description': 'Description',
+  'layerDetail.licence': 'Licence',
+  'layerDetail.formats': 'Formats',
+  'layerDetail.statistics': 'Statistics',
+  'layerDetail.resources': 'resources',
+  'layerDetail.links': 'Links',
+  'layerDetail.downloads': 'Downloads',
 
   // Starred
   'starred.title': 'Starred',
@@ -123,6 +153,10 @@ const en: Record<string, string> = {
   'settings.appearance': 'Appearance',
   'settings.modeLight': 'Light',
   'settings.modeDark': 'Dark',
+  'settings.language': 'Language',
+  'settings.langSystem': 'System',
+  'settings.langIrish': 'Gaeilge',
+  'settings.langEnglish': 'English',
   'settings.recentHistory': 'Recent history',
   'settings.recentOff': 'Off',
   'settings.license': 'Licensing',
@@ -156,6 +190,8 @@ const en: Record<string, string> = {
 
   // App
   'app.loading': 'Loading WASM modules\u2026',
+  'app.preparing': 'Preparing dictionary\u2026',
+  'app.preparingHint': 'Unpacking offline data. This runs once, on first launch.',
 
   // FAQ
   'faq.title': 'Info',

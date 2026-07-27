@@ -583,7 +583,7 @@
   {:else if errored || points.length === 0}
     <div class="ge-map-status">{$t('map.empty')}</div>
   {/if}
-  <div class="ge-map-attr">{$t('map.source')}{#if basemapReady} · © OpenMapTiles © OpenStreetMap contributors{/if}</div>
+  <div class="ge-map-attr">{$t('map.source')}{#if basemapReady} · {$t('map.basemapAttribution')}{/if}</div>
 
   <!-- Bottom sheet: overlays the map -->
   <div class="ge-map-sheet">
@@ -601,7 +601,7 @@
         <div class="ge-place-detail">
           <div class="ge-place-name" style="display:flex;align-items:center;justify-content:space-between;gap:8px;">
             <span>{placeDetail?.name || selectedPoint.name}</span>
-            <FlagButton resourceUri={selectedId ?? ''} tone="var(--fg-soft)" subjectName={placeDetail?.name || selectedPoint.name} subjectGraph="Logainm · Place" subjectKind="place" />
+            <FlagButton resourceUri={selectedId ?? ''} tone="var(--fg-soft)" subjectName={placeDetail?.name || selectedPoint.name} subjectKind="place" />
           </div>
           <div class="ge-place-meta">
             {#if placeDetail?.featureType}<span class="ge-place-ft">{placeDetail.featureType}</span>{/if}

@@ -6,18 +6,21 @@
   // view / add / edit / delete. Writes go through flags-write → v2_emit_overlay
   // (re-emits the note head); localStorage is the editable source of truth.
   import { notesFor, addFlag, editFlag, deleteFlag, type NoteRec, type SubjectKind } from '../lib/flags-write';
+  import { t } from '../lib/i18n';
 
   interface Props {
     /** Resource UUID to show/attach flags for. */
     resourceUri: string;
     /** Icon colour when there are NO flags (matches the surrounding bar). */
     tone?: string;
-    /** Subject context, denormalized onto new notes for the all-flags page. */
+    /** Subject context, denormalized onto new notes for the all-flags page.
+     *  Only the KIND is stored as data — the display label is derived from it at
+     *  render time (`flag.subject.*`), so notes re-localise instead of freezing
+     *  whatever language was active when they were flagged. */
     subjectName?: string;
-    subjectGraph?: string;
     subjectKind?: SubjectKind;
   }
-  let { resourceUri, tone = 'currentColor', subjectName, subjectGraph, subjectKind }: Props = $props();
+  let { resourceUri, tone = 'currentColor', subjectName, subjectKind }: Props = $props();
 
   let notes = $state<NoteRec[]>([]);
   let open = $state(false);
@@ -40,7 +43,7 @@
     const text = draft.trim();
     if (!text || busy || !resourceUri) return;
     busy = true;
-    try { await addFlag(resourceUri, text, { name: subjectName, graph: subjectGraph, kind: subjectKind }); draft = ''; refresh(); }
+    try { await addFlag(resourceUri, text, { name: subjectName, kind: subjectKind }); draft = ''; refresh(); }
     catch (e) { console.warn('[flags] add failed:', e); }
     finally { busy = false; }
   }
@@ -64,7 +67,7 @@
 <button
   class="ge-iconbtn ge-flag-btn"
   class:flagged={hasFlags}
-  aria-label="Bratacha · Flags"
+  aria-label={$t('flag.title')}
   style="color:{hasFlags ? 'var(--flag-red, #d64b3f)' : tone};"
   onclick={() => (open = !open)}
 >
@@ -75,10 +78,10 @@
 
 {#if open}
   <div class="ge-flag-scrim" onclick={() => (open = false)} role="presentation"></div>
-  <div class="ge-flag-pop" role="dialog" aria-label="Bratacha · Flags">
+  <div class="ge-flag-pop" role="dialog" aria-label={$t('flag.title')}>
     <div class="ge-flag-pop-head">
-      <span>Bratacha · Flags{#if busy} · …{/if}</span>
-      <button class="ge-flag-x" aria-label="Dún · Close" onclick={() => (open = false)}>✕</button>
+      <span>{$t('flag.title')}{#if busy} · …{/if}</span>
+      <button class="ge-flag-x" aria-label={$t('flag.close')} onclick={() => (open = false)}>✕</button>
     </div>
 
     {#each notes as n (n.rid)}
@@ -90,7 +93,7 @@
           disabled={busy}
           onchange={(e) => onEdit(n.rid, (e.currentTarget as HTMLInputElement).value)}
         />
-        <button class="ge-flag-del" aria-label="Scrios · Delete" disabled={busy} onclick={() => onDelete(n.rid)}>✕</button>
+        <button class="ge-flag-del" aria-label={$t('flag.delete')} disabled={busy} onclick={() => onDelete(n.rid)}>✕</button>
       </div>
     {/each}
 
@@ -98,11 +101,11 @@
       <input
         class="ge-flag-edit"
         bind:value={draft}
-        placeholder="Cuir nóta leis… · add a note"
+        placeholder={$t('flag.addNote')}
         disabled={busy}
         onkeydown={(e) => { if (e.key === 'Enter') onAdd(); }}
       />
-      <button class="ge-flag-addbtn" disabled={busy || !draft.trim()} onclick={onAdd} aria-label="Cuir leis · Add">+</button>
+      <button class="ge-flag-addbtn" disabled={busy || !draft.trim()} onclick={onAdd} aria-label={$t('flag.add')}>+</button>
     </div>
   </div>
 {/if}

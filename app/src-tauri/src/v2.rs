@@ -107,6 +107,7 @@ pub fn hydrate_resource(
     head_dir: &Path,
     resource_uuid: &str,
     graph: &StaticGraph,
+    languages: &[&str],
 ) -> Result<Value, String> {
     let tiles = ros_madair_read::resource_tiles_with_graph(head_dir, resource_uuid, Some(graph))
         .map_err(|e| e.to_string())?;
@@ -119,7 +120,14 @@ pub fn hydrate_resource(
             tiles.len()
         ));
     }
-    ros_madair_read::hydrate_tiles(&tiles, resource_uuid, graph).map_err(|e| e.to_string())
+    // Display tree: fold this head's vocab labels so `reference` fields render as
+    // labels (not raw UUIDs) — the alizarin-managed rendering. The tile-count
+    // cross-check above still runs.
+    let conn = ros_madair_read::open_head(head_dir).map_err(|e| e.to_string())?;
+    let mut labels = HashMap::new();
+    ros_madair_read::read_vocab_labels(&conn, &mut labels).map_err(|e| e.to_string())?;
+    ros_madair_read::hydrate_tiles_with_labels(&tiles, resource_uuid, graph, &labels, languages)
+        .map_err(|e| e.to_string())
 }
 
 /// Compile a `ros-madair-query` IR against the graph and execute each
@@ -197,9 +205,16 @@ fn graph_path(head_dir: &str) -> PathBuf {
 }
 
 #[tauri::command]
-pub fn v2_hydrate(head_dir: String, resource_id: String) -> Result<Value, String> {
+pub fn v2_hydrate(head_dir: String, resource_id: String, language: Option<String>) -> Result<Value, String> {
     let graph = load_graph(&graph_path(&head_dir))?;
-    hydrate_resource(Path::new(&head_dir), &resource_id, &graph)
+    // Goidelic display preference chain; requested language first if given.
+    // serialize_string still falls back to first-available, so absent languages
+    // are skipped rather than blanking the field.
+    let langs: Vec<&str> = match language.as_deref() {
+        Some(l) => vec![l, "ga", "gd", "en"],
+        None => vec!["ga", "gd", "en"],
+    };
+    hydrate_resource(Path::new(&head_dir), &resource_id, &graph, &langs)
 }
 
 #[tauri::command]
@@ -371,14 +386,18 @@ pub fn v2_descriptors(
 /// from every layer that has it, merge with per-nodegroup precedence (topmost
 /// wins), then hydrate to a schema-aware JSON tree. The graph is the base's.
 #[tauri::command]
-pub fn v2_hydrate_layers(head_dirs: Vec<String>, resource_id: String) -> Result<Value, String> {
+pub fn v2_hydrate_layers(head_dirs: Vec<String>, resource_id: String, language: Option<String>) -> Result<Value, String> {
     let Some(base) = head_dirs.first() else {
         return Err("v2_hydrate_layers: no layers given".to_string());
     };
     let graph = load_graph(&graph_path(base))?;
     let layers = open_layers(&head_dirs)?;
+    let langs: Vec<&str> = match language.as_deref() {
+        Some(l) => vec![l, "ga", "gd", "en"],
+        None => vec!["ga", "gd", "en"],
+    };
     layers
-        .hydrate_resource(&resource_id, &graph)
+        .hydrate_resource(&resource_id, &graph, &langs)
         .map_err(|e| e.to_string())
 }
 
@@ -554,7 +573,7 @@ mod tests {
 
     #[test]
     fn hydrates_sample_entry() {
-        let tree = hydrate_resource(&head_dir(), SAMPLE, &graph()).expect("hydrates");
+        let tree = hydrate_resource(&head_dir(), SAMPLE, &graph(), &["en"]).expect("hydrates");
         let text = serde_json::to_string(&tree).unwrap();
         assert!(
             text.contains("vocative particle"),
@@ -795,24 +814,24 @@ mod tests {
         assert_eq!(composed.len(), 2, "two layers");
 
         // Pick a shared UUID that hydrates from the composed stack.
-        let uuid = if composed.hydrate_resource(SHARED, &graph).is_ok() {
+        let uuid = if composed.hydrate_resource(SHARED, &graph, &["en"]).is_ok() {
             SHARED
         } else {
             SHARED_ALT
         };
 
         let merged = composed
-            .hydrate_resource(uuid, &graph)
+            .hydrate_resource(uuid, &graph, &["en"])
             .expect("composed hydrate of shared uuid");
 
         // Same UUID through each single layer alone.
         let wikt_only = Layers::open(&[wikt.as_path()]).expect("wiktionary single layer");
         let mac_only = Layers::open(&[mac.as_path()]).expect("macbain single layer");
         let wikt_tree = wikt_only
-            .hydrate_resource(uuid, &graph)
+            .hydrate_resource(uuid, &graph, &["en"])
             .expect("wiktionary-alone hydrate");
         let mac_tree = mac_only
-            .hydrate_resource(uuid, &graph)
+            .hydrate_resource(uuid, &graph, &["en"])
             .expect("macbain-alone hydrate");
 
         let merged_keys = tree_keys(&merged);
@@ -899,7 +918,7 @@ mod tests {
         // fear — has wiktionary headword+senses AND macbain etymology+cognates.
         const FEAR: &str = "e98ed0c3-34e5-5f5f-8151-fe77547d56d7";
         let merged = layers
-            .hydrate_resource(FEAR, &graph)
+            .hydrate_resource(FEAR, &graph, &["en"])
             .expect("fear hydrates through the FULL-head 2-layer stack");
 
         let merged_keys = tree_keys(&merged);
@@ -982,7 +1001,7 @@ mod tests {
             Layers::open(&[wikt.as_path(), mac.as_path()]).expect("wiktionary+macbain compose");
 
         let tree = composed
-            .hydrate_resource(SAMPLE, &graph)
+            .hydrate_resource(SAMPLE, &graph, &["en"])
             .expect("overlay-only uuid hydrates through the 2-layer set");
         let cognates = tree
             .get("cognates")
@@ -1002,7 +1021,7 @@ mod tests {
     #[test]
     fn layers_hydrate_sample() {
         let tree = single_layer()
-            .hydrate_resource(SAMPLE, &graph())
+            .hydrate_resource(SAMPLE, &graph(), &["en"])
             .expect("composed hydrate");
         let text = serde_json::to_string(&tree).unwrap();
         assert!(
@@ -1092,12 +1111,12 @@ mod tests {
         let mac = head_dir();
         let graph = load_graph(&wikt.join("graph.json")).expect("base graph loads");
         let composed = Layers::open(&[wikt.as_path(), mac.as_path()]).expect("compose");
-        let uuid = if composed.hydrate_resource(SHARED, &graph).is_ok() {
+        let uuid = if composed.hydrate_resource(SHARED, &graph, &["en"]).is_ok() {
             SHARED
         } else {
             SHARED_ALT
         };
-        let tree = composed.hydrate_resource(uuid, &graph).expect("hydrate");
+        let tree = composed.hydrate_resource(uuid, &graph, &["en"]).expect("hydrate");
         eprintln!("=== shared uuid: {uuid} ===");
         eprintln!("{}", serde_json::to_string_pretty(&tree).unwrap());
 
