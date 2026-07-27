@@ -61,6 +61,22 @@ function localStr(v: unknown): string {
   return '';
 }
 
+// Acute + grave + macron fold to a single length marker — "graphically identical
+// up to acute↔grave". Length is PRESERVED (fear ≠ fēar), only the accent
+// CONVENTION is neutralised (Irish á = Scottish à = macron ā). Mirrors the
+// macbain builder's `normalizeHead` and the pipeline `goi_slug` identity.
+const _MACRON: Record<string, string> = {
+  'à': 'ā', 'á': 'ā', 'è': 'ē', 'é': 'ē', 'ì': 'ī', 'í': 'ī',
+  'ò': 'ō', 'ó': 'ō', 'ù': 'ū', 'ú': 'ū',
+};
+
+/** Identity form of a headword for SAME-LEXEME matching (not slug-building, so no
+ *  punctuation stripping): casefold + NFC, then fold accent convention. Two
+ *  headwords are the same lexeme iff their normHead is equal. */
+export function normHead(s: string): string {
+  return Array.from(s.normalize('NFC').toLowerCase(), (ch) => _MACRON[ch] ?? ch).join('');
+}
+
 /** Resolve a raw concept/reference value to its label via the closure map. */
 function makeLabel(map: Record<string, string>) {
   return (v: unknown): string => {
@@ -264,6 +280,13 @@ export async function loadEntryV2(uri: string, headDirs: string[]): Promise<Entr
       for (const ct of citerTrees) {
         if (!ct || typeof ct !== 'object') continue;
         const citer = ct as Record<string, any>;
+        // SAME-LEXEME gate: only fold a citer whose headword is graphically
+        // identical to this entry (up to acute↔grave). `cited_by` returns every
+        // entry that lists this word as a `cognate_entry_id` — but a cognate is a
+        // related, differently-spelled word (MacBain "bàs" citing Irish "bás" IS
+        // the same lexeme and folds; MacBain "X" citing Irish "Y" is not and must
+        // not). Without this, unrelated MacBain etymologies leak onto Irish entries.
+        if (normHead(localStr(citer.headword)) !== normHead(headword)) continue;
         mergeEtymologies(etymologies, extractEtymologies(citer));
         mergeCognates(cognates, extractCognates(citer));
       }
