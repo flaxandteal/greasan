@@ -138,7 +138,7 @@ function stripMutation(word) {
 }
 
 /** Given an Irish placename, return the set of matched goi ResourceIDs. */
-function matchElements(name, gaLookup, gaFormsLookup) {
+function matchElements(name, formsIndex, elementResolve) {
   const matched = new Map(); // goi ResourceID -> element surface form (for cognate_headword)
   const words = name
     .replace(/[’']/g, "'")
@@ -149,15 +149,17 @@ function matchElements(name, gaLookup, gaFormsLookup) {
     const lower = raw.toLowerCase();
     if (STOPWORDS.has(lower)) continue;
     if (lower.length < 2) continue;
-    // Try mutation-stripped form first, then the raw form.
-    const candidates = [stripMutation(lower), lower];
-    for (const cand of candidates) {
-      const key = normalizeHead(cand);
-      let rid = gaLookup.get(key)?.[0] || gaFormsLookup.get(key);
-      if (rid) {
-        if (!matched.has(rid)) matched.set(rid, cand);
-        break;
-      }
+    // Match against KNOWN Logainm element forms only (not the open dictionary),
+    // mutation-stripped first. This is precision-first: a word links only if it
+    // is a real toponymic element, and then to the POS-resolved goi headword —
+    // no more picking [0] among homographs. Incidental dictionary hits (a rare
+    // word that happens to be a headword) are correctly NOT treated as elements.
+    for (const cand of [stripMutation(lower), lower]) {
+      const elId = formsIndex.get(normalizeHead(cand));
+      if (elId == null) continue;
+      const resolved = elementResolve.get(elId);
+      if (resolved && !matched.has(resolved.rid)) matched.set(resolved.rid, cand);
+      break;
     }
   }
   return matched;
@@ -198,37 +200,109 @@ console.log(`[build-logainm] ${places.size} distinct places loaded`);
 // ============================================================================
 
 console.log('[build-logainm] Building goi lookup...');
-const gaLookup = new Map();       // normalised headword -> ResourceID[]
-const gaFormsLookup = new Map();  // normalised written_rep -> ResourceID
-{
-  const wkCsvPath = resolve(root, 'data/processed/lexical_entry_data.csv');
-  const wkCsv = readFileSync(wkCsvPath, 'utf8');
-  const lines = wkCsv.split('\n');
+const gaLookup = new Map();       // normalised headword -> goi ResourceID[]
+const gaFormsLookup = new Map();  // normalised written_rep -> goi ResourceID
+const gdFallback = new Map();     // normalised headword -> gd- ResourceID (MacBain, Scottish-only)
+
+// Union the goi-emitting layers so a toponymic element absent from Wiktionary can
+// still resolve through Téarma or BuNaMo (all emit the SAME goi-<head>-<pos>
+// slug, so they compose to one resource). MacBain's UNIQUE entries are gd-<head>-
+// etym (Scottish-only) — kept as a last-resort fallback (user's "or macbain, if
+// not"). Recovers ~11 of the 29 Wiktionary-missing elements.
+function loadLexicalCsv(relPath) {
+  const path = resolve(root, relPath);
+  if (!existsSync(path)) { console.warn(`[build-logainm]   skip (missing): ${relPath}`); return; }
+  const lines = readFileSync(path, 'utf8').split('\n');
   const header = lines[0].split(',');
   const ridIdx = header.indexOf('ResourceID');
   const hwIdx = header.indexOf('headword');
   const wrIdx = header.indexOf('written_rep');
   for (let i = 1; i < lines.length; i++) {
-    const line = lines[i];
-    if (!line.trim()) continue;
-    const fields = parseCsvLine(line);
+    if (!lines[i].trim()) continue;
+    const fields = parseCsvLine(lines[i]);
     const rid = fields[ridIdx] || '';
-    if (!rid.startsWith('goi-')) continue; // Irish/cross-dialect lexemes only
     const hw = fields[hwIdx] || '';
     const wr = wrIdx >= 0 ? (fields[wrIdx] || '') : '';
-    if (hw) {
+    if (rid.startsWith('goi-')) {
+      if (hw) {
+        const key = normalizeHead(hw);
+        if (!gaLookup.has(key)) gaLookup.set(key, []);
+        const arr = gaLookup.get(key);
+        if (!arr.includes(rid)) arr.push(rid);
+      }
+      if (wr && !hw) {
+        const key = normalizeHead(wr);
+        if (!gaFormsLookup.has(key)) gaFormsLookup.set(key, rid);
+      }
+    } else if (rid.startsWith('gd-') && hw) {
+      // MacBain Scottish-only etymology entry — last-resort element target.
       const key = normalizeHead(hw);
-      if (!gaLookup.has(key)) gaLookup.set(key, []);
-      const arr = gaLookup.get(key);
-      if (!arr.includes(rid)) arr.push(rid);
-    }
-    if (wr && !hw) {
-      const key = normalizeHead(wr);
-      if (!gaFormsLookup.has(key)) gaFormsLookup.set(key, rid);
+      if (!gdFallback.has(key)) gdFallback.set(key, rid);
     }
   }
 }
-console.log(`[build-logainm] goi lookup: ${gaLookup.size} headwords, ${gaFormsLookup.size} forms`);
+loadLexicalCsv('data/processed/lexical_entry_data.csv');      // Wiktionary (goi)
+loadLexicalCsv('data/processed/tearma_lexical_entry_data.csv'); // Téarma (goi)
+loadLexicalCsv('data/processed/bunamo_lexical_entry_data.csv'); // BuNaMo (goi)
+loadLexicalCsv('data/processed/macbain_lexical_entry_data.csv'); // MacBain (gd fallback)
+console.log(`[build-logainm] goi lookup: ${gaLookup.size} headwords, ${gaFormsLookup.size} forms, ${gdFallback.size} gd fallbacks`);
+
+// ============================================================================
+// Logainm element glossary — the authoritative toponymic element vocabulary
+// (baile, cill, mór, …). Decompose placenames against THESE known forms, not the
+// open dictionary, and resolve each element to the right goi headword+POS once.
+// See scripts/pull-logainm-glossary.mjs → data/raw/logainm-glossary.json.
+// ============================================================================
+const glossaryPath = resolve(root, 'data/raw/logainm-glossary.json');
+if (!existsSync(glossaryPath)) {
+  console.error(`[build-logainm] Element glossary not found: ${glossaryPath}`);
+  console.error('[build-logainm] Run: node scripts/pull-logainm-glossary.mjs');
+  process.exit(1);
+}
+const glossary = JSON.parse(readFileSync(glossaryPath, 'utf8'));
+
+// Qualifier ADJECTIVES used in placenames (colour / size / quality). Everything
+// else defaults to the NOUN sense — the toponymic default (a height, a church).
+// Logainm carries no POS, so this small curated set (keys normalizeHead-folded)
+// is the disambiguator — but ONLY consulted when the dictionary actually has both
+// a noun and an adjective for the spelling; unambiguous elements auto-resolve.
+const ELEMENT_ADJ = new Set([
+  'mór', 'beag', 'fada', 'gearr', 'leathan', 'dubh', 'bán', 'rua', 'dearg',
+  'buí', 'glas', 'gorm', 'liath', 'donn', 'fionn', 'riabhach', 'odhar', 'geal',
+  'sean', 'nua', 'garbh', 'mín', 'maol', 'breac', 'cam',
+].map(normalizeHead));
+
+/** POS suffix of a goi ResourceID: goi-<head>-<pos> → <pos>. */
+function goiPos(rid) { return rid.split('-').slice(2).join('-'); }
+
+// element.id -> { rid (POS-resolved goi ResourceID), headword }.
+const elementResolve = new Map();
+let elResolved = 0, elAmbiguous = 0, elUnmatched = 0;
+for (const el of glossary) {
+  const cands = gaLookup.get(normalizeHead(el.headword)) || [];
+  let rid = null;
+  if (cands.length === 1) {
+    rid = cands[0];
+  } else if (cands.length > 1) {
+    elAmbiguous++;
+    const want = ELEMENT_ADJ.has(normalizeHead(el.headword)) ? 'adjective' : 'noun';
+    rid = cands.find(r => goiPos(r) === want) || cands.find(r => goiPos(r) === 'noun') || cands[0];
+  }
+  // Last resort: a MacBain Scottish-only (gd-) entry for the element's spelling.
+  if (!rid) rid = gdFallback.get(normalizeHead(el.headword)) || null;
+  if (rid) { elementResolve.set(el.id, { rid, headword: el.headword }); elResolved++; }
+  else { elUnmatched++; }
+}
+console.log(`[build-logainm] elements: ${elResolved}/${glossary.length} resolved to goi (${elAmbiguous} POS-ambiguous), ${elUnmatched} with no dictionary entry`);
+
+// normalizeHead(form) -> element.id, over every element's forms + headword.
+const formsIndex = new Map();
+for (const el of glossary) {
+  for (const form of [el.headword, ...el.forms]) {
+    const key = normalizeHead(form);
+    if (key && !formsIndex.has(key)) formsIndex.set(key, el.id);
+  }
+}
 
 const CSV_COLUMNS = [
   'ResourceID', 'headword', 'part_of_speech', 'dialect',
@@ -254,7 +328,7 @@ for (const pid of sortedPlaceIds) {
   const gloss = p.en[0] || '';
   const rid = `lg-${pid}-proper-noun`;
 
-  const matched = matchElements(headword, gaLookup, gaFormsLookup);
+  const matched = matchElements(headword, formsIndex, elementResolve);
   if (matched.size > 0) {
     matchedCount++;
     totalElementLinks += matched.size;

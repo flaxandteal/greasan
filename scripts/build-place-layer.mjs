@@ -117,8 +117,11 @@ function stripMutation(word) {
   return w;
 }
 
-/** Given an Irish placename, return Map<goi ResourceID, surface token>. */
-function matchElements(name, gaLookup, gaFormsLookup) {
+/** Decompose an Irish placename into its Logainm elements → goi ResourceIDs.
+ *  Matches against the KNOWN 211-element glossary (formsIndex), not the open
+ *  dictionary, and links to the POS-resolved goi headword (elementResolve) — so
+ *  homographs no longer resolve to an arbitrary [0]. Returns Map<goiRid, token>. */
+function matchElements(name, formsIndex, elementResolve) {
   const matched = new Map();
   const words = name
     .replace(/[’']/g, "'")
@@ -129,14 +132,12 @@ function matchElements(name, gaLookup, gaFormsLookup) {
     const lower = raw.toLowerCase();
     if (STOPWORDS.has(lower)) continue;
     if (lower.length < 2) continue;
-    const candidates = [stripMutation(lower), lower];
-    for (const cand of candidates) {
-      const key = normalizeHead(cand);
-      let rid = gaLookup.get(key)?.[0] || gaFormsLookup.get(key);
-      if (rid) {
-        if (!matched.has(rid)) matched.set(rid, cand);
-        break;
-      }
+    for (const cand of [stripMutation(lower), lower]) {
+      const elId = formsIndex.get(normalizeHead(cand));
+      if (elId == null) continue;
+      const resolved = elementResolve.get(elId);
+      if (resolved && !matched.has(resolved.rid)) matched.set(resolved.rid, cand);
+      break;
     }
   }
   return matched;
@@ -248,53 +249,86 @@ console.log(`[build-place] Collection: ${existingLabels.size} labels (${added} a
 // STAGE C: goi lookup (headwords + written forms + bunamo inflected forms)
 // ============================================================================
 console.log('[build-place] Building goi lookup...');
-const gaLookup = new Map();      // normalised headword -> ResourceID[]
-const gaFormsLookup = new Map(); // normalised written form -> ResourceID
-{
-  const lines = readFileSync(requireFile(resolve(root, 'data/processed/lexical_entry_data.csv')), 'utf8').split('\n');
+// Union the goi-emitting layers (Wiktionary + Téarma + BuNaMo, all goi-<head>-<pos>)
+// so a toponymic element absent from Wiktionary still resolves via Téarma/BuNaMo;
+// MacBain's unique gd-<head>-etym entries are a last-resort fallback.
+const gaLookup = new Map();   // normalised headword -> goi ResourceID[]
+const gdFallback = new Map(); // normalised headword -> gd- ResourceID (MacBain, Scottish-only)
+function loadLexicalCsv(relPath) {
+  const path = resolve(root, relPath);
+  if (!existsSync(path)) { console.warn(`[build-place]   skip (missing): ${relPath}`); return; }
+  const lines = readFileSync(path, 'utf8').split('\n');
   const header = lines[0].split(',');
   const ridIdx = header.indexOf('ResourceID');
   const hwIdx = header.indexOf('headword');
-  const wrIdx = header.indexOf('written_rep');
   for (let i = 1; i < lines.length; i++) {
     if (!lines[i].trim()) continue;
     const f = parseCsvLine(lines[i]);
     const rid = f[ridIdx] || '';
-    if (!rid.startsWith('goi-')) continue;
     const hw = f[hwIdx] || '';
-    const wr = wrIdx >= 0 ? (f[wrIdx] || '') : '';
-    if (hw) {
-      const key = normalizeHead(hw);
+    if (!hw) continue;
+    const key = normalizeHead(hw);
+    if (rid.startsWith('goi-')) {
       if (!gaLookup.has(key)) gaLookup.set(key, []);
       const arr = gaLookup.get(key);
       if (!arr.includes(rid)) arr.push(rid);
+    } else if (rid.startsWith('gd-')) {
+      if (!gdFallback.has(key)) gdFallback.set(key, rid);
     }
-    if (wr && !hw) { const key = normalizeHead(wr); if (!gaFormsLookup.has(key)) gaFormsLookup.set(key, rid); }
   }
 }
-// BuNaMo inflected forms: written_rep -> its goi slug (lemma). Headword lemmas win
-// (checked first in matchElements), so these only add reach for inflected surfaces.
-{
-  const bunamoCsv = resolve(root, 'data/processed/bunamo_lexical_entry_data.csv');
-  if (existsSync(bunamoCsv)) {
-    const lines = readFileSync(bunamoCsv, 'utf8').split('\n');
-    const header = lines[0].split(',');
-    const ridIdx = header.indexOf('ResourceID');
-    const wrIdx = header.indexOf('written_rep');
-    let bn = 0;
-    for (let i = 1; i < lines.length; i++) {
-      if (!lines[i].trim()) continue;
-      const f = parseCsvLine(lines[i]);
-      const rid = f[ridIdx] || '';
-      const wr = (f[wrIdx] || '').trim();
-      if (!rid.startsWith('goi-') || !wr) continue;
-      const key = normalizeHead(wr);
-      if (!gaLookup.has(key) && !gaFormsLookup.has(key)) { gaFormsLookup.set(key, rid); bn++; }
-    }
-    console.log(`[build-place] +${bn} bunamo inflected forms`);
+loadLexicalCsv('data/processed/lexical_entry_data.csv');        // Wiktionary
+loadLexicalCsv('data/processed/tearma_lexical_entry_data.csv'); // Téarma
+loadLexicalCsv('data/processed/bunamo_lexical_entry_data.csv'); // BuNaMo
+loadLexicalCsv('data/processed/macbain_lexical_entry_data.csv'); // MacBain (gd fallback)
+console.log(`[build-place] goi lookup: ${gaLookup.size} headwords, ${gdFallback.size} gd fallbacks`);
+
+// --- Logainm element glossary: the authoritative toponymic element vocabulary.
+// Decompose placenames against THESE known forms; resolve each to the right goi
+// headword+POS once. See scripts/pull-logainm-glossary.mjs.
+const glossaryPath = resolve(root, 'data/raw/logainm-glossary.json');
+if (!existsSync(glossaryPath)) {
+  console.error(`[build-place] Element glossary not found: ${glossaryPath}`);
+  console.error('[build-place] Run: node scripts/pull-logainm-glossary.mjs');
+  process.exit(1);
+}
+const glossary = JSON.parse(readFileSync(glossaryPath, 'utf8'));
+
+// Qualifier ADJECTIVES in placenames (colour/size/quality). Else default NOUN —
+// the toponymic default. Logainm carries no POS; consulted only when the dictionary
+// has both a noun and an adjective for the spelling. Keys normalizeHead-folded.
+const ELEMENT_ADJ = new Set([
+  'mór', 'beag', 'fada', 'gearr', 'leathan', 'dubh', 'bán', 'rua', 'dearg',
+  'buí', 'glas', 'gorm', 'liath', 'donn', 'fionn', 'riabhach', 'odhar', 'geal',
+  'sean', 'nua', 'garbh', 'mín', 'maol', 'breac', 'cam',
+].map(normalizeHead));
+const goiPos = (rid) => rid.split('-').slice(2).join('-');
+
+const elementResolve = new Map(); // element.id -> { rid, headword }
+let elResolved = 0, elAmbiguous = 0, elUnmatched = 0;
+for (const el of glossary) {
+  const cands = gaLookup.get(normalizeHead(el.headword)) || [];
+  let rid = null;
+  if (cands.length === 1) {
+    rid = cands[0];
+  } else if (cands.length > 1) {
+    elAmbiguous++;
+    const want = ELEMENT_ADJ.has(normalizeHead(el.headword)) ? 'adjective' : 'noun';
+    rid = cands.find(r => goiPos(r) === want) || cands.find(r => goiPos(r) === 'noun') || cands[0];
+  }
+  if (!rid) rid = gdFallback.get(normalizeHead(el.headword)) || null;
+  if (rid) { elementResolve.set(el.id, { rid, headword: el.headword }); elResolved++; }
+  else { elUnmatched++; }
+}
+console.log(`[build-place] elements: ${elResolved}/${glossary.length} resolved to goi (${elAmbiguous} POS-ambiguous), ${elUnmatched} with no dictionary entry`);
+
+const formsIndex = new Map(); // normalizeHead(form) -> element.id
+for (const el of glossary) {
+  for (const form of [el.headword, ...el.forms]) {
+    const key = normalizeHead(form);
+    if (key && !formsIndex.has(key)) formsIndex.set(key, el.id);
   }
 }
-console.log(`[build-place] goi lookup: ${gaLookup.size} headwords, ${gaFormsLookup.size} forms`);
 
 // ============================================================================
 // STAGE D: Build the graph (need PLACE graph_id + RESOURCE_NS before CSV)
@@ -367,7 +401,7 @@ for (const pid of sortedIds) {
   const withinUuids = [...new Set(p.parents)].filter(par => places.has(par)).map(placeUuid);
   if (withinUuids.length) withWithin++;
 
-  const matched = matchElements(name, gaLookup, gaFormsLookup);
+  const matched = matchElements(name, formsIndex, elementResolve);
   if (matched.size > 0) { matchedCount++; totalElementLinks += matched.size; }
   const elements = [...matched.entries()]; // [goiRid, surface][]
 
