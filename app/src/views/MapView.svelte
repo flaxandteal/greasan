@@ -477,6 +477,9 @@
   /** Select a point; optionally recentre the map on it. */
   function selectPoint(id: string, recentre: boolean) {
     selectedId = id;
+    // Lift a peeking sheet so the freshly-selected place's detail panel shows
+    // (it's now fixed above the list, but peek height may only reveal the head).
+    if (snap === 'peek') snap = 'half';
     if (recentre && map) {
       const p = points.find((q) => q.id === id);
       if (p) map.easeTo({ center: [p.lng, p.lat], zoom: Math.max(map.getZoom(), 9), duration: 500 });
@@ -664,9 +667,11 @@
       <div class="ge-map-count">{$t('map.pointsWithGeo', { count: points.length.toLocaleString() })}</div>
     </div>
 
-    <div class="ge-map-list" bind:this={listEl}>
-      <!-- Place detail (hydrate-on-select): feature type, coords, Logainm + word chips -->
-      {#if selectedPoint}
+    <!-- Place detail (hydrate-on-select): a FIXED panel above the list, so a
+         selected place's detail (feature, coords, Logainm, concept chips) stays
+         visible instead of being buried at the top of the 6k-row scroll. -->
+    {#if selectedPoint}
+      <div class="ge-place-detail-fixed">
         <div class="ge-place-detail">
           <div class="ge-place-name" style="display:flex;align-items:center;justify-content:space-between;gap:8px;">
             <span>{placeDetail?.name || selectedPoint.name}</span>
@@ -699,8 +704,10 @@
             </div>
           {/if}
         </div>
-      {/if}
+      </div>
+    {/if}
 
+    <div class="ge-map-list" bind:this={listEl}>
       {#each points as p (p.id)}
         <button
           class="ge-map-card"
@@ -796,6 +803,14 @@
   .ge-map-count { font-size: var(--fs-small, 14px); color: var(--fg-muted); white-space: nowrap; }
 
   .ge-map-list { flex: 1 1 auto; overflow-y: auto; padding: 6px 12px 24px; -webkit-overflow-scrolling: touch; }
+
+  /* Fixed detail panel — sits between the head and the scrollable list so the
+     selected place stays visible; scrolls internally if it has many elements. */
+  .ge-place-detail-fixed {
+    flex: 0 0 auto; padding: 4px 12px 8px; max-height: 42vh; overflow-y: auto;
+    border-bottom: 1px solid var(--srf-divider, rgba(51,75,78,0.1));
+    -webkit-overflow-scrolling: touch;
+  }
 
   /* Place detail card */
   .ge-place-detail {
