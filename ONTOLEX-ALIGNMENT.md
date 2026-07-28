@@ -244,6 +244,20 @@ Cosmetic-on-export but needed for a clean RDF round-trip.
 - **`grammar_class`:** currently a free string. Consider a controlled
   vocabulary/collection (like POS) for declensions (fir1–5 / bain2–5 / a1–3) —
   optional, low priority.
+- **Controlled lists aren't ontology-bound.** `part_of_speech` is correctly a
+  CLM/reference node typed `lexinfo:PartOfSpeech` / `lexinfo:partOfSpeech`, but
+  the "Parts of Speech" collection carries only local labels (`collections.csv`
+  is `collection_name, concept_label, parent_label, sort_order` — no URI column),
+  so each POS resolves to a **locally-minted** concept, not `lexinfo:noun` etc.
+  A true OntoLex controlled list needs the collection to carry external concept
+  URIs — a schema+pipeline change (URI column → `collectionsToSkosXml` → the
+  reference resolution). Same gap applies to dialect/register/domain collections.
+- **POS in search (display).** Search results don't show POS, so same-spelling
+  different-POS entries (`baile`-noun vs `baile`-adjective) look like duplicates.
+  Fix: resolve each resource's `part_of_speech` reference **through the CLM**
+  (the `NapiRdmCache` the builders already load via `addCollectionFromJson`) →
+  Pagefind meta → `Search.svelte`. Mediated by the controlled list, NOT a CSV
+  string hack — so it inherits the LexInfo binding above once that lands.
 
 ---
 

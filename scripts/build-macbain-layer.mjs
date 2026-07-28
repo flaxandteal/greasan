@@ -524,10 +524,15 @@ for (const entry of allEntries) {
   } else {
     // Unmatched: standalone entry
     standaloneCount++;
+    // Dialect-neutral slug (goi-, not gd-): language lives on the tile
+    // (row.dialect below), not the ID. A Scottish-only MacBain entry has no Irish
+    // match to compose with, and "-etym" is a POS bucket no other source emits, so
+    // goi-<slug>-etym cannot collide with a real-POS entry. Finishes the v2
+    // dialect-neutral migration (the last language-prefixed slugs).
     const slug = slugify(entry.primaryHeadword);
-    let rid = `gd-${slug}-etym`;
+    let rid = `goi-${slug}-etym`;
     let suffix = 2;
-    while (usedResourceIds.has(rid)) rid = `gd-${slug}-etym-${suffix++}`;
+    while (usedResourceIds.has(rid)) rid = `goi-${slug}-etym-${suffix++}`;
     usedResourceIds.add(rid);
 
     const maxRows = Math.max(1, resolvedCognates.length);
