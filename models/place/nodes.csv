@@ -1,0 +1,14 @@
+parent_alias,alias,name,datatype,cardinality,ontology_class,parent_property,description,collection_name,required,searchable,exportable,sortorder
+,name,Name,string,1,https://schema.org/name,https://schema.org/name,Canonical Irish placename (the resource descriptor),,true,true,true,1
+,name_en,English Name,string,1,https://schema.org/alternateName,https://schema.org/alternateName,English form of the name,,false,true,true,2
+,feature_type,Feature Type,concept,1,https://schema.org/additionalType,https://schema.org/additionalType,"Logainm feature classification (townland, parish, river, …)",Place Feature Types,false,true,true,3
+,logainm_id,Logainm ID,string,1,https://schema.org/identifier,https://schema.org/identifier,Logainm numeric place identifier,,false,false,true,4
+,logainm_url,Logainm URL,string,1,https://schema.org/url,https://schema.org/url,Logainm.ie page for this place,,false,false,true,5
+,latitude,Latitude,string,1,https://schema.org/latitude,https://schema.org/latitude,WGS84 latitude (from the place geometry centroid),,false,false,true,6
+,longitude,Longitude,string,1,https://schema.org/longitude,https://schema.org/longitude,WGS84 longitude (from the place geometry centroid),,false,false,true,7
+,location,Location,geojson-feature-collection,1,https://schema.org/geo,https://schema.org/geo,"Centroid Point geometry (WGS84); indexed for spatial queries (geo_bbox / chunk_geo_summary)",,false,false,true,10
+,name_elements,Name Elements,semantic,n,https://flaxandteal.org/ontology/goidelic#NameElement,https://flaxandteal.org/ontology/goidelic#hasNameElement,Constituent lexical elements that make up the placename,,false,true,true,8
+name_elements,element_entry,Element Entry,resource-instance,1,https://flaxandteal.org/ontology/goidelic#nameElementEntry,https://flaxandteal.org/ontology/goidelic#nameElementEntry,ResourceID of the constituent goi dictionary entry,,false,false,true,1
+name_elements,element_surface,Element Surface,string,1,https://flaxandteal.org/ontology/goidelic#elementSurface,https://flaxandteal.org/ontology/goidelic#elementSurface,The element token as it appears in the placename,,false,true,true,2
+name_elements,concept_entry,Concept Entry,resource-instance,1,http://www.w3.org/ns/lemon/ontolex#LexicalConcept,https://flaxandteal.org/ontology/goidelic#conceptEntry,ResourceID of the LexicalConcept (toponymic element) this name-element evokes,,false,false,true,3
+,within,Within,resource-instance-list,n,http://geovocab.org/spatial#P,http://geovocab.org/spatial#P,"Administrative container places (barony, parish, county, …)",,false,false,true,9

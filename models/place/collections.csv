@@ -1,0 +1,74 @@
+collection_name,concept_label,parent_label,sort_order
+Place Feature Types,Townland,,1
+Place Feature Types,Parish,,2
+Place Feature Types,Barony,,3
+Place Feature Types,County,,4
+Place Feature Types,Province,,5
+Place Feature Types,Town,,6
+Place Feature Types,Village,,7
+Place Feature Types,Street,,8
+Place Feature Types,River,,9
+Place Feature Types,Lake,,10
+Place Feature Types,Island,,11
+Place Feature Types,Mountain,,12
+Place Feature Types,Hill,,13
+Place Feature Types,Well,,14
+Place Feature Types,Church,,15
+Place Feature Types,Building,,16
+Place Feature Types,Bay,,17
+Place Feature Types,Beach,,18
+Place Feature Types,Point,,19
+Place Feature Types,Other,,99
+Place Feature Types,Bog,,100
+Place Feature Types,Bridge,,101
+Place Feature Types,Cairn,,102
+Place Feature Types,Canal,,103
+Place Feature Types,Castle,,104
+Place Feature Types,Cave,,105
+Place Feature Types,Channel,,106
+Place Feature Types,City,,107
+Place Feature Types,Cliff,,108
+Place Feature Types,Coomb,,109
+Place Feature Types,Creek,,110
+Place Feature Types,Crossroads,,111
+Place Feature Types,Electoral District,,112
+Place Feature Types,Enclosure,,113
+Place Feature Types,Estuary,,114
+Place Feature Types,Feature,,115
+Place Feature Types,Field,,116
+Place Feature Types,Fissure,,117
+Place Feature Types,Footpath,,118
+Place Feature Types,Ford,,119
+Place Feature Types,Graveyard,,120
+Place Feature Types,Hamlet,,121
+Place Feature Types,Harbour,,122
+Place Feature Types,Hillside,,123
+Place Feature Types,Hole,,124
+Place Feature Types,Hollow,,125
+Place Feature Types,House,,126
+Place Feature Types,Landing Place,,127
+Place Feature Types,Locality,,128
+Place Feature Types,Man-made Feature,,129
+Place Feature Types,Marsh,,130
+Place Feature Types,Minor Feature,,131
+Place Feature Types,Monument,,132
+Place Feature Types,Pass,,133
+Place Feature Types,Population Centre,,134
+Place Feature Types,Port,,135
+Place Feature Types,Promontory,,136
+Place Feature Types,Quay,,137
+Place Feature Types,Racecourse,,138
+Place Feature Types,Reef,,139
+Place Feature Types,Road,,140
+Place Feature Types,Rock,,141
+Place Feature Types,Sandbank,,142
+Place Feature Types,Sandhill,,143
+Place Feature Types,Shoal,,144
+Place Feature Types,Standing Stone,,145
+Place Feature Types,Stream,,146
+Place Feature Types,Sub-townland,,147
+Place Feature Types,Tomb,,148
+Place Feature Types,Turlough,,149
+Place Feature Types,Valley,,150
+Place Feature Types,Waterfall,,151
+Place Feature Types,Wood,,152

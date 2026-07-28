@@ -82,6 +82,16 @@ const CORPORA: &[CorpusSpec] = &[
         langs: &["ga"],
     },
     CorpusSpec {
+        // Logainm toponymic CONCEPTS (ontolex:LexicalConcept) — the meaning a
+        // placename evokes. OWN graph (Lexical Concept), its own head so it is
+        // full-hydratable (a placename's concept_entry is hydrated against it).
+        // Reached only via placename/entry links, so no pagefind.
+        name: "concept",
+        head: "concept-v2",
+        index: "concept-v2",
+        langs: &[],
+    },
+    CorpusSpec {
         // Corpus examples — own graph; head bundled for hydrate + cited_by. Two
         // heads keep the licences distinct (Tatoeba CC BY 2.0 / Gaois CC BY 4.0).
         // sampla pagefind (example-granular) carried for the sample search.

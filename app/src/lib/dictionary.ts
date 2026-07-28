@@ -509,6 +509,16 @@ export const V2_LAYERS: V2LayerConfig[] = [
     pagefindBase: '/layer-place/',
   },
   {
+    // Logainm toponymic CONCEPTS (ontolex:LexicalConcept) — the geographic
+    // MEANING a placename evokes. OWN graph (Lexical Concept), full-hydratable as
+    // its own head: a placename's `concept_entry` is hydrated concept-authoritative
+    // via conceptHeadDir(), mirroring placeHeadDir(). Infrastructure, not a user
+    // toggle; no Pagefind (reached only through placename/entry links).
+    name: 'concept',
+    headDir: '/home/philtweir/Cód/Oscailte/Gréasán/data/concept-v2',
+    pagefindBase: '/layer-concept/',
+  },
+  {
     // Corpus examples — OWN graph (like place): example resources + an
     // `illustrates` nodegroup linking to goi entries. Kept as two separate heads
     // so the licences stay distinct (Tatoeba CC BY 2.0 / Gaois CC BY 4.0). The
@@ -604,6 +614,17 @@ export function currentV2HeadDirs(): string[] {
  */
 export function placeHeadDir(): string | undefined {
   return currentV2HeadDirs().find((d) => d.includes('place-v2'));
+}
+
+/**
+ * The `concept-v2` head dir (Logainm meaning-concepts), or undefined if not
+ * active. A placename's `concept_entry` (and, later, a sense's `evokes`) is
+ * hydrated against THIS head as base — its `graph.json` is the LexicalConcept
+ * model, which the composed lexical/place stack does not carry. Mirrors
+ * {@link placeHeadDir}.
+ */
+export function conceptHeadDir(): string | undefined {
+  return currentV2HeadDirs().find((d) => d.includes('concept-v2'));
 }
 
 /** The `layer-v2` catalogue head dir (meta layer), or undefined if not active. */

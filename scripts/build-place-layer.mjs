@@ -117,10 +117,12 @@ function stripMutation(word) {
   return w;
 }
 
-/** Decompose an Irish placename into its Logainm elements → goi ResourceIDs.
- *  Matches against the KNOWN 211-element glossary (formsIndex), not the open
- *  dictionary, and links to the POS-resolved goi headword (elementResolve) — so
- *  homographs no longer resolve to an arbitrary [0]. Returns Map<goiRid, token>. */
+/** Decompose an Irish placename into its Logainm elements. Matches against the
+ *  KNOWN 211-element glossary (formsIndex) → element id (the CONCEPT identity),
+ *  and — where the element resolved to a POS-picked goi headword — the goi
+ *  ResourceID too (elementResolve), so homographs no longer resolve to an
+ *  arbitrary [0]. Keyed by element id so headword-less elements (concepts with
+ *  no dictionary entry) still match. Returns Map<elId, { surface, rid|null }>. */
 function matchElements(name, formsIndex, elementResolve) {
   const matched = new Map();
   const words = name
@@ -135,8 +137,10 @@ function matchElements(name, formsIndex, elementResolve) {
     for (const cand of [stripMutation(lower), lower]) {
       const elId = formsIndex.get(normalizeHead(cand));
       if (elId == null) continue;
-      const resolved = elementResolve.get(elId);
-      if (resolved && !matched.has(resolved.rid)) matched.set(resolved.rid, cand);
+      if (!matched.has(elId)) {
+        const resolved = elementResolve.get(elId);
+        matched.set(elId, { surface: cand, rid: resolved ? resolved.rid : null });
+      }
       break;
     }
   }
@@ -361,12 +365,30 @@ const typedGraph = parseStaticGraph(JSON.stringify({ graph: [graph] }));
 typedGraph.setDescriptorTemplate('name', '<Name>');
 typedGraph.setDescriptorTemplate('description', '<English Name>');
 
+// --- Lexical Concept model: the 211 Logainm elements as ontolex:LexicalConcept
+// resources. Emitted INTO the place-v2 head (ros_madair_emit bundles every graph
+// in the prebuild dir); the concept StaticGraph is registered app-side via core. ---
+const conceptModelDir = resolve(root, 'models/lexical_concept');
+const { graph: conceptGraph } = buildGraphFromModelCsvs(
+  readFileSync(resolve(conceptModelDir, 'graph.csv'), 'utf8'),
+  readFileSync(resolve(conceptModelDir, 'nodes.csv'), 'utf8'),
+  namespace,
+  readFileSync(resolve(conceptModelDir, 'collections.csv'), 'utf8'),
+);
+const conceptGraphId = conceptGraph.graphid;
+const CONCEPT_RESOURCE_NS = uuidv5(`resource/${conceptGraphId}`, ALIZARIN_NS);
+const conceptUuid = (rid) => uuidv5(rid, CONCEPT_RESOURCE_NS);
+const conceptTypedGraph = parseStaticGraph(JSON.stringify({ graph: [conceptGraph] }));
+conceptTypedGraph.setDescriptorTemplate('name', '<Label>');
+console.log(`[build-place] CONCEPT graph_id: ${conceptGraphId}  (${conceptGraph.nodes.length} nodes)`);
+
 // ============================================================================
 // STAGE E: Emit business-data CSV
 // ============================================================================
 const CSV_COLUMNS = [
   'ResourceID', 'name', 'name_en', 'feature_type', 'logainm_id', 'logainm_url',
   'latitude', 'longitude', 'location', 'within', 'element_entry', 'element_surface',
+  'concept_entry',
 ];
 
 /** A place centroid as a GeoJSON FeatureCollection Point ([lon, lat]), or '' if no geometry. */
@@ -383,6 +405,7 @@ function centroidFeatureCollection(lat, long) {
 const csvRows = [CSV_COLUMNS.join(',')];
 let placesWithGa = 0, matchedCount = 0, totalElementLinks = 0, withGeo = 0, withWithin = 0;
 const elementFreq = new Map();
+const conceptLinkFreq = new Map(); // elId -> # placenames linking to this concept
 const featureFreq = new Map();
 const pagefindMeta = []; // {uuid?, id, name, name_en, feature}
 
@@ -403,7 +426,7 @@ for (const pid of sortedIds) {
 
   const matched = matchElements(name, formsIndex, elementResolve);
   if (matched.size > 0) { matchedCount++; totalElementLinks += matched.size; }
-  const elements = [...matched.entries()]; // [goiRid, surface][]
+  const elements = [...matched.entries()]; // [elId, { surface, rid|null }][]
 
   const maxRows = Math.max(1, elements.length);
   for (let i = 0; i < maxRows; i++) {
@@ -420,10 +443,17 @@ for (const pid of sortedIds) {
       row.within = withinUuids.join(',');
     }
     if (i < elements.length) {
-      const [goiRid, surface] = elements[i];
-      row.element_entry = goiUuid(goiRid);
+      const [elId, { surface, rid: goiRid }] = elements[i];
+      // element_entry (placename → headword) stays, but only when a headword
+      // resolved; concept_entry (placename → meaning) is set for every matched
+      // element, including the ~18 with no dictionary entry.
+      if (goiRid) {
+        row.element_entry = goiUuid(goiRid);
+        elementFreq.set(goiRid, (elementFreq.get(goiRid) || 0) + 1);
+      }
       row.element_surface = surface;
-      elementFreq.set(goiRid, (elementFreq.get(goiRid) || 0) + 1);
+      row.concept_entry = conceptUuid(`lgc-${elId}`);
+      conceptLinkFreq.set(elId, (conceptLinkFreq.get(elId) || 0) + 1);
     }
     csvRows.push(CSV_COLUMNS.map(c => csvEscape(row[c] || '')).join(','));
   }
@@ -485,6 +515,33 @@ const cacheResult = registry.populateCachesFromJson(JSON.stringify(resources), t
 const enrichedResources = cacheResult.resources || resources;
 console.log(`[build-place] Descriptors computed for ${enrichedResources.length} resources`);
 
+// --- Concept business data: the 211 Logainm elements as LexicalConcept resources.
+// concept_headword links back to the POS-resolved goi headword (inverse-of-evokes);
+// diminutive_of is reserved for a later pass. Built with the concept graph so the
+// resourceinstanceid == conceptUuid(`lgc-<id>`) the placename concept_entry points at. ---
+const CONCEPT_COLUMNS = ['ResourceID', 'label', 'place_count', 'concept_headword', 'diminutive_of'];
+const conceptRows = [CONCEPT_COLUMNS.join(',')];
+let conceptWithHead = 0;
+for (const el of glossary) {
+  const resolved = elementResolve.get(el.id);
+  if (resolved) conceptWithHead++;
+  const row = {
+    ResourceID: `lgc-${el.id}`,
+    label: el.headword,
+    place_count: String(el.count || 0),
+    concept_headword: resolved ? goiUuid(resolved.rid) : '',
+    diminutive_of: '',
+  };
+  conceptRows.push(CONCEPT_COLUMNS.map(c => csvEscape(row[c] || '')).join(','));
+}
+const conceptCsv = conceptRows.join('\n') + '\n';
+const conceptResourcesRaw = buildResourcesFromBusinessCsv(conceptCsv, conceptGraph, [], 'en', false, LAYER_NAMESPACE)
+  ?.business_data?.resources || [];
+const conceptReg = createResourceRegistry();
+const conceptCache = conceptReg.populateCachesFromJson(JSON.stringify(conceptResourcesRaw), conceptTypedGraph, true, false, true);
+const conceptResources = conceptCache.resources || conceptResourcesRaw;
+console.log(`[build-place] Built ${conceptResources.length} concepts (${conceptWithHead} with a headword); ${conceptLinkFreq.size} distinct concepts linked from placenames`);
+
 // --- Write prebuild directory ---
 const prebuildDir = resolve(root, 'data/prebuild-place');
 execSync(`rm -rf "${prebuildDir}"`);
@@ -509,14 +566,53 @@ writeFileSync(resolve(prebuildDir, 'manifest.json'), JSON.stringify({
 }));
 console.log(`[build-place] Prebuild written to ${prebuildDir}`);
 
+// `cargo run --example` triggers tauri's build.rs, which validates EVERY path in
+// tauri.conf.json `resources`. Two of those are produced later than this cargo
+// run: a brand-new head's bundle zip (build-apk) and a head's pagefind zips
+// (STAGE G) — and regen-layer-v2's remove_dir_all wipes the latter before STAGE G
+// recreates them. Seed empty-but-valid zips so build.rs passes; the real content
+// overwrites them. Must run before EVERY cargo emit (place emit deletes the place
+// pagefind stub again, so the concept emit needs it re-seeded).
+const EMPTY_ZIP = Buffer.from([0x50, 0x4b, 0x05, 0x06, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]);
+function ensureResourceStubs() {
+  for (const rel of ['data/bundle/heads/concept-v2.zip', 'data/place-v2/pagefind-ga.zip']) {
+    const p = resolve(root, rel);
+    if (!existsSync(p)) { mkdirSync(dirname(p), { recursive: true }); writeFileSync(p, EMPTY_ZIP); }
+  }
+}
+
 // --- Run regen-layer-v2 -> data/place-v2 (pass the PLACE graph_id) ---
 const outDir = resolve(root, 'data/place-v2');
 console.log('[build-place] Running regen-layer-v2 (cargo, v2-emit)...');
 const srcTauri = resolve(root, 'app/src-tauri');
+ensureResourceStubs();
 execFileSync('cargo', [
   'run', '--release', '--example', 'regen-layer-v2', '--features', 'v2-emit',
   '--manifest-path', resolve(srcTauri, 'Cargo.toml'),
   '--', 'data/prebuild-place', 'data/place-v2', graphId,
+], { stdio: 'inherit' });
+
+// --- Concepts get their OWN head (concept-v2) so they are full-hydratable:
+// a head ships one graph.json, and full concept-detail hydration needs the
+// concept StaticGraph as base. The app registers it via V2_LAYERS + a
+// concept-authoritative hydrateLayers([conceptHead], id) call site. ---
+const conceptPrebuildDir = resolve(root, 'data/prebuild-concept');
+execSync(`rm -rf "${conceptPrebuildDir}"`);
+mkdirSync(resolve(conceptPrebuildDir, 'graphs/resource_models'), { recursive: true });
+mkdirSync(resolve(conceptPrebuildDir, 'business_data'), { recursive: true });
+mkdirSync(resolve(conceptPrebuildDir, 'reference_data/collections'), { recursive: true });
+writeFileSync(resolve(conceptPrebuildDir, `graphs/resource_models/${conceptGraphId}.json`), JSON.stringify(conceptGraph));
+writeFileSync(resolve(conceptPrebuildDir, `business_data/${conceptGraphId}.json`), JSON.stringify({ business_data: { resources: conceptResources } }));
+writeFileSync(resolve(conceptPrebuildDir, 'manifest.json'), JSON.stringify({
+  base_uri: namespace, source: 'logainm-glossary-concept', source_tag: 'LGC',
+  built: new Date().toISOString(), license: 'CC-BY-4.0',
+}));
+console.log('[build-place] Running regen-layer-v2 for concepts -> data/concept-v2...');
+ensureResourceStubs(); // place emit above deleted data/place-v2/pagefind-ga.zip
+execFileSync('cargo', [
+  'run', '--release', '--example', 'regen-layer-v2', '--features', 'v2-emit',
+  '--manifest-path', resolve(srcTauri, 'Cargo.toml'),
+  '--', 'data/prebuild-concept', 'data/concept-v2', conceptGraphId,
 ], { stdio: 'inherit' });
 
 // ============================================================================

@@ -83,9 +83,55 @@ placename→Headword `element_entry` links intact and layers concepts on top
 - Ontology props added + rdflib-validated: `goi:isEvokedBy` (owl:inverseOf
   ontolex:evokes), `goi:diminutiveOf`, `goi:placeCount`, `goi:conceptEntry`.
 
-**Next (builder + UI + rebuild):**
-- **Model:** id `lgc-<elementId>`. Concepts live in the **place-v2 head**
-  (the resolution is already computed there).
+**Architecture constraint (Explore, done): one head ships one `graph.json`.**
+Even though `ros_madair_emit::emit` bundles every graph in a prebuild dir into
+one head, only ONE model sits beside it (`v2.rs` hardcodes `graph.json`;
+`load_graph` parses a single `StaticGraph`). Which model a resource
+full-hydrates against is decided purely by which head is `headDirs[0]` at the
+call site — there is no graph-id dispatch. Consequence:
+- **Display (label + reverse-links) is graph-agnostic** — `v2_descriptors` /
+  `v2_cited_by` / `v2_geo_points` scan by UUID, no graph. So concepts
+  **co-located in place-v2** render their `label` and answer reverse-links with
+  **zero app/Rust changes**.
+- **Full concept detail-hydrate** (its structured tree) would need concepts as
+  their **own** `concept-v2` head + a `V2_LAYERS` entry
+  (`app/src/lib/dictionary.ts:477`) + a `hydrateLayers([conceptHead], id)` call
+  site. Deferred — 1a doesn't need it; 1b's `evokes`-hydration will.
+
+**Decision for 1a: concepts get their OWN `concept-v2` head** (full-hydratable),
+not co-located. A placename's `concept_entry` is hydrated concept-authoritative
+(head = concept graph), mirroring `placeHeadDir`/`hydratePlace`. Wiring
+touchpoints (all 8):
+1. `build-place-layer.mjs` — emits `data/concept-v2` via a 2nd `regen-layer-v2`.
+2. `models/lexical_concept/` — the model.
+3. `models/place/nodes.csv` — `concept_entry` node.
+4. `ontology/goidelic.ttl` — the 4 concept props.
+5. `app/src/lib/dictionary.ts` — `V2_LAYERS` entry + `conceptHeadDir()`.
+6. `app/src-tauri/src/offline.rs` — `CorpusSpec` (langs `&[]`, no pagefind).
+7. `app/src-tauri/tauri.conf.json` — head resource entry.
+8. `scripts/build-apk.sh` — `concept-v2` in `HEADS`.
+UI: `MapView.svelte` renders the canonical concept label on placename elements
+(descriptor batch against `conceptHeadDir()`), surface on hover.
+
+**Gotcha logged:** a new head in `tauri.conf.json` `resources` makes tauri's
+build script fail any `cargo run --example` until `data/bundle/heads/<head>.zip`
+exists — seed an empty zip once; `build-apk` re-zips the real content (its
+`-nt` check fires on the fresh `head.sqlite`).
+
+**Builder — DONE + unit-validated:**
+- `matchElements` re-keyed by element id (the concept identity), carrying the
+  optional resolved headword; now matches headword-less elements too.
+- `build-place-layer.mjs` loads the concept model, emits the 211 concepts
+  (`label` + `place_count` + `concept_headword`) into `prebuild-place`, and
+  stamps `concept_entry` on each matched placename `name_element`.
+- `models/place/nodes.csv`: `concept_entry` node added (ontolex:LexicalConcept,
+  goi:conceptEntry) beside `element_entry` (which stays).
+- Validated: syntax OK; `conceptUuid('lgc-X')` == the builder's
+  `resourceinstanceid` (so `concept_entry` refs resolve).
+
+**Next:** UI — placename detail renders the concept label; then rebuild
+(place-v2) + push. Then Phase 1b.
+- **Model:** id `lgc-<elementId>`. Concepts live in the **place-v2 head**.
 - **ETL:** emit the 211 concepts from `data/raw/logainm-glossary.json` in
   `build-place-layer.mjs` (it already loads the glossary + builds `elementResolve`
   = element→`goi-<head>-<pos>`); **add** a `concept_entry` ref on the placename

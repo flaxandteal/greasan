@@ -34,9 +34,9 @@
   maplibregl.setWorkerCount(1);
   import { invoke } from '@tauri-apps/api/core';
   import { t } from '../lib/i18n';
-  import { geoPoints, hydrateLayers, type GeoPoint } from '../lib/v2';
+  import { geoPoints, hydrateLayers, descriptors, type GeoPoint } from '../lib/v2';
   import { darkMode, closeMap, currentEntry, loading } from '../lib/store';
-  import { loadEntryFlagged } from '../lib/dictionary';
+  import { loadEntryFlagged, conceptHeadDir } from '../lib/dictionary';
   import FlagButton from './FlagButton.svelte';
   // Public-domain outline (Natural Earth, naturalearthdata.com): the Goidelic
   // area (Ireland + Isle of Man + western Scotland). Static asset, not a head.
@@ -501,7 +501,7 @@
     logainmUrl: string;
     lat?: number;
     lng?: number;
-    elements: Array<{ surface: string; entryId: string }>;
+    elements: Array<{ surface: string; entryId: string; concept: string }>;
   }
   let placeDetail = $state<PlaceDetail | null>(null);
   let placeLoading = $state(false);
@@ -547,9 +547,25 @@
       if (!tree || typeof tree !== 'object') { placeDetail = null; return; }
       const ftRaw = tree.feature_type;
       const featureType = typeof ftRaw === 'string' ? (closureMap[ftRaw] ?? '') : localStr(ftRaw);
-      const elements = asArray(tree.name_elements)
-        .map((ne) => ({ surface: localStr(ne?.element_surface), entryId: refId(ne?.element_entry) }))
+      const elemsRaw = asArray(tree.name_elements)
+        .map((ne) => ({
+          surface: localStr(ne?.element_surface),
+          entryId: refId(ne?.element_entry),
+          conceptId: refId(ne?.concept_entry),
+        }))
         .filter((e) => e.surface);
+      // Canonical element label per constituent, from the concept head's spine
+      // (graph-agnostic descriptors — one batched call, no per-concept hydrate).
+      let conceptLabels: Record<string, string> = {};
+      const cHead = conceptHeadDir();
+      const cids = cHead ? [...new Set(elemsRaw.map((e) => e.conceptId).filter(Boolean))] : [];
+      if (cids.length) conceptLabels = await descriptors([cHead!], cids).catch(() => ({}));
+      if (forId !== selectedId) return; // a newer selection superseded this one
+      const elements = elemsRaw.map((e) => ({
+        surface: e.surface,
+        entryId: e.entryId,
+        concept: e.conceptId ? (conceptLabels[e.conceptId] || '') : '',
+      }));
       const pt = points.find((q) => q.id === id);
       placeDetail = {
         id,
@@ -675,9 +691,9 @@
             <div class="ge-place-elems">
               {#each placeDetail.elements as el}
                 {#if el.entryId}
-                  <button class="ge-elem-chip is-link" onclick={() => openEntry(el.entryId, el.surface)}>{el.surface}</button>
+                  <button class="ge-elem-chip is-link" title={el.surface} onclick={() => openEntry(el.entryId, el.concept || el.surface)}>{el.concept || el.surface}</button>
                 {:else}
-                  <span class="ge-elem-chip">{el.surface}</span>
+                  <span class="ge-elem-chip" title={el.surface}>{el.concept || el.surface}</span>
                 {/if}
               {/each}
             </div>
