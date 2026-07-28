@@ -201,49 +201,6 @@ _METHOD_CONFIDENCE = {
 }
 
 
-_lemma_db = None
-_lemma_db_loaded = False
-
-
-def _get_lemma_db():
-    """Lazily build a BuNaMo LemmaDb (once) so the engine can resolve classless
-    lemmas by exact attestation (→ attested) and do gender-aware compound
-    decomposition (→ inferred) instead of pure morphological guessing.
-
-    Coverage barely changes (most classless Téarma nouns are technical terms
-    outside BuNaMo), but the ~2k it covers upgrade from a guess to an exact /
-    compound resolution. Falls back to ``None`` (heuristics + guesser only) if
-    BuNaMo or its Python loader isn't available. Path via ``BUNAMO_DIR`` env
-    (default ``data/bunamo-src``, relative to the pipeline's cwd).
-    """
-    global _lemma_db, _lemma_db_loaded
-    if _lemma_db_loaded:
-        return _lemma_db
-    _lemma_db_loaded = True
-    if _gramadan is None:
-        return None
-    try:
-        import os
-
-        from gramadan.v2.database import Database  # type: ignore
-
-        bunamo_dir = os.environ.get("BUNAMO_DIR", "data/bunamo-src")
-        if not os.path.isdir(os.path.join(bunamo_dir, "noun")):
-            return None
-        os.makedirs(os.path.join(bunamo_dir, "copula"), exist_ok=True)  # loader wants it
-        bdb = Database(bunamo_dir)
-        bdb.load()
-        db = _gramadan.LemmaDb()
-        for lemma, word in bdb.dictionary["noun"].items():
-            gender = str(getattr(word, "gender", "")).split(".")[-1].lower()  # masc/fem
-            lem = word.getLemma() if hasattr(word, "getLemma") else lemma
-            db.insert(lem, int(getattr(word, "declension", 0) or 0), gender)
-        _lemma_db = db
-    except Exception:  # pragma: no cover - preload optional; guesser still runs
-        _lemma_db = None
-    return _lemma_db
-
-
 def guess_grammar_class(word: str, pos: str, gender) -> tuple[str, str]:
     """Infer a (grammar_class, method) for a classless noun/verb via gramadan.
 
@@ -256,7 +213,7 @@ def guess_grammar_class(word: str, pos: str, gender) -> tuple[str, str]:
         return "", "Unresolved"
     if isinstance(gender, (list, tuple)):
         gender = next((g for g in gender if g in ("masculine", "feminine", "masc", "fem")), "")
-    gclass, method = _gramadan.enrich(word, pos, gender or "", "", _get_lemma_db())
+    gclass, method = _gramadan.enrich(word, pos, gender or "", "")
     if gclass == "-1":
         gclass = "irr"
     return gclass, method
