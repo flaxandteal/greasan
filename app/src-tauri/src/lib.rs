@@ -82,6 +82,7 @@ pub fn run() {
         v2::v2_hydrate_layers,
         v2::v2_closure,
         v2::v2_descriptors,
+        v2::v2_search_display,
         v2::v2_cited_by,
         v2::v2_geo_points,
         v2::v2_emit_overlay,

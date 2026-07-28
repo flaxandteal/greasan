@@ -130,6 +130,20 @@ export async function descriptors(headDirs: string[], uris: string[]): Promise<R
   return await invoke<Record<string, string>>('v2_descriptors', { headDirs, uris });
 }
 
+export interface SearchDisplay { headword: string; pos: string; dialects: string[] }
+
+/** Canonical search display (headword + POS + dialect labels) resolved from the
+ * COMPOSED head stack — so a result's badges come from the richest layer, not
+ * whichever Pagefind record survived the per-layer cap. The POS/dialect node
+ * UUIDs are stable properties of the lexical_entry model. */
+const POS_NODE = 'a956278b-6815-5cc5-b674-e933e9c84aad';
+const DIALECT_NODE = '69fb02e1-6d10-5a11-9bc2-4a02ad7fb8b0';
+export async function searchDisplay(headDirs: string[], uris: string[]): Promise<Record<string, SearchDisplay>> {
+  return await invoke<Record<string, SearchDisplay>>('v2_search_display', {
+    headDirs, uris, posNode: POS_NODE, dialectNode: DIALECT_NODE,
+  });
+}
+
 /**
  * Reverse-cognate lookup: the resources that LINK TO `uri` through `nodePath`
  * (a link-datatype node alias, e.g. `cognate_entry_id`) in the composed view.

@@ -382,6 +382,104 @@ pub fn v2_descriptors(
     Ok(out)
 }
 
+/// Canonical search-result display for a set of URIs, resolved from the COMPOSED
+/// head stack instead of trusting whichever layer's Pagefind meta happened to win
+/// the merge. headword = spine.display_name; part_of_speech + the entry-level
+/// dialect come from concept_tags -> vocab (both are references). Fixes bare /
+/// duplicate rows that leak from a forms-only layer (BuNaMo) when the rich layer's
+/// exact match is crowded past the per-layer result cap. Gloss is a tile, so it
+/// stays from Pagefind. First head (composition order) that has the resource wins,
+/// so the richest layer (wiktionary first) provides the display for shared slugs.
+#[derive(serde::Serialize, Default)]
+pub struct SearchDisplay {
+    pub headword: String,
+    pub pos: String,
+    pub dialects: Vec<String>,
+}
+
+#[tauri::command]
+pub fn v2_search_display(
+    head_dirs: Vec<String>,
+    uris: Vec<String>,
+    pos_node: String,
+    dialect_node: String,
+) -> Result<HashMap<String, SearchDisplay>, String> {
+    let mut out: HashMap<String, SearchDisplay> = HashMap::new();
+    for dir in &head_dirs {
+        if uris.iter().all(|u| out.contains_key(u)) {
+            break;
+        }
+        let conn = ros_madair_read::open_head(Path::new(dir)).map_err(|e| e.to_string())?;
+        let spines: Vec<String> = {
+            let mut stmt = conn
+                .prepare("SELECT name FROM sqlite_master WHERE type='table' AND name LIKE 'spine_%'")
+                .map_err(|e| format!("list spines for {dir}: {e}"))?;
+            let rows = stmt
+                .query_map([], |r| r.get::<_, String>(0))
+                .map_err(|e| format!("query spines for {dir}: {e}"))?;
+            rows.filter_map(|r| r.ok()).collect()
+        };
+        // Intern the POS + dialect node UUIDs against THIS head's dict.
+        let node_id = |u: &str| -> Option<i64> {
+            conn.query_row("SELECT term_id FROM dict WHERE term=?1", [u], |r| r.get::<_, i64>(0))
+                .ok()
+        };
+        let pos_nid = node_id(&pos_node);
+        let dial_nid = node_id(&dialect_node);
+        for uri in &uris {
+            if out.contains_key(uri) {
+                continue;
+            }
+            // rid + headword from the first spine that has this uri.
+            let mut found: Option<(i64, String)> = None;
+            for spine in &spines {
+                let sql = format!(
+                    "SELECT s.rid, s.display_name FROM {spine} s \
+                     JOIN dict d ON d.term_id = s.term_id WHERE d.term = ?1 LIMIT 1"
+                );
+                if let Ok(row) = conn.query_row(&sql, [uri], |r| {
+                    Ok((r.get::<_, i64>(0)?, r.get::<_, String>(1)?))
+                }) {
+                    found = Some(row);
+                    break;
+                }
+            }
+            let Some((rid, headword)) = found else {
+                continue;
+            };
+            let mut disp = SearchDisplay {
+                headword,
+                pos: String::new(),
+                dialects: Vec::new(),
+            };
+            // rid + node are i64 from the head's own dict — safe to inline (no
+            // user text), avoiding a params dependency.
+            if let Some(pn) = pos_nid {
+                let sql = format!(
+                    "SELECT v.label FROM concept_tags ct JOIN vocab v ON v.concept = ct.concept \
+                     WHERE ct.rid = {rid} AND ct.node = {pn} LIMIT 1"
+                );
+                if let Ok(p) = conn.query_row(&sql, [], |r| r.get::<_, String>(0)) {
+                    disp.pos = p;
+                }
+            }
+            if let Some(dn) = dial_nid {
+                let sql = format!(
+                    "SELECT DISTINCT v.label FROM concept_tags ct JOIN vocab v \
+                     ON v.concept = ct.concept WHERE ct.rid = {rid} AND ct.node = {dn}"
+                );
+                if let Ok(mut stmt) = conn.prepare(&sql) {
+                    if let Ok(rows) = stmt.query_map([], |r| r.get::<_, String>(0)) {
+                        disp.dialects = rows.filter_map(|r| r.ok()).collect();
+                    }
+                }
+            }
+            out.insert(uri.clone(), disp);
+        }
+    }
+    Ok(out)
+}
+
 /// Hydrate one resource from the composed view of a layer stack: gather its tiles
 /// from every layer that has it, merge with per-nodegroup precedence (topmost
 /// wins), then hydrate to a schema-aware JSON tree. The graph is the base's.

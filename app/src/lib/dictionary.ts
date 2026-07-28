@@ -7,7 +7,7 @@ import { getPagefind, resetPagefind, type PagefindInstance } from './pagefind';
 import { FAMILIES, DEFAULT_FAMILY, type FamilyConfig, type FamilyId } from './family';
 import { diagStart, diagEnd } from './diagnostics';
 import { loadEntryV2 } from './dictionary-v2';
-import { prepareOffline, descriptors, hydrateV2, citedBy } from './v2';
+import { prepareOffline, descriptors, hydrateV2, citedBy, searchDisplay } from './v2';
 
 let activeFamilyConfig: FamilyConfig = FAMILIES[DEFAULT_FAMILY];
 
@@ -321,6 +321,20 @@ async function searchOneInstance(
   });
 }
 
+/** Fold a set of dialect labels (from the composed entry, e.g. "Irish",
+ * "Scottish Gaelic", "Munster Irish") to a branch code — GA / GD / GV, or "G"
+ * when the slug spans more than one Goidelic branch. Mirrors the layer builders'
+ * DIALECT_LABEL_TO_CODE, but branch-only (the search badge shows the branch). */
+function dialectsToCode(labels: string[]): string {
+  const branches = new Set<string>();
+  for (const l of labels) {
+    if (/scottish|gaelic/i.test(l)) branches.add('GD');
+    else if (/manx/i.test(l)) branches.add('GV');
+    else if (/irish/i.test(l)) branches.add('GA');
+  }
+  return branches.size > 1 ? 'G' : ([...branches][0] || '');
+}
+
 export async function search(query: string, lang: SearchLang = 'ga', dialects?: string[]): Promise<EntrySummary[]> {
   if (!query.trim()) return [];
 
@@ -369,6 +383,25 @@ export async function search(query: string, lang: SearchLang = 'ga', dialects?: 
     for (const [uri, r] of byUri) {
       if (branchesByUri.get(uri)!.size > 1) r.dialect = 'G';
       merged.push(r);
+    }
+
+    // Canonical display from the COMPOSED heads — headword/POS/dialect come from
+    // the richest layer that owns each slug, not whichever Pagefind record won
+    // the per-layer cap + dedup. Fixes bare/duplicate rows leaking from the
+    // forms-only BuNaMo layer (no POS, dialect shown as raw "Irish"). Gloss is a
+    // tile, so it stays from Pagefind. Best-effort: falls through on error.
+    try {
+      const disp = await searchDisplay(currentV2HeadDirs(), merged.map((r) => r.uri));
+      for (const r of merged) {
+        const d = disp[r.uri];
+        if (!d) continue;
+        if (d.headword) r.headword = d.headword;
+        if (d.pos) r.pos = d.pos;
+        const code = dialectsToCode(d.dialects);
+        if (code) r.dialect = code;
+      }
+    } catch (err) {
+      console.warn('[dictionary] searchDisplay failed:', err);
     }
 
     const q = query.toLowerCase();
