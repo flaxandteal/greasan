@@ -223,7 +223,9 @@ def main() -> None:
     db.load()
 
     OUT_CSV.parent.mkdir(parents=True, exist_ok=True)
-    columns = ["ResourceID", "grammar_class", "written_rep", "gram_features", "form_dialect"]
+    # grammar_class_confidence appended LAST so the position-based parse in
+    # build-bunamo-layer.mjs (id/grammar_class/written_rep = cols 0/1/2) is unchanged.
+    columns = ["ResourceID", "grammar_class", "written_rep", "gram_features", "form_dialect", "grammar_class_confidence"]
 
     stats = {p: {"total": 0, "matched": 0, "tiles": 0} for p in POS_FOLDERS}
     rows_out: list[dict] = []
@@ -255,6 +257,8 @@ def main() -> None:
                     "written_rep": written,
                     "gram_features": ", ".join(sorted(set(feats))),
                     "form_dialect": "Irish",
+                    # From a real BuNaMo paradigm → attested (same tile as the value).
+                    "grammar_class_confidence": "attested" if (gclass and first) else "",
                 })
                 first = False
                 stats[pos]["tiles"] += 1

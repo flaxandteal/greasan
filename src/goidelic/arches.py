@@ -15,6 +15,7 @@ COLUMNS = [
     "headword",
     "part_of_speech",
     "grammar_class",
+    "grammar_class_confidence",
     "dialect",
     "ipa_value",
     "pronunciation_dialect",
@@ -61,7 +62,12 @@ def entry_to_rows(entry: dict) -> list[dict[str, str]]:
         if i == 0:
             row["headword"] = entry.get("headword", "")
             row["part_of_speech"] = entry.get("part_of_speech", "")
-            row["grammar_class"] = entry.get("grammar_class", "")
+            gc = entry.get("grammar_class", "")
+            row["grammar_class"] = gc
+            # All current grammar_class values come from explicit TBX codes or real
+            # BuNaMo paradigms → attested. The morphology guesser (deferred) will
+            # emit inferred/uncertain per-entry; until then this is a constant.
+            row["grammar_class_confidence"] = "attested" if gc else ""
             row["dialect"] = entry.get("dialect", "")
             # Domain is concept-list (cardinality n), pipe-separated
             if domains:
