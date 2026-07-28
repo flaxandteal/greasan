@@ -139,10 +139,20 @@ if (usingNapi) {
   }
 }
 
-const cacheResult = registry.populateCachesFromJson(
-  JSON.stringify(resources), typedGraph, true, false, true
-);
-const enrichedResources = cacheResult.resources || resources;
+// Descriptor computation, BATCHED. A single populateCachesFromJson over all 193k
+// resources OOMs on a loaded machine — the V8 JSON string, the NAPI parse and the
+// output all live at once. enrich=false (the cross-ref __cache is unused by the
+// tearma Pagefind and the tile-built head), so per-resource descriptors don't need
+// the full set and chunks are independent. Peak memory becomes ~one chunk instead
+// of the whole corpus; the POS slug descriptor still computes per resource.
+const CHUNK = 25000;
+const enrichedResources = [];
+for (let i = 0; i < resources.length; i += CHUNK) {
+  const chunk = resources.slice(i, i + CHUNK);
+  const r = registry.populateCachesFromJson(JSON.stringify(chunk), typedGraph, false, false, true);
+  enrichedResources.push(...(r.resources || chunk));
+  console.log(`[build-tearma] Descriptors: ${Math.min(i + CHUNK, resources.length)}/${resources.length}`);
+}
 console.log(`[build-tearma] Descriptors computed for ${enrichedResources.length} resources`);
 
 // --- Write prebuild directory ---

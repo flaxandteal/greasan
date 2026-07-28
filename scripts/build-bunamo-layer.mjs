@@ -154,8 +154,17 @@ if (usingNapi) {
   }
 }
 
-const cacheResult = registry.populateCachesFromJson(JSON.stringify(resources), typedGraph, true, false, true);
-const enrichedResources = cacheResult.resources || resources;
+// Batched descriptor pass + enrich=false — same OOM guard as build-tearma-layer:
+// a monolithic populateCachesFromJson over the full resource set can exhaust RAM
+// on a loaded machine. bunamo has no cross-graph refs and its Pagefind doesn't use
+// __cache, so per-chunk descriptors are complete.
+const BUNAMO_CHUNK = 25000;
+const enrichedResources = [];
+for (let i = 0; i < resources.length; i += BUNAMO_CHUNK) {
+  const chunk = resources.slice(i, i + BUNAMO_CHUNK);
+  const r = registry.populateCachesFromJson(JSON.stringify(chunk), typedGraph, false, false, true);
+  enrichedResources.push(...(r.resources || chunk));
+}
 console.log(`[build-bunamo] Descriptors computed for ${enrichedResources.length} resources`);
 
 // --- Write prebuild directory ---
