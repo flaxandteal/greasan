@@ -12,6 +12,11 @@ dependencies = [
     "orjson>=3.10",
     "httpx>=0.27",
     "pydantic>=2.0",
+    # PyO3 bindings for the gramadan Irish morphology engine — infers a
+    # grammar_class for classless Téarma nouns/verbs in the TBX pipeline.
+    "gramadan-rs",
+    # Python Gramadán — build-bunamo-data.py uses its Database (BuNaMo) loader.
+    "gramadan-py",
 ]
 
 [project.optional-dependencies]
@@ -19,6 +24,10 @@ dev = [
     "pytest>=8.0",
     "pytest-snapshot>=0.9",
 ]
+
+[tool.uv.sources]
+gramadan-rs = { path = "../Gramadan/gramadan-rs" }
+gramadan-py = { path = "data/gramadan-src/Python" }
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/goidelic"]

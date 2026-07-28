@@ -179,6 +179,46 @@ def extract_declension(raw_pos: str) -> str:
     return _DECLENSION.get(raw_pos.strip(), "")
 
 
+# --- grammar_class inference (gramadan morphology engine) --------------------
+# gramadan_rs.enrich(word, pos, gender, "") -> (grammar_class, method). The method
+# name maps to a confidence level for the grammar_class_confidence reference.
+try:
+    import gramadan_rs as _gramadan  # PyO3 binding, see ../../Gramadan/gramadan-rs
+except ImportError:  # pragma: no cover - engine optional; pipeline still runs
+    _gramadan = None
+
+_METHOD_CONFIDENCE = {
+    "AlreadyStated": "attested",
+    "DbLookup": "attested",
+    "HeuristicVowel4th": "inferred",
+    "HeuristicVnAdh": "inferred",
+    "HeuristicVnAil": "inferred",
+    "HeuristicProper4th": "inferred",
+    "CompoundDecomposition": "inferred",
+    "MorphologicalGuesser": "uncertain",
+    "VerbHeuristic": "uncertain",
+    "Unresolved": "",
+}
+
+
+def guess_grammar_class(word: str, pos: str, gender) -> tuple[str, str]:
+    """Infer a (grammar_class, method) for a classless noun/verb via gramadan.
+
+    ``gender`` may be the ``extract_gender`` list (e.g. ``["masculine"]``) or a
+    bare string; the engine wants "masculine"/"feminine". Returns
+    ("", "Unresolved") when the engine is unavailable or can't resolve. A
+    DB-lookup on an irregular NOUN stringifies to "-1"; normalise that to "irr".
+    """
+    if _gramadan is None:
+        return "", "Unresolved"
+    if isinstance(gender, (list, tuple)):
+        gender = next((g for g in gender if g in ("masculine", "feminine", "masc", "fem")), "")
+    gclass, method = _gramadan.enrich(word, pos, gender or "", "")
+    if gclass == "-1":
+        gclass = "irr"
+    return gclass, method
+
+
 def _clean_domain(text: str) -> str:
     """Clean HTML entity leftovers from domain strings.
 
@@ -343,6 +383,15 @@ def parse_term_entry(entry: ET.Element) -> list[dict]:
 
             mapped_domains = map_domains(raw_domains)
 
+            # grammar_class: prefer the explicit TBX declension code (attested);
+            # otherwise infer it for nouns/verbs via the gramadan morphology
+            # engine, tagging the confidence by which strategy resolved it.
+            gclass = extract_declension(raw_pos)
+            gclass_conf = "attested" if gclass else ""
+            if not gclass and pos in ("noun", "verb"):
+                gclass, method = guess_grammar_class(headword, pos, gender)
+                gclass_conf = _METHOD_CONFIDENCE.get(method, "uncertain") if gclass else ""
+
             records.append({
                 "word": headword,
                 "word_search": normalise_for_search(headword),
@@ -350,7 +399,8 @@ def parse_term_entry(entry: ET.Element) -> list[dict]:
                 "dialect": "Irish (General)",
                 "pos": pos,
                 "raw_pos": raw_pos,
-                "grammar_class": extract_declension(raw_pos),
+                "grammar_class": gclass,
+                "grammar_class_confidence": gclass_conf,
                 "pronunciations": [],
                 "senses": senses,
                 "forms": forms,

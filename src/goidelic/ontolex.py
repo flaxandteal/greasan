@@ -81,6 +81,7 @@ def shape_entry(entry: dict) -> dict:
         "headwords": [{"dialect": dialect, "word": entry["word"]}],
         "part_of_speech": entry["pos"],
         "grammar_class": entry.get("grammar_class", ""),
+        "grammar_class_confidence": entry.get("grammar_class_confidence", ""),
         "dialect": dialect,
         "pronunciations": pronunciations,
         "senses": senses,

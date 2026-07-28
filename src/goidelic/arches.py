@@ -64,10 +64,13 @@ def entry_to_rows(entry: dict) -> list[dict[str, str]]:
             row["part_of_speech"] = entry.get("part_of_speech", "")
             gc = entry.get("grammar_class", "")
             row["grammar_class"] = gc
-            # All current grammar_class values come from explicit TBX codes or real
-            # BuNaMo paradigms → attested. The morphology guesser (deferred) will
-            # emit inferred/uncertain per-entry; until then this is a constant.
-            row["grammar_class_confidence"] = "attested" if gc else ""
+            # Confidence comes from the enrichment stage (tbx.py): "attested" for an
+            # explicit TBX code / BuNaMo paradigm, "inferred"/"uncertain" for a
+            # gramadan guess. Fall back to the attested-if-present constant for
+            # sources (e.g. Wiktionary) that don't run the guesser.
+            row["grammar_class_confidence"] = (
+                entry.get("grammar_class_confidence") or ("attested" if gc else "")
+            )
             row["dialect"] = entry.get("dialect", "")
             # Domain is concept-list (cardinality n), pipe-separated
             if domains:
