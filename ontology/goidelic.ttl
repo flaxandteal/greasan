@@ -381,3 +381,67 @@
     rdfs:range xsd:string ;
     rdfs:comment
         "ResourceID of the linked LexicalEntry for this cognate, when one exists in the corpus. Used by the frontend to render clickable cross-references."@en .
+
+# --- Etymology attachment (interim) -----------------------------------------
+# lemonEty attaches etymons via Etymology -> EtyLink -> Etymon, with the link
+# typed (inheritance / borrowing / cognate / derivation / calque). The resource
+# model does not yet emit EtyLink, so these two flattened shortcut predicates
+# stand in: LexicalEntry -> Etymology and LexicalEntry -> Etymon directly. They
+# live in the local namespace (not lemonEty) because they are OURS, not part of
+# the published lemonEty vocabulary. Replace with ety:etyLink / ety:etymon once
+# the EtyLink restructure lands (see ONTOLEX-ALIGNMENT plan).
+
+:hasEtymology
+    a owl:ObjectProperty ;
+    rdfs:label "has etymology"@en ;
+    rdfs:domain ontolex:LexicalEntry ;
+    rdfs:range ety:Etymology ;
+    rdfs:comment
+        "Flattened shortcut linking a LexicalEntry to its Etymology. Interim: lemonEty routes this through no direct property (LexicalEntry -> Etymology is via ety:etyLink structure); we assert it directly until EtyLink is modelled."@en .
+
+:hasEtymon
+    a owl:ObjectProperty ;
+    rdfs:label "has etymon"@en ;
+    rdfs:domain ontolex:LexicalEntry ;
+    rdfs:range ety:Etymon ;
+    rdfs:comment
+        "Flattened shortcut linking a LexicalEntry directly to an Etymon (cognate or ancestor), bypassing the Etymology/EtyLink intermediary. Interim: carries no link type, so it cannot distinguish inheritance from borrowing from cognate. Replace with a typed ety:EtyLink once modelled."@en .
+
+# --- Lexical concepts (Logainm toponymic elements) --------------------------
+# The 211 recurring toponymic elements (baile, cill, mór, …) are modelled as
+# ontolex:LexicalConcept resources — the geographic MEANING a placename evokes,
+# distinct from any one dictionary headword. A placename links to a concept; the
+# concept links back to the headword(s) that lexicalise it. See ONTOLEX-ALIGNMENT
+# Phase 1a and HANDOFF-lexeme-concept-split.md.
+
+:isEvokedBy
+    a owl:ObjectProperty ;
+    owl:inverseOf ontolex:evokes ;
+    rdfs:label "is evoked by"@en ;
+    rdfs:domain ontolex:LexicalConcept ;
+    rdfs:range ontolex:LexicalEntry ;
+    rdfs:comment
+        "Links a LexicalConcept to a LexicalEntry that lexicalises it. Local inverse of ontolex:evokes (which OntoLex defines only entry->concept); we assert the concept->entry direction so the 211 concept resources carry the relation, rather than adding a node to every dictionary entry."@en .
+
+:diminutiveOf
+    a owl:ObjectProperty ;
+    rdfs:label "diminutive of"@en ;
+    rdfs:domain ontolex:LexicalConcept ;
+    rdfs:range ontolex:LexicalConcept ;
+    rdfs:comment
+        "Relates a diminutive concept (e.g. coillín) to its base concept (coill), giving diminutives a home instead of the unsafe strip-to-base decomposition."@en .
+
+:placeCount
+    a owl:DatatypeProperty ;
+    rdfs:label "place count"@en ;
+    rdfs:domain ontolex:LexicalConcept ;
+    rdfs:range xsd:nonNegativeInteger ;
+    rdfs:comment
+        "Number of Logainm places whose name uses this element. Frequency signal from the glossary, useful for ordering/weighting concepts."@en .
+
+:conceptEntry
+    a owl:ObjectProperty ;
+    rdfs:label "concept entry"@en ;
+    rdfs:range ontolex:LexicalConcept ;
+    rdfs:comment
+        "Links a placename name-element to the LexicalConcept it evokes. Layered on top of the existing placename->headword nameElementEntry link (which stays), so the concept re-point is additive."@en .

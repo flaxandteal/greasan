@@ -1,0 +1,2 @@
+name,ontology_class,author,description,is_resource
+Lexical Concept,http://www.w3.org/ns/lemon/ontolex#LexicalConcept,,Toponymic meaning-concept from the Logainm element glossary; the geographic sense a placename evokes,true
