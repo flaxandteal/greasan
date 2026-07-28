@@ -302,7 +302,7 @@ async function searchOneInstance(
       return {
         uri,
         headword: d.meta.headword || d.meta.title,
-        pos: '',
+        pos: d.meta.pos || '',
         gloss: d.meta.title || undefined,
         dialect,
       };
@@ -310,7 +310,7 @@ async function searchOneInstance(
     return {
       uri,
       headword: d.meta.title,
-      pos: '',
+      pos: d.meta.pos || '',
       // Samplaí: the sentence is the title (headword); the translation is the
       // subtitle (gloss). Don't surface pagefind's raw excerpt — its `content`
       // concatenates the sentence, its accent-stripped copy, and the translation,

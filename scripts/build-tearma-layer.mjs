@@ -90,6 +90,9 @@ console.log(`[build-tearma] Graph: ${graphId}, Collections: ${collections.length
 const typedGraph = parseStaticGraph(JSON.stringify({ graph: [graph] }));
 typedGraph.setDescriptorTemplate('name', '<Headword>');
 typedGraph.setDescriptorTemplate('description', '<Gloss>');
+// `slug` carries the part_of_speech REFERENCE so Pagefind can resolve it to a POS
+// label via the controlled-list collection vocab (CLM) — see build-wiktionary-layer.
+typedGraph.setDescriptorTemplate('slug', '<Part of Speech>');
 
 // Build resources
 const tBd = performance.now();
@@ -255,6 +258,17 @@ function getDialectCodes(resource) {
   return codes ? [...codes] : ['GA'];
 }
 
+// POS label per resource — part_of_speech REFERENCE (on descriptors.slug) resolved
+// through the controlled-list collection vocab (CLM). See build-wiktionary-layer.
+const conceptToLabel = {};
+for (const c of collections) {
+  for (const [id, con] of Object.entries(c.__allConcepts || {})) {
+    const pl = con?.prefLabels || {};
+    conceptToLabel[id] = pl.en?.value || pl[Object.keys(pl)[0]]?.value || '';
+  }
+}
+const posOf = (ri) => conceptToLabel[ri?.descriptors?.slug] || '';
+
 const { index: gaIndex } = await pagefind.createIndex({ forceLanguage: 'ga' });
 const { index: enIndex } = await pagefind.createIndex({ forceLanguage: 'en' });
 
@@ -272,6 +286,7 @@ for (const resource of enrichedResources) {
   if (!headword || !uuid) continue;
 
   const gloss = ri?.descriptors?.description || '';
+  const pos = posOf(ri);
   const dialectCodes = getDialectCodes(resource);
   const dialectDisplay = dialectCodes.reduce((a, b) => a.length >= b.length ? a : b, '');
 
@@ -280,7 +295,7 @@ for (const resource of enrichedResources) {
     url: uuid,
     content: headword === headwordNorm ? headword : `${headword} ${headwordNorm}`,
     language: 'ga',
-    meta: { title: headword, gloss, dialect: dialectDisplay },
+    meta: { title: headword, gloss, dialect: dialectDisplay, pos },
     filters: { dialect: dialectCodes },
   });
   gaCount++;
@@ -290,7 +305,7 @@ for (const resource of enrichedResources) {
       url: uuid,
       content: gloss,
       language: 'en',
-      meta: { title: gloss, headword, dialect: dialectDisplay },
+      meta: { title: gloss, headword, dialect: dialectDisplay, pos },
       filters: { dialect: dialectCodes },
     });
     enCount++;

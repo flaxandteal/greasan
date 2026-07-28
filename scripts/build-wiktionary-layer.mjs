@@ -78,6 +78,12 @@ const models = [
     descriptors: {
       name: '<Headword>',
       description: '<Gloss>',
+      // `slug` carries the part_of_speech REFERENCE (concept UUID) so the Pagefind
+      // builder can resolve it to a POS label via the controlled-list collection
+      // (the CLM vocab) — mediated by the reference system, not the raw CSV string.
+      // Nothing reads a lexical entry's slug (only layer slugs are consumed), so
+      // this is a safe, search-only repurpose.
+      slug: '<Part of Speech>',
     },
   },
 ];
@@ -363,6 +369,18 @@ if (lexicalGraphId) {
     return codes ? [...codes] : ['GA'];
   }
 
+  // POS label per resource — resolved from the part_of_speech REFERENCE (carried on
+  // descriptors.slug) through the controlled-list collection vocab (the CLM data),
+  // so search can distinguish e.g. baile-noun from baile-adjective.
+  const conceptToLabel = {};
+  for (const c of allCollections) {
+    for (const [id, con] of Object.entries(c.__allConcepts || {})) {
+      const pl = con?.prefLabels || {};
+      conceptToLabel[id] = pl.en?.value || pl[Object.keys(pl)[0]]?.value || '';
+    }
+  }
+  const posOf = (ri) => conceptToLabel[ri?.descriptors?.slug] || '';
+
   // Create per-language pagefind indices
   const { index: gaIndex } = await pagefind.createIndex({ forceLanguage: 'ga' });
   const { index: enIndex } = await pagefind.createIndex({ forceLanguage: 'en' });
@@ -383,6 +401,7 @@ if (lexicalGraphId) {
     if (!headword || !uuid) continue;
 
     const gloss = ri?.descriptors?.description || '';
+    const pos = posOf(ri);
     const dialectCodes = getDialectCodes(resource);
     const dialectDisplay = dialectCodes.reduce((a, b) => a.length >= b.length ? a : b, '');
 
@@ -392,7 +411,7 @@ if (lexicalGraphId) {
       url: uuid,
       content: headword === headwordNorm ? headword : `${headword} ${headwordNorm}`,
       language: 'ga',
-      meta: { title: headword, gloss, dialect: dialectDisplay },
+      meta: { title: headword, gloss, dialect: dialectDisplay, pos },
       filters: { dialect: dialectCodes },
     });
     gaCount++;
@@ -407,7 +426,7 @@ if (lexicalGraphId) {
         url: uuid,
         content: gloss,
         language: 'en',
-        meta: { title: gloss, headword, dialect: dialectDisplay },
+        meta: { title: gloss, headword, dialect: dialectDisplay, pos },
         filters: { dialect: dialectCodes },
       });
       enCount++;
