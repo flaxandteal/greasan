@@ -596,11 +596,13 @@ pub fn v2_geo_points(
 #[cfg(all(feature = "v2", feature = "v2-emit"))]
 #[tauri::command]
 pub fn v2_emit_overlay(
+    app: tauri::AppHandle,
     head_dir: String,
     graph_id: String,
     business_data_json: String,
 ) -> Result<(), String> {
     use std::fs;
+    use tauri::Emitter;
     let head = Path::new(&head_dir);
     let graph_json = head.join("graph.json");
     if !graph_json.is_file() {
@@ -628,10 +630,33 @@ pub fn v2_emit_overlay(
     // Emit clears head_dir, so re-emit in place then restore graph.json.
     let _ = fs::remove_dir_all(head);
     fs::create_dir_all(head).map_err(|e| e.to_string())?;
-    ros_madair_emit::emit(
+    // Progress → the frontend as `emit-progress` events; a progress bar does
+    // `listen("emit-progress", e => …)` with `{ phase | done, total }`.
+    //
+    // For the small note/flag overlay this synchronous call is fine. A LARGE
+    // layer build (Path A, HANDOFF-streaming-build.md) should run this on a
+    // blocking thread (`tauri::async_runtime::spawn_blocking`) so it does not tie
+    // up a command worker for minutes, and should thread a cancel signal (an
+    // `AtomicBool` set by a sibling command) into the `ControlFlow` below.
+    let mut on_progress = |p: ros_madair_emit::EmitProgress| {
+        let payload = match p {
+            ros_madair_emit::EmitProgress::Phase(name) => {
+                serde_json::json!({ "phase": name })
+            }
+            ros_madair_emit::EmitProgress::Streaming { done, total } => {
+                serde_json::json!({ "done": done, "total": total })
+            }
+        };
+        let _ = app.emit("emit-progress", payload);
+        std::ops::ControlFlow::Continue(())
+    };
+    ros_madair_emit::emit_with_progress(
         prebuild.to_str().ok_or("non-utf8 prebuild path")?,
         head.to_str().ok_or("non-utf8 head path")?,
         "https://example.org/",
+        &ros_madair_emit::EmitOptions::default(),
+        &ros_madair_emit::default_registry(),
+        &mut on_progress,
     )
     .map_err(|e| format!("emit: {e}"))?;
     fs::copy(&model_dst, head.join("graph.json")).map_err(|e| e.to_string())?;
@@ -649,6 +674,56 @@ pub fn v2_emit_overlay(
 ) -> Result<(), String> {
     Err("v2_emit_overlay: this build lacks the v2-emit feature".to_string())
 }
+
+/// DEBUG on-device emit memory measurement (HANDOFF-streaming-build.md). If the
+/// marker file `{app_data}/files/emit-measure/RUN` exists — pushed via adb for a
+/// measurement run — stream-emit the prebuild directory at `emit-measure/prebuild/`
+/// into `emit-measure/out/` on a background thread IN THIS PROCESS, so an external
+/// `dumpsys meminfo` poll captures the real peak RSS of the memory-bounded emit
+/// over a large corpus. Writes `summary.json` (the emit summary, incl. snapshot_id
+/// — cross-check against the desktop build) and a `DONE` marker on completion. The
+/// marker is one-shot (removed on start). Inert in production: the marker never
+/// exists. No-op in a `v2` build without `v2-emit`.
+#[cfg(all(feature = "v2", feature = "v2-emit"))]
+pub fn maybe_run_emit_measurement(app: tauri::AppHandle) {
+    use tauri::Manager;
+    let Ok(app_data) = app.path().app_data_dir() else {
+        return;
+    };
+    let base = app_data.join("files/emit-measure");
+    if !base.join("RUN").is_file() {
+        return;
+    }
+    std::thread::spawn(move || {
+        let prebuild = base.join("prebuild");
+        let out = base.join("out");
+        let _ = std::fs::remove_dir_all(&out);
+        let _ = std::fs::remove_file(base.join("DONE"));
+        let _ = std::fs::remove_file(base.join("RUN")); // one-shot
+        let prebuild_s = prebuild.to_string_lossy();
+        let out_s = out.to_string_lossy();
+        let mut on_progress =
+            |_p: ros_madair_emit::EmitProgress| std::ops::ControlFlow::Continue(());
+        let summary = match ros_madair_emit::emit_with_progress(
+            &prebuild_s,
+            &out_s,
+            "https://example.org/",
+            &ros_madair_emit::EmitOptions::default(),
+            &ros_madair_emit::default_registry(),
+            &mut on_progress,
+        ) {
+            Ok(s) => serde_json::to_string(&s)
+                .unwrap_or_else(|e| format!("{{\"ser_err\":\"{e}\"}}")),
+            Err(e) => format!("{{\"error\":\"{}\"}}", e.to_string().replace('"', "'")),
+        };
+        let _ = std::fs::write(base.join("summary.json"), summary);
+        let _ = std::fs::write(base.join("DONE"), "1");
+    });
+}
+
+/// No-op when built without the emit crate.
+#[cfg(all(feature = "v2", not(feature = "v2-emit")))]
+pub fn maybe_run_emit_measurement(_app: tauri::AppHandle) {}
 
 #[cfg(test)]
 mod tests {

@@ -42,6 +42,10 @@ pub fn run() {
             android_ctx::init_from_tao();
             #[cfg(feature = "nav-server")]
             navserver::start(_app.handle().clone());
+            // DEBUG: on-device emit memory measurement, gated by a pushed marker
+            // file; inert in production. See HANDOFF-streaming-build.md.
+            #[cfg(feature = "v2")]
+            v2::maybe_run_emit_measurement(_app.handle().clone());
             Ok(())
         })
         .plugin(tauri_plugin_opener::init())
