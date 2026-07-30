@@ -14,7 +14,7 @@
 //   greasan://flags              open the flags page
 //   greasan://faq                open the FAQ overlay
 import { listen } from '@tauri-apps/api/event';
-import { currentEntry, currentExample, currentLayer, overlayView, layerSheetOpen, openMap, loading } from './store';
+import { currentEntry, currentExample, currentLayer, overlayView, layerSheetOpen, openMap, loading, dismissLicenseToast } from './store';
 import { search, loadEntryFlagged, loadExample, placeHeadDir } from './dictionary';
 import { loadLayerBySlug } from './layers-catalogue';
 
@@ -64,6 +64,8 @@ export async function handleDeepLink(url: string): Promise<void> {
   let u: URL;
   try { u = new URL(url); } catch { return; }
   if (u.protocol !== 'greasan:') return;
+  // A redirect into a specific view shouldn't sit under the launch licence toast.
+  dismissLicenseToast.update((n) => n + 1);
   const route = u.host;
   const arg = decodeURIComponent(u.pathname.replace(/^\/+/, ''));
   switch (route) {

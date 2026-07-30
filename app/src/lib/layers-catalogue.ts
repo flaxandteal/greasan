@@ -51,14 +51,14 @@ function refLabel(v: unknown): string {
   return str(v);
 }
 
-/** A reference-list field → its labels. The engine renders a list either as an
- * array of labels or a `", "`-joined display string; handle both. */
+/** A reference-list field → its labels. The engine already renders a list as a
+ * clean `", "`-joined display string, so keep it whole (splitting on `", "` would
+ * mangle a label that itself contains a comma); an array is mapped through. */
 function refList(v: unknown): string[] {
   if (v == null) return [];
   if (Array.isArray(v)) return v.map(str).filter(Boolean);
   const s = str(v);
-  if (!s) return [];
-  return s.includes(', ') ? s.split(', ').filter(Boolean) : [s];
+  return s ? [s] : [];
 }
 
 function asArray(v: unknown): any[] { return Array.isArray(v) ? v : v == null ? [] : [v]; }

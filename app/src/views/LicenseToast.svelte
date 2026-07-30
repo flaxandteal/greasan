@@ -1,10 +1,19 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import { showLicenseToast } from '../lib/store';
+  import { showLicenseToast, dismissLicenseToast } from '../lib/store';
   import { t } from '../lib/i18n';
 
   let visible = $state(false);
   let dismissed = $state(false);
+
+  // A nav/deep-link redirect bumps `dismissLicenseToast` — hide the toast so it
+  // doesn't overlap the target view. Skip the effect's initial (mount) run.
+  let toastPrimed = false;
+  $effect(() => {
+    void $dismissLicenseToast;
+    if (!toastPrimed) { toastPrimed = true; return; }
+    if (visible) dismiss();
+  });
 
   export function show() {
     dismissed = false;

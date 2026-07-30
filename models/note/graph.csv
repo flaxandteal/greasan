@@ -1,0 +1,2 @@
+name,ontology_class,author,description,is_resource
+Note,http://www.w3.org/ns/oa#Annotation,,A user note/flag attached to one or more resources,true

@@ -45,6 +45,7 @@
   --map-land:       #FBF9F2;               /* map: landmass fill */
   --map-coast:      var(--teal-deep);      /* map: coastline (dark line on cream) */
   --map-water:      #DCE6E5;               /* map: water bodies (cool grey on cream) */
+  --map-label:      #6E7C7E;               /* map: place labels — tonal grey, subordinate to the dots */
   --srf-chrome:     var(--paper);          /* navbar, search bar */
   --srf-chrome-fg:  var(--ink);
   --srf-divider:    rgba(51, 75, 78, 0.10);
@@ -133,6 +134,7 @@
   --map-land:       #3C585C;               /* map: raised landmass, lighter than the teal bg */
   --map-coast:      #6FA3AB;               /* map: coastline, legible on dark teal (bg was == --teal-deep) */
   --map-water:      #223C40;               /* map: water bodies, darker than land so they recede */
+  --map-label:      #9BA9AB;               /* map: place labels — tonal grey on dark teal */
   --srf-chrome:     #2A3F42;
   --srf-chrome-fg:  var(--cream);
   --srf-divider:    rgba(246, 244, 235, 0.10);

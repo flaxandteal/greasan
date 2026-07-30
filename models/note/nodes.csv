@@ -1,0 +1,4 @@
+parent_alias,alias,name,datatype,cardinality,ontology_class,parent_property,description,collection_name,required,searchable,exportable,sortorder
+,description,Description,string,1,http://www.w3.org/ns/oa#bodyValue,http://www.w3.org/ns/oa#bodyValue,The note text (the resource descriptor),,true,true,true,1
+,subject,Subject,resource-instance-list,n,http://www.w3.org/ns/oa#hasTarget,http://www.w3.org/ns/oa#hasTarget,The flagged resource(s) this note is about — points at ANY resource,,false,false,true,2
+,author,Author,resource-instance,1,http://purl.org/dc/terms/creator,http://purl.org/dc/terms/creator,The Person who created the note (the seeded User),,false,false,true,3

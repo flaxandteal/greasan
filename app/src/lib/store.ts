@@ -64,6 +64,9 @@ export function closeMap(): void {
   mapState.set(null);
 }
 export const showLicenseToast = persisted<boolean>('ge:showLicenseToast', true);
+/** Bump to dismiss the launch "Open Data" toast — e.g. a nav/deep-link redirect
+ *  shouldn't leave the licence toast overlapping the target view. */
+export const dismissLicenseToast = writable(0);
 export const darkMode = persisted<'light' | 'dark'>('ge:darkMode', 'light');
 export const density = persisted<'compact' | 'comfortable' | 'spacious'>('ge:density', 'comfortable');
 export const listStyle = persisted<'card' | 'flat'>('ge:listStyle', 'card');
