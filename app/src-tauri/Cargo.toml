@@ -17,6 +17,10 @@ tauri-plugin-dialog = "2"
 tauri-plugin-fs = "2"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
+# Irish morphology — declension/conjugation enrichment for classless TBX records
+# (the on-device counterpart of the Python tbx.py pipeline). `default-features`
+# off so the optional PyO3 `python` feature is NOT pulled into the app build.
+gramadan = { path = "../../../Gramadan/gramadan-rs", default-features = false }
 ros-madair-core = { path = "../../../magic/RosMadair/crates/ros-madair-core" }
 # v1 and the shipping app build against the REAL core (2.0.0-alpha.120). The v2
 # pilot links a *second* copy — the sandbox core, 2.0.0-alpha.121 — under the

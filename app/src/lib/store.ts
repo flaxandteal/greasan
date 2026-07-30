@@ -271,9 +271,9 @@ export async function importLayer(sourceUrl: string, name: string, format = 'pre
   }
 
   const outputPath = finalStatus.output_path!;
-  if (format === 'prebuild-v2') {
-    // Installed v2 head: register its dir into the native v2 head-dir set
-    // (hydrate/query), not the v1 SparqlStore. See addV2Layer.
+  if (format === 'prebuild-v2' || format === 'tbx-v2') {
+    // Installed v2 head (prebuild or TBX-built): register its dir into the native
+    // v2 head-dir set (hydrate/query), not the v1 SparqlStore. See addV2Layer.
     addV2Layer(outputPath, name);
   } else {
     const baseUrl = layerBaseUrl(name, outputPath);

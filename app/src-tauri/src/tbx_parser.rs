@@ -173,6 +173,10 @@ pub struct TbxRecord {
     /// Declension/conjugation class from the POS code ("1".."5"), or empty when
     /// the source gives none. See {@link extract_declension}.
     pub grammar_class: String,
+    /// Confidence of `grammar_class`: "attested" (explicit TBX code), or
+    /// "inferred"/"uncertain" once `enrich_records` fills a classless entry via
+    /// gramadan morphology; empty when there is no class. Drives the UI '?'.
+    pub grammar_class_confidence: String,
     pub dialect: String,
     pub senses: Vec<Sense>,
     pub forms: Vec<Form>,
@@ -515,6 +519,9 @@ fn parse_single_entry(xml: &str) -> Result<Vec<TbxRecord>, String> {
                 word: tg.headword.clone(),
                 pos: pos.to_string(),
                 grammar_class,
+                // Stamped by `enrich_records` (attested if class present, else the
+                // gramadan method's confidence, else empty).
+                grammar_class_confidence: String::new(),
                 dialect: "Irish (General)".to_string(),
                 senses,
                 forms,
@@ -601,7 +608,62 @@ const CSV_COLUMNS: &[&str] = &[
     // Appended last so the positional row writes below stay put. Matches the
     // `grammar_class` node on the lexical_entry model (BuNaMo emits it too).
     "grammar_class",
+    // The confidence concept sits in the same `grammar_class_group` nodegroup.
+    "grammar_class_confidence",
 ];
+
+/// Map a gramadan resolution [`Method`] to a confidence concept, mirroring the
+/// Python `tbx.py` `_METHOD_CONFIDENCE`.
+fn method_confidence(m: gramadan::enrich::Method) -> &'static str {
+    use gramadan::enrich::Method::*;
+    match m {
+        AlreadyStated | DbLookup => "attested",
+        HeuristicVowel4th | HeuristicVnAdh | HeuristicVnAil | HeuristicProper4th
+        | CompoundDecomposition => "inferred",
+        MorphologicalGuesser | VerbHeuristic => "uncertain",
+        Unresolved => "",
+    }
+}
+
+/// Fill `grammar_class` for classless noun/verb records via gramadan morphology
+/// (empty `LemmaDb` — heuristics + baked exception lists suffice; gramadan
+/// hand-off §1b) and stamp `grammar_class_confidence`. The on-device counterpart
+/// of the Python `tbx.py` enrichment, so a phone-built Téarma matches the shipped
+/// corpus (~80% of classless nouns/verbs resolved). A class already given by the
+/// TBX POS code is marked "attested".
+pub fn enrich_records(records: &mut [TbxRecord]) {
+    use gramadan::enrich::{enrich_grammar_class, Record as GRecord};
+    use gramadan::noun::LemmaDb;
+    let db = LemmaDb::new();
+    for rec in records.iter_mut() {
+        if !rec.grammar_class.is_empty() {
+            rec.grammar_class_confidence = "attested".to_string();
+            continue;
+        }
+        if rec.pos != "noun" && rec.pos != "verb" {
+            continue;
+        }
+        // Gender rides the first form's gram_features (see `extract_gender`).
+        let gender = rec
+            .forms
+            .first()
+            .and_then(|f| f.gram_features.first().cloned())
+            .unwrap_or_default();
+        let res = enrich_grammar_class(
+            &GRecord {
+                word: rec.word.clone(),
+                pos: rec.pos.clone(),
+                gender,
+                grammar_class: String::new(),
+            },
+            &db,
+        );
+        if !res.grammar_class.is_empty() {
+            rec.grammar_class = res.grammar_class;
+            rec.grammar_class_confidence = method_confidence(res.method).to_string();
+        }
+    }
+}
 
 /// Convert parsed TBX records into business-data CSV.
 pub fn records_to_csv(records: &[TbxRecord], source_label: &str) -> Result<String, String> {
@@ -638,8 +700,11 @@ pub fn records_to_csv(records: &[TbxRecord], source_label: &str) -> Result<Strin
                 if !rec.categories.is_empty() {
                     row[10] = csv_escape(&rec.categories.join("|"));
                 }
-                // grammar_class is the appended final column.
-                *row.last_mut().unwrap() = csv_escape(&rec.grammar_class);
+                // grammar_class + its confidence are the two appended final
+                // columns (in CSV_COLUMNS order).
+                let n = CSV_COLUMNS.len();
+                row[n - 2] = csv_escape(&rec.grammar_class);
+                row[n - 1] = csv_escape(&rec.grammar_class_confidence);
             }
 
             if i < rec.senses.len() {

@@ -40,7 +40,7 @@ export interface SuggestedLayer {
   name: string;
   url: string;
   label: string;
-  format: 'built' | 'prebuild' | 'prebuild-v2' | 'tbx';
+  format: 'built' | 'prebuild' | 'prebuild-v2' | 'tbx' | 'tbx-v2';
 }
 
 export interface FamilyConfig {
@@ -155,8 +155,8 @@ export const FAMILIES: Record<FamilyId, FamilyConfig> = {
       {
         name: 'tearma',
         url: 'https://www.tearma.ie/api/tbx',
-        label: 'Téarma — Irish terminology (on-device build)',
-        format: 'tbx',
+        label: 'Téarma — Irish terminology (on-device v2 build)',
+        format: 'tbx-v2',
       },
       {
         name: 'macbain',

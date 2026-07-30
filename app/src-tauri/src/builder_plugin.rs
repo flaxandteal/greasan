@@ -253,6 +253,64 @@ fn copy_pagefind_indices(src: &Path, dest: &Path) {
     }
 }
 
+/// Write in-memory graph + resources + collections to a temp prebuild dir and run
+/// the streaming emitter → a v2 head in `out_dir` (head.sqlite + chunks +
+/// graph.json). The v2 counterpart of `build_to_memory` + `write_artifacts`, for
+/// the tbx-v2 on-device Téarma build. Base_uri is the canonical
+/// `https://example.org/` every v2 head composes under (see the prebuild-v2 note).
+#[cfg(feature = "v2-emit")]
+fn write_prebuild_and_emit_v2(
+    out_dir: &Path,
+    graph: &StaticGraph,
+    resources: &[StaticResource],
+    collections: &[SkosCollection],
+) -> Result<(), String> {
+    let src = out_dir.join(".prebuild-src");
+    let _ = std::fs::remove_dir_all(&src);
+    let gid = graph.graphid.clone();
+    let models = src.join("graphs/resource_models");
+    let bd = src.join("business_data");
+    let cols_dir = src.join("reference_data/collections");
+    for d in [&models, &bd, &cols_dir] {
+        std::fs::create_dir_all(d).map_err(|e| format!("mkdir {}: {e}", d.display()))?;
+    }
+    std::fs::write(
+        models.join(format!("{gid}.json")),
+        serde_json::to_vec(graph).map_err(|e| e.to_string())?,
+    )
+    .map_err(|e| e.to_string())?;
+    let wrapper = serde_json::json!({ "business_data": { "resources": resources } });
+    std::fs::write(
+        bd.join(format!("{gid}.json")),
+        serde_json::to_vec(&wrapper).map_err(|e| e.to_string())?,
+    )
+    .map_err(|e| e.to_string())?;
+    for col in collections {
+        std::fs::write(
+            cols_dir.join(format!("{}.json", col.id)),
+            serde_json::to_vec(col).map_err(|e| e.to_string())?,
+        )
+        .map_err(|e| e.to_string())?;
+    }
+    std::fs::write(
+        src.join("manifest.json"),
+        r#"{"base_uri":"https://example.org/"}"#,
+    )
+    .map_err(|e| e.to_string())?;
+
+    ros_madair_emit::emit(
+        src.to_str().ok_or("non-utf8 prebuild path")?,
+        out_dir.to_str().ok_or("non-utf8 out path")?,
+        "https://example.org/",
+    )
+    .map_err(|e| format!("emit: {e}"))?;
+
+    std::fs::copy(models.join(format!("{gid}.json")), out_dir.join("graph.json"))
+        .map_err(|e| format!("copy graph.json: {e}"))?;
+    let _ = std::fs::remove_dir_all(&src);
+    Ok(())
+}
+
 /// Parse a prebuild tar.gz archive into graphs, resources, and collections.
 ///
 /// Expected archive structure:
@@ -391,8 +449,13 @@ pub async fn build_layer<R: Runtime>(
     format: String,
     layer_name: String,
 ) -> Result<BuildLayerResult, String> {
-    if format != "prebuild" && format != "prebuild-v2" && format != "built" && format != "tbx" {
-        return Err(format!("unsupported format \"{format}\" — only \"prebuild\", \"prebuild-v2\", \"built\", and \"tbx\" are supported"));
+    if !matches!(
+        format.as_str(),
+        "prebuild" | "prebuild-v2" | "built" | "tbx" | "tbx-v2"
+    ) {
+        return Err(format!(
+            "unsupported format \"{format}\" — only \"prebuild\", \"prebuild-v2\", \"built\", \"tbx\", and \"tbx-v2\" are supported"
+        ));
     }
 
     let layer_id = uuid::Uuid::new_v4().to_string();
@@ -490,7 +553,7 @@ pub async fn build_layer<R: Runtime>(
 
             // 2. Parse TBX XML into term records
             update_status(&app, &id_clone, "parsing", 0.2);
-            let records = match tbx_parser::parse_tbx(&bytes) {
+            let mut records = match tbx_parser::parse_tbx(&bytes) {
                 Ok(r) => r,
                 Err(e) => {
                     update_status_failed(&app, &id_clone, format!("TBX parse failed: {e}"));
@@ -499,6 +562,10 @@ pub async fn build_layer<R: Runtime>(
             };
 
             eprintln!("[builder] parsed {} TBX records", records.len());
+
+            // 2b. Declension enrichment (gramadan): fill classless noun/verb
+            // classes + stamp confidence, matching the Python pipeline.
+            tbx_parser::enrich_records(&mut records);
 
             // 3. Generate business-data CSV
             let csv_data = match tbx_parser::records_to_csv(&records, "TE") {
@@ -619,6 +686,85 @@ pub async fn build_layer<R: Runtime>(
             // 9. Complete
             let output_path = output_dir_clone.to_string_lossy().to_string();
             update_status_complete(&app, &id_clone, output_path);
+        } else if format_clone == "tbx-v2" {
+            // "tbx-v2": Téarma from TBX → a v2 HEAD (installable/loadable as a v2
+            // layer), with gramadan declension enrichment — the on-device
+            // counterpart of the Python pipeline. Same parse+enrich+build as
+            // "tbx", but emits a v2 head instead of v1 flat artifacts.
+            #[cfg(not(feature = "v2-emit"))]
+            {
+                update_status_failed(&app, &id_clone, "tbx-v2 requires a v2-emit build".into());
+                return;
+            }
+            #[cfg(feature = "v2-emit")]
+            {
+                update_status(&app, &id_clone, "parsing", 0.2);
+                let mut records = match tbx_parser::parse_tbx(&bytes) {
+                    Ok(r) => r,
+                    Err(e) => {
+                        update_status_failed(&app, &id_clone, format!("TBX parse failed: {e}"));
+                        return;
+                    }
+                };
+                tbx_parser::enrich_records(&mut records);
+                let csv_data = match tbx_parser::records_to_csv(&records, "TE") {
+                    Ok(c) => c,
+                    Err(e) => {
+                        update_status_failed(&app, &id_clone, format!("CSV generation failed: {e}"));
+                        return;
+                    }
+                };
+                // Graph + collections from the core bundle (asset resolver — keep
+                // on the async worker, not spawn_blocking).
+                update_status(&app, &id_clone, "building", 0.4);
+                let graph = match load_core_graph(&app, LEXICAL_ENTRY_GRAPH_ID) {
+                    Ok(g) => g,
+                    Err(e) => {
+                        update_status_failed(&app, &id_clone, format!("load graph failed: {e}"));
+                        return;
+                    }
+                };
+                let collections = match load_core_collections(&app) {
+                    Ok(c) => c,
+                    Err(e) => {
+                        update_status_failed(&app, &id_clone, format!("load collections failed: {e}"));
+                        return;
+                    }
+                };
+                // Build resources + emit are CPU-heavy at Téarma scale — off the
+                // async worker.
+                let out = output_dir_clone.clone();
+                let emit_res = tokio::task::spawn_blocking(move || -> Result<usize, String> {
+                    let resources = build_resources_from_business_csv(
+                        &csv_data,
+                        &graph,
+                        &collections,
+                        BusinessDataCsvOptions {
+                            strict_concepts: false,
+                            uuid_namespace: Some(TEARMA_UUID_NS.to_string()),
+                            ..Default::default()
+                        },
+                    )
+                    .map_err(|e| format!("build resources failed: {e}"))?;
+                    let n = resources.len();
+                    write_prebuild_and_emit_v2(&out, &graph, &resources, &collections)?;
+                    Ok(n)
+                })
+                .await;
+                match emit_res {
+                    Ok(Ok(n)) => eprintln!("[builder] tbx-v2 emitted {n} resources"),
+                    Ok(Err(e)) => {
+                        update_status_failed(&app, &id_clone, e);
+                        return;
+                    }
+                    Err(e) => {
+                        update_status_failed(&app, &id_clone, format!("tbx-v2 task panicked: {e}"));
+                        return;
+                    }
+                }
+                let output_path = output_dir_clone.to_string_lossy().to_string();
+                update_status_complete(&app, &id_clone, output_path);
+            }
         } else if format_clone == "prebuild-v2" {
             // "prebuild-v2": extract the emit-layout prebuild verbatim, then run
             // the streaming emitter to produce a v2 head (head.sqlite + chunks),
