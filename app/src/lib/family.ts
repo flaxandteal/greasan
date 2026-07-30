@@ -40,7 +40,7 @@ export interface SuggestedLayer {
   name: string;
   url: string;
   label: string;
-  format: 'built' | 'prebuild' | 'tbx';
+  format: 'built' | 'prebuild' | 'prebuild-v2' | 'tbx';
 }
 
 export interface FamilyConfig {
@@ -163,6 +163,12 @@ export const FAMILIES: Record<FamilyId, FamilyConfig> = {
         url: 'http://localhost:8080/macbain-layer.tar.gz',
         label: 'MacBain — Scottish Gaelic etymology (1911)',
         format: 'built',
+      },
+      {
+        name: 'macbain-emit',
+        url: 'file:///data/user/0/org.flaxandteal.greasan/files/macbain-prebuild-v2.tar.gz',
+        label: 'MacBain (on-device emit — v2 test)',
+        format: 'prebuild-v2',
       },
     ],
   },

@@ -723,9 +723,29 @@ export async function initOfflineLayers(): Promise<void> {
 export function registerV2Layers(): void {
   dynamicLayers.length = 0;
   for (const layer of activeV2Layers) {
-    dynamicLayers.push({ name: layer.name, baseUrl: layer.headDir, pagefindBase: layer.pagefindBase });
+    // `|| null`: an installed v2 head has no pagefind base yet (empty string);
+    // a null base is skipped by the search collector, an empty one would 404.
+    dynamicLayers.push({ name: layer.name, baseUrl: layer.headDir, pagefindBase: layer.pagefindBase || null });
   }
   // A newly-registered layer may introduce new dialect values.
+  dialectCache.clear();
+}
+
+/**
+ * Register an INSTALLED v2 head (built on-device via `build_layer` format
+ * `prebuild-v2`, or restored from disk) as an active layer so its resources join
+ * the v2 head-dir set — `currentV2HeadDirs()` → hydrate/query/descriptors. Unlike
+ * `addDynamicLayer` (v1 SparqlStore) this never constructs a store; it just adds
+ * the head dir. Text search (Pagefind) for installed heads is a follow-on, so it
+ * registers with a NULL pagefind base (search skips it; hydrate/badges still work).
+ * Idempotent by name (reinstall replaces).
+ */
+export function addV2Layer(headDir: string, name: string): void {
+  activeV2Layers = activeV2Layers.filter((l) => l.name !== name);
+  activeV2Layers.push({ name, headDir, pagefindBase: '' });
+  const i = dynamicLayers.findIndex((l) => l.name === name);
+  if (i >= 0) dynamicLayers.splice(i, 1);
+  dynamicLayers.push({ name, baseUrl: headDir, pagefindBase: null });
   dialectCache.clear();
 }
 

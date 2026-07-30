@@ -1,8 +1,8 @@
 import { writable, derived, readable, get, type Writable } from 'svelte/store';
 import { ready } from './wasm';
 import { FAMILIES, DEFAULT_FAMILY, layerSwatch, type FamilyId } from './family';
-import { switchFamily, addDynamicLayer, removeDynamicLayer, getDynamicLayers, registerV2Layers, initOfflineLayers, setHiddenLayers, search, loadEntryFlagged, type DynamicLayerInfo, type ExampleDetail } from './dictionary';
-import { buildLayer, waitForBuild, listLayers, assetUrl, removeLayerFiles, type BuildLayerStatus } from './tauri-builder';
+import { switchFamily, addDynamicLayer, addV2Layer, removeDynamicLayer, getDynamicLayers, registerV2Layers, initOfflineLayers, setHiddenLayers, search, loadEntryFlagged, type DynamicLayerInfo, type ExampleDetail } from './dictionary';
+import { buildLayer, waitForBuild, listLayers, listV2Layers, assetUrl, removeLayerFiles, type BuildLayerStatus } from './tauri-builder';
 import type { SearchLang } from './dictionary';
 
 export type { DynamicLayerInfo } from './dictionary';
@@ -268,8 +268,14 @@ export async function importLayer(sourceUrl: string, name: string, format = 'pre
   }
 
   const outputPath = finalStatus.output_path!;
-  const baseUrl = layerBaseUrl(name, outputPath);
-  await addDynamicLayer(baseUrl, name);
+  if (format === 'prebuild-v2') {
+    // Installed v2 head: register its dir into the native v2 head-dir set
+    // (hydrate/query), not the v1 SparqlStore. See addV2Layer.
+    addV2Layer(outputPath, name);
+  } else {
+    const baseUrl = layerBaseUrl(name, outputPath);
+    await addDynamicLayer(baseUrl, name);
+  }
   layers.set(getDynamicLayers());
 
   buildProgress.set(null);
@@ -350,11 +356,31 @@ export async function bootstrapLayers(): Promise<void> {
     preparingDictionary.set(false);
   }
   registerV2Layers();
+  // Re-add any user-installed v2 heads (built on-device via `prebuild-v2`),
+  // persisted on disk under layers/<name>/head.sqlite, into the active head-dir
+  // set. This is the v2 counterpart of restoreLayers (which is v1-only).
+  await restoreV2Layers();
   // Re-apply persisted visibility now that the real layer set is known:
   // `setHiddenLayers` strips the base layer, and until initOfflineLayers has
   // run that base is the dev constant, not the installed one.
   setHiddenLayers(get(hiddenLayerNames));
   layers.set(getDynamicLayers());
+}
+
+/**
+ * Restore user-installed v2 heads from disk on startup. Scans layers/<name>/ for
+ * a `head.sqlite` (`list_v2_layers`) and re-registers each via `addV2Layer` so it
+ * rejoins `currentV2HeadDirs()`. The v2 sibling of `restoreLayers` (v1 summary.bin).
+ */
+export async function restoreV2Layers(): Promise<void> {
+  try {
+    const existing = await listV2Layers();
+    for (const layer of existing) {
+      addV2Layer(layer.output_path, layer.layer_id);
+    }
+  } catch (err) {
+    console.warn('[store] restoreV2Layers failed:', err);
+  }
 }
 
 /** Restore previously-built layers from disk on app startup. */

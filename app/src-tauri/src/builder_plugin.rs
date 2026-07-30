@@ -177,6 +177,82 @@ fn layers_dir<R: Runtime>(app: &AppHandle<R>) -> Result<PathBuf, String> {
     Ok(app_data.join("layers"))
 }
 
+/// Extract a tar.gz VERBATIM into `dest`, preserving the archive's directory
+/// structure (only stripping a leading `./`). Used to lay an emit-layout prebuild
+/// (`graphs/resource_models/`, `business_data/`, `reference_data/`, `manifest.json`)
+/// back onto disk so the emitter can stream it. Unlike `extract_built_archive_sync`
+/// it has no desktop zip-unpacking side effect.
+#[cfg(feature = "v2-emit")]
+fn extract_tar_gz_verbatim(bytes: &[u8], dest: &Path) -> Result<(), String> {
+    let decoder = GzDecoder::new(bytes);
+    let mut archive = tar::Archive::new(decoder);
+    std::fs::create_dir_all(dest).map_err(|e| format!("mkdir {}: {e}", dest.display()))?;
+    for entry_result in archive.entries().map_err(|e| format!("tar read error: {e}"))? {
+        let mut entry = entry_result.map_err(|e| format!("tar entry error: {e}"))?;
+        if entry.header().entry_type().is_dir() {
+            continue;
+        }
+        let path = entry
+            .path()
+            .map_err(|e| format!("tar path error: {e}"))?
+            .to_path_buf();
+        let rel = path.to_string_lossy();
+        let rel = rel.trim_start_matches("./");
+        if rel.is_empty() {
+            continue;
+        }
+        let out = dest.join(rel);
+        if let Some(parent) = out.parent() {
+            std::fs::create_dir_all(parent)
+                .map_err(|e| format!("mkdir {}: {e}", parent.display()))?;
+        }
+        let mut buf = Vec::new();
+        entry
+            .read_to_end(&mut buf)
+            .map_err(|e| format!("read {rel}: {e}"))?;
+        std::fs::write(&out, &buf).map_err(|e| format!("write {}: {e}", out.display()))?;
+    }
+    Ok(())
+}
+
+/// The graph id whose `business_data/<id>.json` is largest — the corpus graph
+/// shipped as the head's `graph.json`.
+#[cfg(feature = "v2-emit")]
+fn primary_graph_id(src: &Path) -> Result<String, String> {
+    let bd = src.join("business_data");
+    let mut best: Option<(u64, String)> = None;
+    for e in std::fs::read_dir(&bd)
+        .map_err(|e| format!("read business_data: {e}"))?
+        .flatten()
+    {
+        let p = e.path();
+        if p.extension().and_then(|s| s.to_str()) == Some("json") {
+            let sz = e.metadata().map(|m| m.len()).unwrap_or(0);
+            let stem = p.file_stem().unwrap_or_default().to_string_lossy().to_string();
+            if best.as_ref().map_or(true, |(b, _)| sz > *b) {
+                best = Some((sz, stem));
+            }
+        }
+    }
+    best.map(|(_, id)| id)
+        .ok_or_else(|| "prebuild has no business_data/*.json".to_string())
+}
+
+/// Copy any `pagefind-*.zip` indices bundled beside the prebuild into the head
+/// dir. (Absent for a bare prebuild; present if the packager bundled search.)
+#[cfg(feature = "v2-emit")]
+fn copy_pagefind_indices(src: &Path, dest: &Path) {
+    if let Ok(entries) = std::fs::read_dir(src) {
+        for e in entries.flatten() {
+            let name = e.file_name();
+            let ns = name.to_string_lossy();
+            if ns.starts_with("pagefind-") && ns.ends_with(".zip") {
+                let _ = std::fs::copy(e.path(), dest.join(&*ns));
+            }
+        }
+    }
+}
+
 /// Parse a prebuild tar.gz archive into graphs, resources, and collections.
 ///
 /// Expected archive structure:
@@ -315,8 +391,8 @@ pub async fn build_layer<R: Runtime>(
     format: String,
     layer_name: String,
 ) -> Result<BuildLayerResult, String> {
-    if format != "prebuild" && format != "built" && format != "tbx" {
-        return Err(format!("unsupported format \"{format}\" — only \"prebuild\", \"built\", and \"tbx\" are supported"));
+    if format != "prebuild" && format != "prebuild-v2" && format != "built" && format != "tbx" {
+        return Err(format!("unsupported format \"{format}\" — only \"prebuild\", \"prebuild-v2\", \"built\", and \"tbx\" are supported"));
     }
 
     let layer_id = uuid::Uuid::new_v4().to_string();
@@ -543,6 +619,96 @@ pub async fn build_layer<R: Runtime>(
             // 9. Complete
             let output_path = output_dir_clone.to_string_lossy().to_string();
             update_status_complete(&app, &id_clone, output_path);
+        } else if format_clone == "prebuild-v2" {
+            // "prebuild-v2": extract the emit-layout prebuild verbatim, then run
+            // the streaming emitter to produce a v2 head (head.sqlite + chunks),
+            // which the app loads natively via currentV2HeadDirs — NOT the v1
+            // flat artifacts build_to_memory writes. Emit is memory-bounded (see
+            // HANDOFF-streaming-build.md); requires the v2-emit build.
+            #[cfg(not(feature = "v2-emit"))]
+            {
+                update_status_failed(
+                    &app,
+                    &id_clone,
+                    "prebuild-v2 requires a v2-emit build".into(),
+                );
+                return;
+            }
+            #[cfg(feature = "v2-emit")]
+            {
+                update_status(&app, &id_clone, "extracting", 0.25);
+                let src = output_dir_clone.join(".prebuild-src");
+                let _ = std::fs::remove_dir_all(&src);
+                if let Err(e) = extract_tar_gz_verbatim(&bytes, &src) {
+                    update_status_failed(&app, &id_clone, format!("extract failed: {e}"));
+                    return;
+                }
+
+                // EVERY v2 head composes under this base_uri (regen-layer-v2 and
+                // v2_emit_overlay both hardcode it); `Layers::open` REFUSES to
+                // compose heads that disagree on it, which silently breaks
+                // cross-layer hydrate. The prebuild manifest's base_uri is the
+                // ontology namespace (goidelic#), NOT the compose base_uri — do
+                // not read it here.
+                let base_uri = "https://example.org/".to_string();
+
+                // The graph shipped as the head's graph.json = the one carrying
+                // the most business data (its resources are the corpus).
+                let graph_id = match primary_graph_id(&src) {
+                    Ok(g) => g,
+                    Err(e) => {
+                        update_status_failed(&app, &id_clone, e);
+                        return;
+                    }
+                };
+
+                update_status(&app, &id_clone, "building", 0.4);
+                let src_s = src.to_string_lossy().to_string();
+                let out_s = output_dir_clone.to_string_lossy().to_string();
+                // Emit is CPU-heavy + blocking (~seconds for a small layer, tens
+                // of minutes for tearma); keep it off the async worker thread.
+                let emit_res = tokio::task::spawn_blocking(move || {
+                    // Stringify the error inside the closure: emit's
+                    // Box<dyn Error> is not Send and can't cross spawn_blocking.
+                    ros_madair_emit::emit(&src_s, &out_s, &base_uri).map_err(|e| e.to_string())
+                })
+                .await;
+                match emit_res {
+                    Ok(Ok(_summary)) => {}
+                    Ok(Err(e)) => {
+                        update_status_failed(&app, &id_clone, format!("emit failed: {e}"));
+                        return;
+                    }
+                    Err(e) => {
+                        update_status_failed(&app, &id_clone, format!("emit task panicked: {e}"));
+                        return;
+                    }
+                }
+
+                update_status(&app, &id_clone, "writing", 0.9);
+                // emit does not write graph.json — the head needs it as its base
+                // model (mirrors regen-layer-v2 copying it post-emit).
+                let graph_src = src
+                    .join("graphs/resource_models")
+                    .join(format!("{graph_id}.json"));
+                if let Err(e) =
+                    std::fs::copy(&graph_src, output_dir_clone.join("graph.json"))
+                {
+                    update_status_failed(
+                        &app,
+                        &id_clone,
+                        format!("copy graph.json ({}): {e}", graph_src.display()),
+                    );
+                    return;
+                }
+                // Carry through any pagefind indices bundled in the prebuild.
+                copy_pagefind_indices(&src, &output_dir_clone);
+                // Head is self-contained now; drop the extracted source.
+                let _ = std::fs::remove_dir_all(&src);
+
+                let output_path = output_dir_clone.to_string_lossy().to_string();
+                update_status_complete(&app, &id_clone, output_path);
+            }
         } else {
             // "prebuild" format: parse, build, write
             // 2. Parse
@@ -786,6 +952,35 @@ pub async fn list_layers<R: Runtime>(app: AppHandle<R>) -> Result<Vec<LayerInfo>
         }
     }
 
+    Ok(layers)
+}
+
+/// List locally-built v2 layers (a `head.sqlite` present), so `restoreV2Layers`
+/// can re-register them into the active head-dir set on startup. The v2 sibling
+/// of `list_layers` (which keys on the v1 `summary.bin`).
+#[command]
+pub async fn list_v2_layers<R: Runtime>(app: AppHandle<R>) -> Result<Vec<LayerInfo>, String> {
+    let dir = layers_dir(&app)?;
+    let mut layers = Vec::new();
+    let entries = match std::fs::read_dir(&dir) {
+        Ok(e) => e,
+        Err(_) => return Ok(layers),
+    };
+    for entry in entries.flatten() {
+        let path = entry.path();
+        if path.is_dir() && path.join("head.sqlite").exists() {
+            let layer_id = path
+                .file_name()
+                .unwrap_or_default()
+                .to_string_lossy()
+                .to_string();
+            layers.push(LayerInfo {
+                layer_id,
+                output_path: path.to_string_lossy().to_string(),
+                has_pagefind: layer_has_pagefind_check(&path),
+            });
+        }
+    }
     Ok(layers)
 }
 

@@ -242,10 +242,42 @@ pub fn v2_query(head_dir: String, ir: Value) -> Result<Value, String> {
 // ---------------------------------------------------------------------------
 
 /// Open an ordered layer stack, base first. Precedence = order.
+/// Emit an ERROR-priority line to Android logcat (tag `greasan`), so composition
+/// failures are grep-able with `adb logcat greasan:E` / `adb logcat | grep greasan`.
+/// Tauri does not route Rust `eprintln!` to logcat on Android, so a straight
+/// stderr print is invisible on-device; this uses liblog directly. Off Android it
+/// falls back to stderr.
+pub fn logcat_error(msg: &str) {
+    #[cfg(target_os = "android")]
+    {
+        use std::os::raw::c_char;
+        #[link(name = "log")]
+        extern "C" {
+            fn __android_log_write(prio: i32, tag: *const c_char, text: *const c_char) -> i32;
+        }
+        if let Ok(m) = std::ffi::CString::new(msg) {
+            // 6 = ANDROID_LOG_ERROR
+            unsafe { __android_log_write(6, c"greasan".as_ptr(), m.as_ptr()) };
+        }
+    }
+    #[cfg(not(target_os = "android"))]
+    eprintln!("[greasan] {msg}");
+}
+
 fn open_layers(head_dirs: &[String]) -> Result<Layers, String> {
     let paths: Vec<PathBuf> = head_dirs.iter().map(PathBuf::from).collect();
     let refs: Vec<&Path> = paths.iter().map(PathBuf::as_path).collect();
-    Layers::open(&refs).map_err(|e| e.to_string())
+    Layers::open(&refs).map_err(|e| {
+        // Surface composition failures — most notably a layer whose base_uri
+        // disagrees with the stack, which otherwise breaks hydrate SILENTLY (the
+        // typed error only reaches the JS caller, never logcat). Now grep-able.
+        let msg = format!(
+            "Layers::open FAILED over {} head(s): {e} — dirs: {head_dirs:?}",
+            refs.len()
+        );
+        logcat_error(&msg);
+        msg
+    })
 }
 
 /// Compile a `ros-madair-query` IR against the composed view of a layer stack.
@@ -1121,6 +1153,7 @@ mod tests {
             "merged tree does not contain the headword text 'fear'"
         );
     }
+
 
     /// REVERSE-COGNATE (P12): `Layers::cited_by` over the app's real head stack
     /// (wiktionary-v2-full + macbain-v2). The Irish "fear"

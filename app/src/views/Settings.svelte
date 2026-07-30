@@ -34,7 +34,7 @@
   let layerUrl = $state('');
   let layerName = $state('');
   let layerError = $state('');
-  let layerFormat = $state<'built' | 'prebuild' | 'tbx'>('built');
+  let layerFormat = $state<'built' | 'prebuild' | 'prebuild-v2' | 'tbx'>('built');
   let tbxFilePath = $state('');
 
   let isBuilding = $derived($buildProgress !== null && $buildProgress.state !== 'failed');
@@ -255,6 +255,13 @@
             onclick={() => { layerFormat = 'prebuild'; tbxFilePath = ''; layerUrl = ''; }}
           >
             {$t('settings.formatPrebuild')}
+          </button>
+          <button
+            class="ge-seg"
+            class:active={layerFormat === 'prebuild-v2'}
+            onclick={() => { layerFormat = 'prebuild-v2'; tbxFilePath = ''; layerUrl = ''; }}
+          >
+            v2 head
           </button>
           <button
             class="ge-seg"

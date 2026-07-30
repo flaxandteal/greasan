@@ -39,6 +39,11 @@ export async function listLayers(): Promise<LayerInfo[]> {
   return invoke('list_layers');
 }
 
+/** List locally-built v2 layers (a `head.sqlite` present) for restore on startup. */
+export async function listV2Layers(): Promise<LayerInfo[]> {
+  return invoke('list_v2_layers');
+}
+
 /** Check if a named index directory exists on-device. Returns the path or null. */
 export async function checkLocalIndex(name: string): Promise<string | null> {
   return invoke('check_local_index', { name });
