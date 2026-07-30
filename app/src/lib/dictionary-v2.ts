@@ -220,10 +220,16 @@ export async function loadEntryV2(uri: string, headDirs: string[]): Promise<Entr
     const dialect = label(tree.dialect);
     // Grammatical class (BuNaMo): noun declension / verb conjugation / adjective
     // declension — a plain localized string on the composed tree ('1'..'5', 'irr', '').
-    const grammarClass = localStr(tree.grammar_class) || undefined;
-    // Confidence concept ('attested' / 'inferred' / 'uncertain'); non-attested
-    // gets a '?' beside the declension in the UI.
-    const grammarClassConfidence = label(tree.grammar_class_confidence) || undefined;
+    // grammar_class + its confidence live NESTED under the `grammar_class_group`
+    // semantic nodegroup (the model promoted grammar_class to a nodegroup with a
+    // confidence reference — commit 9d6e23d). Top-level `tree.grammar_class` no
+    // longer exists, so the declension stopped rendering; read from the group.
+    const gcgRaw = tree.grammar_class_group;
+    const gcg = (Array.isArray(gcgRaw) ? gcgRaw[0] : gcgRaw) as Record<string, unknown> | undefined;
+    const grammarClass = localStr(gcg?.grammar_class) || undefined;
+    // Confidence ('attested' / 'inferred' / 'uncertain'); non-attested gets a '?'
+    // beside the declension in the UI.
+    const grammarClassConfidence = localStr(gcg?.grammar_class_confidence) || undefined;
 
     // Pronunciation — cardinality n.
     const ipa: string[] = [];
