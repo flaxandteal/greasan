@@ -748,6 +748,21 @@ pub async fn build_layer<R: Runtime>(
                     .map_err(|e| format!("build resources failed: {e}"))?;
                     let n = resources.len();
                     write_prebuild_and_emit_v2(&out, &graph, &resources, &collections)?;
+                    // Build pagefind indices INTO the head dir so the emitted v2
+                    // layer is searchable (headword + gloss). Same builder as the
+                    // v1 "tbx" branch; the zips land beside head.sqlite where the
+                    // v2 loader/`layer_has_pagefind_check` expect them. Non-fatal:
+                    // a head with no index still loads, it just won't surface in
+                    // search. Pagefind's futures are !Send, but this closure is
+                    // already on a spawn_blocking thread with no active runtime,
+                    // so build_pagefind_indices_sync's own current-thread runtime
+                    // is safe here.
+                    let mut desc_graph = graph.clone();
+                    let _ = desc_graph.set_descriptor_template("name", "<Headword>");
+                    let _ = desc_graph.set_descriptor_template("description", "<Gloss>");
+                    if let Err(e) = build_pagefind_indices_sync(&desc_graph, &resources, &out) {
+                        eprintln!("[builder] tbx-v2 pagefind failed (non-fatal): {e}");
+                    }
                     Ok(n)
                 })
                 .await;
@@ -1384,7 +1399,23 @@ const CORE_PREFIX: &str = "core-goidelic";
 fn load_core_graph<R: Runtime>(app: &AppHandle<R>, graph_id: &str) -> Result<StaticGraph, String> {
     let asset_path = format!("{CORE_PREFIX}/graphs/{graph_id}.json");
     let bytes = load_core_asset(app, &asset_path)?;
-    serde_json::from_slice(&bytes).map_err(|e| format!("parse graph {graph_id}: {e}"))
+    // The core bundle ships the Arches export wrapper `{"graph":[<graph>]}`; the
+    // prebuild/head path uses a flat StaticGraph. Accept either — flat first,
+    // then unwrap the wrapper.
+    if let Ok(g) = serde_json::from_slice::<StaticGraph>(&bytes) {
+        return Ok(g);
+    }
+    #[derive(serde::Deserialize)]
+    struct ArchesGraphExport {
+        graph: Vec<StaticGraph>,
+    }
+    let export: ArchesGraphExport = serde_json::from_slice(&bytes)
+        .map_err(|e| format!("parse graph {graph_id}: {e}"))?;
+    export
+        .graph
+        .into_iter()
+        .find(|g| g.graphid == graph_id)
+        .ok_or_else(|| format!("graph {graph_id}: not found in export"))
 }
 
 /// Load all SkosCollections from the core bundle.
@@ -1455,11 +1486,14 @@ fn load_core_collections<R: Runtime>(app: &AppHandle<R>) -> Result<Vec<SkosColle
 /// Extract collection IDs from the concept_hierarchy.json structure.
 /// The hierarchy is a nested JSON object where keys are collection UUIDs.
 fn collect_collection_ids(value: &serde_json::Value, ids: &mut std::collections::HashSet<String>) {
+    // UUIDs are 36 chars with 4 hyphens.
+    fn is_uuid(s: &str) -> bool {
+        s.len() == 36 && s.chars().filter(|c| *c == '-').count() == 4
+    }
     match value {
         serde_json::Value::Object(map) => {
             for (key, val) in map {
-                // UUIDs are 36 chars with hyphens
-                if key.len() == 36 && key.chars().filter(|c| *c == '-').count() == 4 {
+                if is_uuid(key) {
                     ids.insert(key.clone());
                 }
                 collect_collection_ids(val, ids);
@@ -1469,6 +1503,14 @@ fn collect_collection_ids(value: &serde_json::Value, ids: &mut std::collections:
             for item in arr {
                 collect_collection_ids(item, ids);
             }
+        }
+        // The concept_hierarchy is a LIST of collection objects whose id is a bare
+        // UUID VALUE (not a key) — e.g. the small "Confidence Levels" collection.
+        // Collect those too; a non-collection UUID just misses its file and is
+        // skipped. Without this the confidence concepts never reach the head and
+        // the declension '?' cannot resolve.
+        serde_json::Value::String(s) if is_uuid(s) => {
+            ids.insert(s.clone());
         }
         _ => {}
     }

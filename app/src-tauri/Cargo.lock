@@ -1762,11 +1762,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "gramadan"
+version = "0.1.0"
+dependencies = [
+ "once_cell",
+ "quick-xml 0.37.5",
+ "regex",
+]
+
+[[package]]
 name = "greasan"
 version = "0.1.0"
 dependencies = [
  "alizarin-core",
  "flate2",
+ "gramadan",
  "jni",
  "ndk",
  "ndk-context",
