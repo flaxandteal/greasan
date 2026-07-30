@@ -221,6 +221,9 @@ export async function loadEntryV2(uri: string, headDirs: string[]): Promise<Entr
     // Grammatical class (BuNaMo): noun declension / verb conjugation / adjective
     // declension — a plain localized string on the composed tree ('1'..'5', 'irr', '').
     const grammarClass = localStr(tree.grammar_class) || undefined;
+    // Confidence concept ('attested' / 'inferred' / 'uncertain'); non-attested
+    // gets a '?' beside the declension in the UI.
+    const grammarClassConfidence = label(tree.grammar_class_confidence) || undefined;
 
     // Pronunciation — cardinality n.
     const ipa: string[] = [];
@@ -358,6 +361,7 @@ export async function loadEntryV2(uri: string, headDirs: string[]): Promise<Entr
       dialect: dialect || undefined,
       gender,
       grammarClass,
+      grammarClassConfidence,
       senses,
       forms,
       ipa,

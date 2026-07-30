@@ -58,7 +58,7 @@ function countResources(head) {
 
 // --- Layer catalogue metadata. Concept labels MUST match models/layer/collections.csv. ---
 const LAYERS = [
-  { slug: 'wiktionary', head: 'wiktionary-v2', name: 'Vicífhoclóir · Wiktionary',
+  { slug: 'wiktionary', head: 'wiktionary-v2-full', name: 'Vicífhoclóir · Wiktionary',
     licence: 'CC BY-SA 4.0', attribution: 'Wiktionary contributors (CC BY-SA 4.0)',
     types: ['Glosses', 'Senses', 'Etymology', 'Pronunciation', 'Cognates'], formats: ['Arches JSON', 'RM'],
     swatch: 'var(--layer-wk)', default_on: 'true', descType: 'Overview',

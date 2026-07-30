@@ -49,9 +49,13 @@
     const g = entry.gender === 'masculine' ? 'm' : entry.gender === 'feminine' ? 'f' : '';
     const c = entry.grammarClass ?? '';
     const kind = posKind(entry.pos);
-    if (kind === 'noun') return (g + c) || g;
-    if (kind === 'adjective') return c ? 'a' + c : '';
-    if (kind === 'verb') return c && ORDINAL[+c] ? ORDINAL[+c] + ' conj.' : '';
+    // An inferred/uncertain declension (gramadan guess, not attested) gets a
+    // trailing '?' beside the class so the reader knows it is not sourced.
+    const conf = (entry.grammarClassConfidence ?? '').toLowerCase();
+    const q = c && conf && !conf.startsWith('attest') ? '?' : '';
+    if (kind === 'noun') return c ? g + c + q : g;
+    if (kind === 'adjective') return c ? 'a' + c + q : '';
+    if (kind === 'verb') return c && ORDINAL[+c] ? ORDINAL[+c] + ' conj.' + q : '';
     return g;
   });
 

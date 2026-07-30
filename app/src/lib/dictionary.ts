@@ -44,6 +44,10 @@ export interface EntryDetail {
   /** Grammatical class token from BuNaMo: noun declension ('1'..'5'), verb conjugation,
    *  adjective declension. Combined with pos/gender into the title badge (e.g. 'm1'). */
   grammarClass?: string;
+  /** Confidence of `grammarClass`: 'attested' (explicit source/BuNaMo) vs
+   *  'inferred'/'uncertain' (gramadan guess). Non-attested renders a '?' beside
+   *  the class badge. */
+  grammarClassConfidence?: string;
   senses: Array<{ gloss: string; examples: string[]; sourceLabel?: string; dialect?: string }>;
   forms: Array<{ writtenRep: string; tags: string[] }>;
   ipa: string[];
