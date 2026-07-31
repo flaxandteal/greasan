@@ -121,6 +121,19 @@ fn default_base_uri() -> String {
     "https://flaxandteal.org/ontology/goidelic#".to_string()
 }
 
+/// Human-readable notification line for a build state (shown in the shade).
+fn notif_label(state: &str) -> &'static str {
+    match state {
+        "fetching" => "Fetching source…",
+        "extracting" => "Extracting…",
+        "parsing" => "Parsing data…",
+        "building" => "Building resources…",
+        "indexing" => "Building index…",
+        "writing" => "Writing…",
+        _ => "Working…",
+    }
+}
+
 fn update_status<R: Runtime>(app: &AppHandle<R>, layer_id: &str, state: &str, progress: f64) {
     if let Some(st) = app.try_state::<BuilderState>() {
         if let Ok(mut map) = st.lock() {
@@ -135,6 +148,8 @@ fn update_status<R: Runtime>(app: &AppHandle<R>, layer_id: &str, state: &str, pr
             );
         }
     }
+    // Mirror progress to the foreground-service notification (no-op off Android).
+    crate::fg_service::update(notif_label(state), (progress * 100.0).round() as i32);
 }
 
 fn update_status_complete<R: Runtime>(app: &AppHandle<R>, layer_id: &str, output_path: String) {
@@ -151,6 +166,7 @@ fn update_status_complete<R: Runtime>(app: &AppHandle<R>, layer_id: &str, output
             );
         }
     }
+    crate::fg_service::stop();
 }
 
 fn update_status_failed<R: Runtime>(app: &AppHandle<R>, layer_id: &str, error: String) {
@@ -167,6 +183,7 @@ fn update_status_failed<R: Runtime>(app: &AppHandle<R>, layer_id: &str, error: S
             );
         }
     }
+    crate::fg_service::stop();
 }
 
 fn layers_dir<R: Runtime>(app: &AppHandle<R>) -> Result<PathBuf, String> {
@@ -436,9 +453,13 @@ fn stream_tbx_v2_build(
     source_label: &str,
     uuid_ns: &str,
     batch_size: usize,
+    report: &dyn Fn(&str, f64),
 ) -> Result<usize, String> {
     use std::io::Write;
     let stamp = |m: String| crate::v2::logcat_error(&format!("[tbx-v2 timing] {m}"));
+    // Number of batches — used to animate the progress bar/notification across
+    // the long build+pagefind-add phase (the visibly slow part).
+    let n_batches = records.len().div_ceil(batch_size).max(1);
 
     // Prebuild scaffolding (graph, collections, manifest) — no resources yet.
     let src = out_dir.join(".prebuild-src");
@@ -498,7 +519,7 @@ fn stream_tbx_v2_build(
         let mut total = 0usize;
         let mut build_ms = 0u128;
 
-        for batch in records.chunks(batch_size) {
+        for (bi, batch) in records.chunks(batch_size).enumerate() {
             let mut csv = header.clone();
             tbx_parser::append_records_csv(batch, source_label, &mut seen_ids, &mut csv);
             let t = std::time::Instant::now();
@@ -524,6 +545,9 @@ fn stream_tbx_v2_build(
                 pagefind_add_resource(&mut ga, &mut en, &desc_graph, r).await;
                 total += 1;
             }
+            // The build+pagefind-add loop is the long, visible phase — animate
+            // it across 0.10..0.75 so the bar/notification actually moves.
+            report("building", 0.10 + 0.65 * (bi + 1) as f64 / n_batches as f64);
         }
         w.write_all(br#"]}}"#).map_err(|e| e.to_string())?;
         w.flush().map_err(|e| e.to_string())?;
@@ -534,6 +558,9 @@ fn stream_tbx_v2_build(
             "build_resources (batched, size {batch_size}): {build_ms} ms, {total} resources"
         ));
 
+        // emit and pagefind-finalize are single opaque steps (no sub-progress
+        // available), so the bar parks at these marks for their duration.
+        report("indexing", 0.78);
         let t = std::time::Instant::now();
         ros_madair_emit::emit(
             src.to_str().ok_or("non-utf8 prebuild path")?,
@@ -543,6 +570,7 @@ fn stream_tbx_v2_build(
         .map_err(|e| format!("emit: {e}"))?;
         stamp(format!("emit: {} ms", t.elapsed().as_millis()));
 
+        report("indexing", 0.88);
         let t = std::time::Instant::now();
         pagefind_finalize(&mut ga, &mut en, out_dir).await?;
         stamp(format!("pagefind: {} ms", t.elapsed().as_millis()));
@@ -715,6 +743,10 @@ pub async fn build_layer<R: Runtime>(
 
     // Spawn async task — don't block the command handler
     tauri::async_runtime::spawn(async move {
+        // Start the foreground service so the build survives backgrounding and
+        // shows a progress notification. Stopped by update_status_complete /
+        // _failed on every exit path. No-op off Android.
+        crate::fg_service::start(notif_label("fetching"));
         // 1. Fetch (content:// via JNI, file:// from disk, otherwise reqwest)
         update_status(&app, &id_clone, "fetching", 0.1);
         // For Android content:// URIs, stream to a temp file via JNI first
@@ -996,7 +1028,10 @@ pub async fn build_layer<R: Runtime>(
                 // corpus, so full Téarma (~189k) no longer OOMs. CPU-heavy —
                 // off the async worker.
                 let out = output_dir_clone.clone();
+                let app_cb = app.clone();
+                let id_cb = id_clone.clone();
                 let emit_res = tokio::task::spawn_blocking(move || -> Result<usize, String> {
+                    let report = |state: &str, p: f64| update_status(&app_cb, &id_cb, state, p);
                     stream_tbx_v2_build(
                         &out,
                         &graph,
@@ -1005,6 +1040,7 @@ pub async fn build_layer<R: Runtime>(
                         "TE",
                         TEARMA_UUID_NS,
                         5000,
+                        &report,
                     )
                 })
                 .await;

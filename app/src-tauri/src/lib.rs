@@ -25,6 +25,10 @@ mod offline;
 #[cfg(target_os = "android")]
 mod android_ctx;
 
+/// Android foreground-service bridge — keeps a long on-device build alive when
+/// backgrounded and shows a progress notification. No-op off Android.
+mod fg_service;
+
 use std::collections::HashMap;
 use std::sync::Mutex;
 

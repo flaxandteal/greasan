@@ -202,14 +202,15 @@
 
     {#if isBuilding && $buildProgress}
       <div style="padding:6px 0;">
-        <div style="font-size:var(--fs-small);color:var(--fg-muted);margin-bottom:4px;">
-          {$buildProgress.state === 'fetching' ? $t('settings.buildFetching') :
+        <div style="font-size:var(--fs-small);color:var(--fg-muted);margin-bottom:4px;display:flex;justify-content:space-between;gap:8px;">
+          <span>{$buildProgress.state === 'fetching' ? $t('settings.buildFetching') :
            $buildProgress.state === 'extracting' ? $t('settings.buildExtracting') :
            $buildProgress.state === 'parsing' ? $t('settings.buildParsing') :
            $buildProgress.state === 'building' ? $t('settings.buildBuilding') :
            $buildProgress.state === 'indexing' ? $t('settings.buildIndexing') :
            $buildProgress.state === 'writing' ? $t('settings.buildWriting') :
-           $buildProgress.state}
+           $buildProgress.state}</span>
+          <span style="font-variant-numeric:tabular-nums;">{Math.round($buildProgress.progress * 100)}%</span>
         </div>
         <div style="height:4px;background:var(--srf-rule);border-radius:2px;overflow:hidden;">
           <div style="height:100%;background:var(--accent-deep);border-radius:2px;transition:width 0.3s;width:{$buildProgress.progress * 100}%;"></div>
