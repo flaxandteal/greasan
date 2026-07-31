@@ -311,6 +311,251 @@ fn write_prebuild_and_emit_v2(
     Ok(())
 }
 
+/// Create one pagefind index forced to `lang`.
+#[cfg(feature = "v2-emit")]
+fn pagefind_new_index(lang: &str) -> Result<PagefindIndex, String> {
+    let cfg = PagefindServiceConfig::builder()
+        .force_language(lang.to_string())
+        .build();
+    PagefindIndex::new(Some(cfg)).map_err(|e| format!("pagefind {lang} init: {e}"))
+}
+
+/// Add one resource to the ga (headword) and en (gloss) pagefind indices.
+/// Mirrors the record shape of `build_pagefind_indices_inner` so the streaming
+/// tbx-v2 path produces the same index as the batch v1 path — but one resource
+/// at a time, so the full resource set is never held in memory at once.
+#[cfg(feature = "v2-emit")]
+async fn pagefind_add_resource(
+    ga: &mut PagefindIndex,
+    en: &mut PagefindIndex,
+    indexed_graph: &StaticGraph,
+    resource: &StaticResource,
+) {
+    let uuid = &resource.resourceinstance.resourceinstanceid;
+    let Some(tiles) = &resource.tiles else { return };
+    let descriptors = indexed_graph.build_descriptors(tiles);
+    let headword = descriptors.name.as_deref().unwrap_or("").trim();
+    if headword.is_empty() {
+        return;
+    }
+    let gloss = descriptors
+        .description
+        .as_deref()
+        .unwrap_or("")
+        .trim()
+        .to_string();
+
+    let headword_norm = strip_diacritics(headword);
+    let content = if headword == headword_norm {
+        headword.to_string()
+    } else {
+        format!("{headword} {headword_norm}")
+    };
+    let mut meta = BTreeMap::new();
+    meta.insert("title".to_string(), headword.to_string());
+    meta.insert("gloss".to_string(), gloss.clone());
+    meta.insert("dialect".to_string(), "GA".to_string());
+    let mut filters = BTreeMap::new();
+    filters.insert("dialect".to_string(), vec!["GA".to_string()]);
+
+    if let Err(e) = ga
+        .add_custom_record(
+            uuid.clone(),
+            content,
+            "ga".to_string(),
+            Some(meta),
+            Some(filters.clone()),
+            None,
+        )
+        .await
+    {
+        eprintln!("[pagefind] ga record failed for {uuid}: {e}");
+    }
+    if !gloss.is_empty() {
+        let mut en_meta = BTreeMap::new();
+        en_meta.insert("title".to_string(), gloss.clone());
+        en_meta.insert("headword".to_string(), headword.to_string());
+        en_meta.insert("dialect".to_string(), "GA".to_string());
+        if let Err(e) = en
+            .add_custom_record(
+                uuid.clone(),
+                gloss.clone(),
+                "en".to_string(),
+                Some(en_meta),
+                Some(filters),
+                None,
+            )
+            .await
+        {
+            eprintln!("[pagefind] en record failed for {uuid}: {e}");
+        }
+    }
+}
+
+/// Write + zip both pagefind indices into `output_dir` (beside `head.sqlite`).
+#[cfg(feature = "v2-emit")]
+async fn pagefind_finalize(
+    ga: &mut PagefindIndex,
+    en: &mut PagefindIndex,
+    output_dir: &Path,
+) -> Result<(), String> {
+    ga.write_files(Some(output_dir.join("pagefind-ga").to_string_lossy().to_string()))
+        .await
+        .map_err(|e| format!("pagefind ga write: {e}"))?;
+    en.write_files(Some(output_dir.join("pagefind-en").to_string_lossy().to_string()))
+        .await
+        .map_err(|e| format!("pagefind en write: {e}"))?;
+    for dir_name in ["pagefind-ga", "pagefind-en"] {
+        let src = output_dir.join(dir_name);
+        let dest = output_dir.join(format!("{dir_name}.zip"));
+        if src.exists() {
+            zip_directory_store(&src, &dest)?;
+            let _ = std::fs::remove_dir_all(&src);
+        }
+    }
+    Ok(())
+}
+
+/// Streaming tbx-v2 build: the memory-bounded counterpart of
+/// `build_resources_from_business_csv` (whole corpus → `Vec` → emit), which
+/// OOMs at Téarma scale (~189k resources ≈ 3GB resident before emit ever runs).
+///
+/// Instead of materialising every resource at once, this builds resources in
+/// batches of `batch_size`, streams each batch straight to the `business_data`
+/// JSON on disk (and into the pagefind indices), then drops it — so peak memory
+/// is one batch, not the whole corpus. The existing streaming `emit` then reads
+/// the finished JSON file. Output is byte-identical to the monolithic path:
+/// `append_records_csv` threads the ResourceID dedup across batches, so RIDs
+/// (and thus UUIDs) and resource order match exactly.
+#[cfg(feature = "v2-emit")]
+fn stream_tbx_v2_build(
+    out_dir: &Path,
+    graph: &StaticGraph,
+    collections: &[SkosCollection],
+    records: Vec<tbx_parser::TbxRecord>,
+    source_label: &str,
+    uuid_ns: &str,
+    batch_size: usize,
+) -> Result<usize, String> {
+    use std::io::Write;
+    let stamp = |m: String| crate::v2::logcat_error(&format!("[tbx-v2 timing] {m}"));
+
+    // Prebuild scaffolding (graph, collections, manifest) — no resources yet.
+    let src = out_dir.join(".prebuild-src");
+    let _ = std::fs::remove_dir_all(&src);
+    let gid = graph.graphid.clone();
+    let models = src.join("graphs/resource_models");
+    let bd = src.join("business_data");
+    let cols_dir = src.join("reference_data/collections");
+    for d in [&models, &bd, &cols_dir] {
+        std::fs::create_dir_all(d).map_err(|e| format!("mkdir {}: {e}", d.display()))?;
+    }
+    std::fs::write(
+        models.join(format!("{gid}.json")),
+        serde_json::to_vec(graph).map_err(|e| e.to_string())?,
+    )
+    .map_err(|e| e.to_string())?;
+    for col in collections {
+        std::fs::write(
+            cols_dir.join(format!("{}.json", col.id)),
+            serde_json::to_vec(col).map_err(|e| e.to_string())?,
+        )
+        .map_err(|e| e.to_string())?;
+    }
+    std::fs::write(
+        src.join("manifest.json"),
+        r#"{"base_uri":"https://example.org/"}"#,
+    )
+    .map_err(|e| e.to_string())?;
+
+    // Descriptor graph for pagefind headword/gloss extraction.
+    let mut desc_graph = graph.clone();
+    let _ = desc_graph.set_descriptor_template("name", "<Headword>");
+    let _ = desc_graph.set_descriptor_template("description", "<Gloss>");
+
+    // pagefind's futures are !Send; this runs on a spawn_blocking thread with no
+    // ambient runtime, so a dedicated current-thread runtime is safe. emit and
+    // build_resources are sync and simply block this single task — fine.
+    let rt = tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+        .map_err(|e| format!("pagefind runtime: {e}"))?;
+
+    let total = rt.block_on(async {
+        let mut ga = pagefind_new_index("ga")?;
+        let mut en = pagefind_new_index("en")?;
+
+        let bd_path = bd.join(format!("{gid}.json"));
+        let file =
+            std::fs::File::create(&bd_path).map_err(|e| format!("create business_data: {e}"))?;
+        let mut w = std::io::BufWriter::new(file);
+        w.write_all(br#"{"business_data":{"resources":["#)
+            .map_err(|e| e.to_string())?;
+
+        let header = tbx_parser::csv_header();
+        let mut seen_ids: HashMap<String, u32> = HashMap::new();
+        let mut first = true;
+        let mut total = 0usize;
+        let mut build_ms = 0u128;
+
+        for batch in records.chunks(batch_size) {
+            let mut csv = header.clone();
+            tbx_parser::append_records_csv(batch, source_label, &mut seen_ids, &mut csv);
+            let t = std::time::Instant::now();
+            let resources = build_resources_from_business_csv(
+                &csv,
+                graph,
+                collections,
+                BusinessDataCsvOptions {
+                    strict_concepts: false,
+                    uuid_namespace: Some(uuid_ns.to_string()),
+                    ..Default::default()
+                },
+            )
+            .map_err(|e| format!("build resources failed: {e}"))?;
+            build_ms += t.elapsed().as_millis();
+            for r in &resources {
+                if !first {
+                    w.write_all(b",").map_err(|e| e.to_string())?;
+                }
+                first = false;
+                serde_json::to_writer(&mut w, r)
+                    .map_err(|e| format!("serialize resource: {e}"))?;
+                pagefind_add_resource(&mut ga, &mut en, &desc_graph, r).await;
+                total += 1;
+            }
+        }
+        w.write_all(br#"]}}"#).map_err(|e| e.to_string())?;
+        w.flush().map_err(|e| e.to_string())?;
+        drop(w);
+        // Records are no longer needed — free them before the memory-heavy emit.
+        drop(records);
+        stamp(format!(
+            "build_resources (batched, size {batch_size}): {build_ms} ms, {total} resources"
+        ));
+
+        let t = std::time::Instant::now();
+        ros_madair_emit::emit(
+            src.to_str().ok_or("non-utf8 prebuild path")?,
+            out_dir.to_str().ok_or("non-utf8 out path")?,
+            "https://example.org/",
+        )
+        .map_err(|e| format!("emit: {e}"))?;
+        stamp(format!("emit: {} ms", t.elapsed().as_millis()));
+
+        let t = std::time::Instant::now();
+        pagefind_finalize(&mut ga, &mut en, out_dir).await?;
+        stamp(format!("pagefind: {} ms", t.elapsed().as_millis()));
+
+        Ok::<usize, String>(total)
+    })?;
+
+    std::fs::copy(models.join(format!("{gid}.json")), out_dir.join("graph.json"))
+        .map_err(|e| format!("copy graph.json: {e}"))?;
+    let _ = std::fs::remove_dir_all(&src);
+    Ok(total)
+}
+
 /// Parse a prebuild tar.gz archive into graphs, resources, and collections.
 ///
 /// Expected archive structure:
@@ -698,7 +943,18 @@ pub async fn build_layer<R: Runtime>(
             }
             #[cfg(feature = "v2-emit")]
             {
+                // Per-stage timing. All lines go to logcat under tag `greasan`
+                // (via logcat_error) so a full-Téarma run can be profiled from
+                // `adb logcat -s greasan` without a debugger.
+                use std::time::Instant;
+                let t_all = Instant::now();
+                macro_rules! stamp {
+                    ($($a:tt)*) => { crate::v2::logcat_error(&format!("[tbx-v2 timing] {}", format!($($a)*))); };
+                }
+                stamp!("input bytes = {}", bytes.len());
+
                 update_status(&app, &id_clone, "parsing", 0.2);
+                let t = Instant::now();
                 let mut records = match tbx_parser::parse_tbx(&bytes) {
                     Ok(r) => r,
                     Err(e) => {
@@ -706,17 +962,19 @@ pub async fn build_layer<R: Runtime>(
                         return;
                     }
                 };
+                stamp!("parse: {} ms, {} records", t.elapsed().as_millis(), records.len());
+                // The raw XML (~160MB for full Téarma) is done with — reclaim it
+                // before the build so it isn't resident alongside the resources.
+                drop(bytes);
+
+                let t = Instant::now();
                 tbx_parser::enrich_records(&mut records);
-                let csv_data = match tbx_parser::records_to_csv(&records, "TE") {
-                    Ok(c) => c,
-                    Err(e) => {
-                        update_status_failed(&app, &id_clone, format!("CSV generation failed: {e}"));
-                        return;
-                    }
-                };
+                stamp!("enrich: {} ms", t.elapsed().as_millis());
+
                 // Graph + collections from the core bundle (asset resolver — keep
                 // on the async worker, not spawn_blocking).
                 update_status(&app, &id_clone, "building", 0.4);
+                let t = Instant::now();
                 let graph = match load_core_graph(&app, LEXICAL_ENTRY_GRAPH_ID) {
                     Ok(g) => g,
                     Err(e) => {
@@ -731,41 +989,26 @@ pub async fn build_layer<R: Runtime>(
                         return;
                     }
                 };
-                // Build resources + emit are CPU-heavy at Téarma scale — off the
-                // async worker.
+                stamp!("load graph+collections: {} ms", t.elapsed().as_millis());
+
+                // Streaming build: batches → business_data JSON on disk →
+                // streaming emit. Peak memory is one batch, not the whole
+                // corpus, so full Téarma (~189k) no longer OOMs. CPU-heavy —
+                // off the async worker.
                 let out = output_dir_clone.clone();
                 let emit_res = tokio::task::spawn_blocking(move || -> Result<usize, String> {
-                    let resources = build_resources_from_business_csv(
-                        &csv_data,
+                    stream_tbx_v2_build(
+                        &out,
                         &graph,
                         &collections,
-                        BusinessDataCsvOptions {
-                            strict_concepts: false,
-                            uuid_namespace: Some(TEARMA_UUID_NS.to_string()),
-                            ..Default::default()
-                        },
+                        records,
+                        "TE",
+                        TEARMA_UUID_NS,
+                        5000,
                     )
-                    .map_err(|e| format!("build resources failed: {e}"))?;
-                    let n = resources.len();
-                    write_prebuild_and_emit_v2(&out, &graph, &resources, &collections)?;
-                    // Build pagefind indices INTO the head dir so the emitted v2
-                    // layer is searchable (headword + gloss). Same builder as the
-                    // v1 "tbx" branch; the zips land beside head.sqlite where the
-                    // v2 loader/`layer_has_pagefind_check` expect them. Non-fatal:
-                    // a head with no index still loads, it just won't surface in
-                    // search. Pagefind's futures are !Send, but this closure is
-                    // already on a spawn_blocking thread with no active runtime,
-                    // so build_pagefind_indices_sync's own current-thread runtime
-                    // is safe here.
-                    let mut desc_graph = graph.clone();
-                    let _ = desc_graph.set_descriptor_template("name", "<Headword>");
-                    let _ = desc_graph.set_descriptor_template("description", "<Gloss>");
-                    if let Err(e) = build_pagefind_indices_sync(&desc_graph, &resources, &out) {
-                        eprintln!("[builder] tbx-v2 pagefind failed (non-fatal): {e}");
-                    }
-                    Ok(n)
                 })
                 .await;
+                stamp!("TOTAL wall: {} ms", t_all.elapsed().as_millis());
                 match emit_res {
                     Ok(Ok(n)) => eprintln!("[builder] tbx-v2 emitted {n} resources"),
                     Ok(Err(e)) => {

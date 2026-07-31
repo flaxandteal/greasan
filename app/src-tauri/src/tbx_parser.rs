@@ -666,13 +666,25 @@ pub fn enrich_records(records: &mut [TbxRecord]) {
 }
 
 /// Convert parsed TBX records into business-data CSV.
-pub fn records_to_csv(records: &[TbxRecord], source_label: &str) -> Result<String, String> {
-    let mut out = String::new();
-    out.push_str(&CSV_COLUMNS.join(","));
-    out.push('\n');
+/// The CSV header line (with trailing newline). Each streamed batch is a
+/// self-contained CSV: this header followed by [`append_records_csv`] rows.
+pub fn csv_header() -> String {
+    let mut h = CSV_COLUMNS.join(",");
+    h.push('\n');
+    h
+}
 
-    let mut seen_ids: HashMap<String, u32> = HashMap::new();
-
+/// Append CSV rows for `records` to `out`, threading `seen_ids` so ResourceID
+/// dedup is stable across batched calls — a sequence of batches produces the
+/// exact same rows (and thus the same resource UUIDs) as a single call over
+/// all records. This is what lets the streaming build split the corpus into
+/// memory-bounded batches without changing the output.
+pub fn append_records_csv(
+    records: &[TbxRecord],
+    source_label: &str,
+    seen_ids: &mut HashMap<String, u32>,
+    out: &mut String,
+) {
     for rec in records {
         let base_id = slugify(&rec.word, &rec.pos, "ga");
         let rid = match seen_ids.get(&base_id) {
@@ -722,7 +734,12 @@ pub fn records_to_csv(records: &[TbxRecord], source_label: &str) -> Result<Strin
             out.push('\n');
         }
     }
+}
 
+pub fn records_to_csv(records: &[TbxRecord], source_label: &str) -> Result<String, String> {
+    let mut out = csv_header();
+    let mut seen_ids: HashMap<String, u32> = HashMap::new();
+    append_records_csv(records, source_label, &mut seen_ids, &mut out);
     Ok(out)
 }
 
