@@ -25,7 +25,9 @@ set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 PKG="org.flaxandteal.greasan"
-HEADS=(wiktionary-v2-full macbain-v2 tearma-v2 bunamo-v2 place-v2 concept-v2 example-tatoeba-v2 example-gaois-v2 person-v2 note-v2 layer-v2)
+# NOTE: tearma-v2 is deliberately NOT bundled — Téarma cannot be shipped
+# (licensing), so it is built on-device (tbx-v2 → FTS5 sidecar) instead.
+HEADS=(wiktionary-v2-full macbain-v2 bunamo-v2 place-v2 concept-v2 example-tatoeba-v2 example-gaois-v2 person-v2 note-v2 layer-v2)
 
 INSTALL=0; LAUNCH=0; DEBUG=0; REZIP=1; DEVICE=""
 while [ $# -gt 0 ]; do

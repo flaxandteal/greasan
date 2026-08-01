@@ -55,12 +55,9 @@ const CORPORA: &[CorpusSpec] = &[
         index: "macbain-index",
         langs: &["en", "ga"],
     },
-    CorpusSpec {
-        name: "tearma",
-        head: "tearma-v2",
-        index: "tearma-index",
-        langs: &["ga", "en"],
-    },
+    // Téarma is NOT bundled — it cannot be shipped (licensing), so it is built
+    // on-device (tbx-v2 → FTS5 `search.sqlite` sidecar) and installed as a
+    // layer, not a bundled corpus. See `family.ts`'s `tearma` suggested layer.
     CorpusSpec {
         // Morphology enrichment (BuNaMo): forms + grammar_class compose onto the
         // shared goi ids. Pagefind is ga-only (inflected surface forms). Its

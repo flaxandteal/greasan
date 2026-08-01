@@ -35,7 +35,6 @@
     "resources": {
       "../../data/bundle/heads/wiktionary-v2-full.zip": "heads/wiktionary-v2-full.zip",
       "../../data/bundle/heads/macbain-v2.zip": "heads/macbain-v2.zip",
-      "../../data/bundle/heads/tearma-v2.zip": "heads/tearma-v2.zip",
       "../../data/bundle/heads/bunamo-v2.zip": "heads/bunamo-v2.zip",
       "../../data/bundle/heads/place-v2.zip": "heads/place-v2.zip",
       "../../data/bundle/heads/concept-v2.zip": "heads/concept-v2.zip",
@@ -53,8 +52,6 @@
       "../../data/wiktionary-index/pagefind-sampla.zip": "pagefind/wiktionary-index/pagefind-sampla.zip",
       "../../data/macbain-index/pagefind-en.zip": "pagefind/macbain-index/pagefind-en.zip",
       "../../data/macbain-index/pagefind-ga.zip": "pagefind/macbain-index/pagefind-ga.zip",
-      "../../data/tearma-index/pagefind-ga.zip": "pagefind/tearma-index/pagefind-ga.zip",
-      "../../data/tearma-index/pagefind-en.zip": "pagefind/tearma-index/pagefind-en.zip",
       "basemap/goidelic.pmtiles": "basemap/goidelic.pmtiles"
     }
   }
