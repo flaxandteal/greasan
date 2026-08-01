@@ -460,14 +460,25 @@ fn stream_tbx_v2_build(
         let fts_n = fts.finish()?;
         stamp(format!("fts: {} ms, {fts_n} entries", t.elapsed().as_millis()));
 
-        // emit is a single opaque step (no sub-progress), so the bar parks here
-        // for its duration — now the long pole (~7.5 min at Téarma scale).
+        // emit is now the long pole (~5.75 min at Téarma scale). It reports
+        // ~100 Streaming{done,total} ticks over the run, so animate the bar +
+        // notification across 0.70..0.97 instead of parking at one value.
         report("indexing", 0.70);
         let t = std::time::Instant::now();
-        ros_madair_emit::emit(
+        let mut on_progress = |p: ros_madair_emit::EmitProgress| {
+            if let ros_madair_emit::EmitProgress::Streaming { done, total } = p {
+                let frac = if total > 0 { done as f64 / total as f64 } else { 0.0 };
+                report("indexing", 0.70 + 0.27 * frac);
+            }
+            std::ops::ControlFlow::Continue(())
+        };
+        ros_madair_emit::emit_with_progress(
             src.to_str().ok_or("non-utf8 prebuild path")?,
             out_dir.to_str().ok_or("non-utf8 out path")?,
             "https://example.org/",
+            &ros_madair_emit::EmitOptions::default(),
+            &ros_madair_emit::default_registry(),
+            &mut on_progress,
         )
         .map_err(|e| format!("emit: {e}"))?;
         stamp(format!("emit: {} ms", t.elapsed().as_millis()));
