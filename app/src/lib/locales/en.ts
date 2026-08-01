@@ -136,6 +136,7 @@ const en: Record<string, string> = {
   'layers.dismiss': 'Dismiss',
   'layers.errNotTbx': 'That download wasn’t a TBX file — it looks like a web page. Check the source.',
   'layers.manageAll': 'Manage layers',
+  'layers.removeLayer': 'Remove layer',
 
   'settings.title': 'Settings',
   'settings.dictionary': 'Dictionary',

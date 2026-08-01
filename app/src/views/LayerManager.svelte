@@ -11,19 +11,34 @@
   // format is inferred, never chosen from a row of build-pipeline buttons.
   import {
     layerStack, toggleLayerVisibility, layers,
-    buildProgress, buildingLayerName, importLayer, installPackage, removeLayer,
-    overlayView, currentLayer, familyConfig,
+    buildProgress, buildingLayerName, importLayer, installPackage,
+    overlayView, familyConfig,
   } from '../lib/store';
   import type { SuggestedLayer } from '../lib/family';
   import { t } from '../lib/i18n';
   import { open } from '@tauri-apps/plugin-dialog';
   import { onMount } from 'svelte';
-  import { loadLayerCatalogue, loadLayerBySlug, type LayerEntry } from '../lib/layers-catalogue';
+  import { loadLayerCatalogue, type LayerEntry } from '../lib/layers-catalogue';
+  import LayerBlockCard from './LayerBlockCard.svelte';
 
   let catalogue = $state<LayerEntry[]>([]);
   onMount(() => { loadLayerCatalogue().then(c => (catalogue = c)).catch(() => {}); });
   function catEntry(name: string): LayerEntry | undefined {
     return catalogue.find(e => e.slug === name || e.integrationSlug === name || e.integrationSlug === `${name}-v2`);
+  }
+
+  /** A minimal LayerEntry for a layer with no catalogue metadata (e.g. a
+   *  device-built Téarma) so it still renders as a full block card. */
+  function stubEntry(name: string, label: string, swatch: string): LayerEntry {
+    return {
+      resourceId: '', name: label, slug: name, icon: '', types: [], formats: [],
+      licence: '', attribution: '', descriptionType: '', description: '',
+      links: [], resourceCount: '', statistics: null, integrationSlug: name,
+      defaultOn: false, swatch, config: null, downloads: [],
+    };
+  }
+  function entryFor(l: { name: string; label: string; swatch: string }): LayerEntry {
+    return catEntry(l.name) ?? stubEntry(l.name, l.label, l.swatch);
   }
 
   // Installed layers split by visibility. The pinned "base" (last one standing)
@@ -111,15 +126,6 @@
 
   function resetAdd() { addName = ''; addUrl = ''; pickedFile = ''; }
 
-  async function remove(name: string) {
-    try { await removeLayer(name); } catch (e) { addError = humanError(String(e)); }
-  }
-
-  async function openDetail(name: string) {
-    const l = catEntry(name) ?? await loadLayerBySlug(name);
-    if (l) currentLayer.set(l);
-  }
-
   function close() { overlayView.set(null); }
 
   /** Turn a raw ingest error into a sentence. The classic: a 404 HTML page fed
@@ -177,44 +183,13 @@
     {/if}
 
     {#each active as l}
-      {@const ce = catEntry(l.name)}
-      <div class="lm-row">
-        <button class="lm-tap" onclick={() => openDetail(l.name)} aria-label={l.label}>
-          <span class="lm-swatch" style="background:{l.swatch}"></span>
-          <div class="lm-main">
-            <div class="lm-name">{ce?.name ?? l.label}</div>
-            {#if ce}<div class="lm-desc">{ce.types.join(' · ')}</div>{/if}
-            <div class="lm-chips">
-              {#if ce?.licence}<span class="lm-mini lic">{ce.licence}</span>{/if}
-              {#if ce?.resourceCount}<span class="lm-mini">{Number(ce.resourceCount).toLocaleString()}</span>{/if}
-            </div>
-          </div>
-        </button>
-        {#if l.base}
-          <span class="lm-pill base">{$t('layers.base')}</span>
-        {:else}
-          <button class="lm-toggle" onclick={() => toggleLayerVisibility(l.name)} aria-label={$t('layers.aria')}></button>
-        {/if}
-      </div>
+      <LayerBlockCard layer={entryFor(l)} toggle toggled onToggle={() => toggleLayerVisibility(l.name)} actionLabel={$t('layers.aria')} />
     {/each}
 
     {#if hidden.length > 0}
       <div class="lm-group">{$t('layers.stHidden')}</div>
       {#each hidden as l}
-        {@const ce = catEntry(l.name)}
-        <div class="lm-row dim">
-          <button class="lm-tap" onclick={() => openDetail(l.name)} aria-label={l.label}>
-            <span class="lm-swatch" style="background:{l.swatch}"></span>
-            <div class="lm-main">
-              <div class="lm-name">{ce?.name ?? l.label}</div>
-              {#if ce}<div class="lm-desc">{ce.types.join(' · ')}</div>{/if}
-            </div>
-          </button>
-          <button class="lm-toggle off" onclick={() => toggleLayerVisibility(l.name)} aria-label={$t('layers.aria')}></button>
-          <button class="lm-x" onclick={() => remove(l.name)} aria-label={$t('settings.removeLayer')}>
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6L6 18M6 6l12 12"/></svg>
-          </button>
-        </div>
+        <LayerBlockCard layer={entryFor(l)} toggle toggled={false} onToggle={() => toggleLayerVisibility(l.name)} actionLabel={$t('layers.aria')} />
       {/each}
     {/if}
 
@@ -229,11 +204,12 @@
     {#if suggestions.length > 0}
       <div class="lm-group">{$t('layers.fromCatalogue')}</div>
       {#each suggestions as s}
-        <button class="lm-src" onclick={() => useSuggestion(s)} disabled={isBuilding}>
-          <span class="lm-src-ic">◆</span>
-          <span class="lm-src-t">{s.label}</span>
-          <span class="lm-src-go">{!s.url ? $t('layers.getFile') : s.format === 'built' ? $t('layers.install') : $t('layers.build')}</span>
-        </button>
+        <LayerBlockCard
+          layer={catEntry(s.name) ?? stubEntry(s.name, s.label, 'var(--layer-default)')}
+          actionText={!s.url ? $t('layers.getFile') : s.format === 'built' ? $t('layers.install') : $t('layers.build')}
+          onAction={() => useSuggestion(s)}
+          disabled={isBuilding}
+        />
       {/each}
     {/if}
 
@@ -273,27 +249,14 @@
     background: var(--srf-card, var(--srf-base)); border: 1px solid var(--srf-rule); border-radius: 12px;
     padding: 10px 12px;
   }
-  .lm-row.dim { opacity: .72; }
   .lm-row.building { border-color: color-mix(in oklab, var(--warn, #b9821f) 45%, var(--srf-rule)); }
   .lm-row.failed { border-color: color-mix(in oklab, var(--danger, #b0463c) 45%, var(--srf-rule)); }
-  .lm-tap { flex: 1; display: flex; align-items: center; gap: 10px; background: none; border: none; padding: 0; text-align: left; color: inherit; cursor: pointer; min-width: 0; }
   .lm-swatch { width: 6px; align-self: stretch; border-radius: 3px; flex-shrink: 0; min-height: 34px; }
   .lm-main { flex: 1; min-width: 0; }
   .lm-name { font-weight: 650; font-size: var(--fs-body); }
-  .lm-desc { font-size: var(--fs-small); color: var(--fg-muted); margin-top: 1px; }
-  .lm-chips { display: flex; gap: 5px; margin-top: 4px; flex-wrap: wrap; }
-  .lm-mini { font-size: 10px; padding: 2px 6px; border-radius: 999px; border: 1px solid var(--srf-rule); color: var(--fg-muted); }
-  .lm-mini.lic { border-color: color-mix(in oklab, var(--ok, #4f8a5f) 30%, var(--srf-rule)); }
-
-  .lm-toggle { width: 38px; height: 22px; border-radius: 999px; background: var(--ok, #4f8a5f); border: none; position: relative; flex-shrink: 0; cursor: pointer; }
-  .lm-toggle::after { content: ""; position: absolute; top: 2px; right: 2px; width: 18px; height: 18px; border-radius: 50%; background: #fff; }
-  .lm-toggle.off { background: var(--srf-rule); }
-  .lm-toggle.off::after { left: 2px; right: auto; }
-  .lm-x { background: none; border: none; color: var(--fg-muted); padding: 4px; cursor: pointer; display: flex; flex-shrink: 0; }
 
   .lm-pill { font-size: 10px; letter-spacing: .03em; text-transform: uppercase; padding: 3px 8px; border-radius: 999px; font-weight: 650; white-space: nowrap; flex-shrink: 0; }
   .lm-pill.building { color: var(--warn, #b9821f); background: color-mix(in oklab, var(--warn, #b9821f) 16%, transparent); }
-  .lm-pill.base { color: var(--fg-muted); background: color-mix(in oklab, var(--fg-muted) 14%, transparent); }
 
   .lm-prog { height: 5px; border-radius: 999px; background: var(--srf-rule); overflow: hidden; margin-top: 6px; }
   .lm-prog > span { display: block; height: 100%; background: var(--accent-deep, var(--accent)); border-radius: 999px; transition: width .3s; }
@@ -301,13 +264,6 @@
   .lm-err { font-size: var(--fs-small); color: var(--danger, #b0463c); margin-top: 2px; }
 
   .lm-empty { font-size: var(--fs-small); color: var(--fg-muted); padding: 4px 0 8px; }
-
-  .lm-src { display: flex; align-items: center; gap: 10px; width: 100%; text-align: left;
-    background: var(--srf-card, var(--srf-base)); border: 1px dashed var(--srf-rule); border-radius: 12px; padding: 11px 12px; cursor: pointer; color: inherit; }
-  .lm-src:disabled { opacity: .5; }
-  .lm-src-ic { color: var(--accent); font-size: 12px; }
-  .lm-src-t { flex: 1; font-weight: 600; font-size: var(--fs-body); }
-  .lm-src-go { font-size: var(--fs-small); font-weight: 650; color: var(--accent); }
 
   .lm-file { display: flex; flex-direction: column; gap: 8px; }
   .lm-input { padding: 9px 11px; border: 1px solid var(--srf-rule); border-radius: 8px; font-size: var(--fs-body); background: var(--srf-base); color: var(--fg-body); }

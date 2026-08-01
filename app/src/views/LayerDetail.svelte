@@ -4,7 +4,7 @@
   // Layer description page — the full human-readable card for one Layer resource
   // from the catalogue. Styled like the example / headword pages (teal hero +
   // ge-block-title sections).
-  import { currentLayer } from '../lib/store';
+  import { currentLayer, layers, removeLayer } from '../lib/store';
   import { t } from '../lib/i18n';
   import { invoke } from '@tauri-apps/api/core';
   import type { LayerEntry } from '../lib/layers-catalogue';
@@ -12,6 +12,20 @@
   let { layer }: { layer: LayerEntry } = $props();
 
   function goBack() { currentLayer.set(null); }
+
+  // The installed layer this catalogue entry corresponds to (if any) — enables
+  // the Remove action. Installed names map to slug / integrationSlug (± the
+  // `-v2` head suffix); device-built layers use their name as the slug.
+  let installedName = $derived(
+    $layers.find(l =>
+      l.name === layer.slug || l.name === layer.integrationSlug || `${l.name}-v2` === layer.integrationSlug,
+    )?.name,
+  );
+  async function doRemove() {
+    if (!installedName) return;
+    try { await removeLayer(installedName); } catch (e) { console.warn('[layer] remove failed:', e); }
+    goBack();
+  }
   // Match MapView: the opener plugin's command directly (no JS wrapper installed).
   function open(url: string) { if (url) invoke('plugin:opener|open_url', { url }).catch((e) => console.warn('[layer] open failed:', e)); }
   function num(s: string): string { const n = Number(s); return Number.isFinite(n) ? n.toLocaleString() : s; }
@@ -116,6 +130,15 @@
           </div></div>
         {/each}
       </div>
+    </div>
+  {/if}
+
+  {#if installedName}
+    <div style="padding:20px 16px 8px;">
+      <button
+        onclick={doRemove}
+        style="width:100%;padding:12px;border:1px solid color-mix(in srgb, var(--danger,#b0463c) 40%, var(--srf-rule));border-radius:10px;background:transparent;color:var(--danger,#b0463c);font-weight:650;font-size:15px;cursor:pointer;"
+      >{$t('layers.removeLayer')}</button>
     </div>
   {/if}
 </div>

@@ -8,10 +8,18 @@
   import { currentLayer } from '../lib/store';
   import type { LayerEntry } from '../lib/layers-catalogue';
 
-  let { layer, actionLabel, onAction }: {
+  let { layer, actionLabel, actionText, onAction, toggle, toggled, onToggle, disabled }: {
     layer: LayerEntry;
+    /** Icon-button (X) action, e.g. remove. */
     actionLabel?: string;
+    /** Labelled action instead of the X — e.g. "Install" / "Build". */
+    actionText?: string;
     onAction?: () => void;
+    /** Render a visibility toggle (installed layers) instead of an action. */
+    toggle?: boolean;
+    toggled?: boolean;
+    onToggle?: () => void;
+    disabled?: boolean;
   } = $props();
 
   function openDetail() { currentLayer.set(layer); }
@@ -35,7 +43,11 @@
       {#if num(layer.resourceCount)}<span class="ge-layer-block-count">{num(layer.resourceCount)}</span>{/if}
     </div>
   </button>
-  {#if onAction}
+  {#if toggle}
+    <button class="ge-layer-block-toggle" class:on={toggled} onclick={onToggle} aria-label={actionLabel}><span></span></button>
+  {:else if actionText}
+    <button class="ge-layer-block-textaction" onclick={onAction} disabled={disabled}>{actionText}</button>
+  {:else if onAction}
     <button class="ge-layer-block-action" onclick={onAction} aria-label={actionLabel}>
       <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6L6 18M6 6l12 12"/></svg>
     </button>
@@ -74,4 +86,21 @@
     padding: 0 12px; display: inline-flex; align-items: center;
   }
   .ge-layer-block-action:active { background: color-mix(in srgb, var(--fg-soft) 14%, transparent); }
+  .ge-layer-block-textaction {
+    align-self: center; margin-right: 12px; border: 0; background: transparent;
+    color: var(--accent-deep, var(--accent)); font-weight: 700; font-size: 14px;
+    cursor: pointer; padding: 6px 4px; white-space: nowrap;
+  }
+  .ge-layer-block-textaction:disabled { opacity: .45; cursor: default; }
+  .ge-layer-block-toggle {
+    align-self: center; margin-right: 14px; width: 38px; height: 22px; border: 0;
+    border-radius: 999px; background: var(--srf-rule); position: relative; cursor: pointer;
+    flex-shrink: 0; transition: background .15s;
+  }
+  .ge-layer-block-toggle.on { background: var(--ok, #4f8a5f); }
+  .ge-layer-block-toggle > span {
+    position: absolute; top: 2px; left: 2px; width: 18px; height: 18px;
+    border-radius: 50%; background: #fff; transition: transform .15s;
+  }
+  .ge-layer-block-toggle.on > span { transform: translateX(16px); }
 </style>
