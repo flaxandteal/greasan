@@ -50,6 +50,10 @@
     layerName = s.name;
     layerUrl = s.url;
     layerFormat = s.format;
+    // Reset the picked-file label: a chip with an empty url (e.g. the Téarma
+    // "choose a file" chip) clears layerUrl, so a stale tbxFilePath would
+    // otherwise show "a file is chosen" while the Build button stays disabled.
+    tbxFilePath = '';
   }
 
   async function handleChooseTbxFile() {
