@@ -264,7 +264,7 @@
 
 <style>
   .ge-layer-mgr { color: var(--fg-body); }
-  .lm-hero { display: flex; align-items: center; gap: 12px; padding: 14px 16px 6px; }
+  .lm-hero { display: flex; align-items: center; gap: 12px; padding: calc(14px + env(safe-area-inset-top, 0px)) 16px 6px; }
   .lm-back { background: none; border: none; color: var(--fg-body); padding: 4px; cursor: pointer; display: flex; }
   .lm-title { font-size: var(--fs-title, 22px); font-weight: 700; margin: 0; }
   .lm-sub { font-size: var(--fs-small); color: var(--fg-muted); margin: 2px 0 0; }
