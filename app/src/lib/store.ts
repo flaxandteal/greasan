@@ -39,7 +39,12 @@ export const wasmReady = readable(false, (set) => {
 });
 
 export const activeTab = writable<'search' | 'starred' | 'settings'>('search');
-export const overlayView = writable<'faq' | 'flags' | null>(null);
+export const overlayView = writable<'faq' | 'flags' | 'layers' | null>(null);
+
+/** Name of the layer currently being installed/built, or null. Lets the Layer
+ *  Manager attribute `buildProgress` to a specific card (the layer isn't in
+ *  `layers` until the build completes). Set by importLayer/installPackage. */
+export const buildingLayerName = writable<string | null>(null);
 
 /**
  * Open placenames-map state — the `map(layer, filter, selected)` argument bag
@@ -257,6 +262,7 @@ export function setActiveFamily(familyId: FamilyId): void {
  * Progress is exposed via the buildProgress store.
  */
 export async function importLayer(sourceUrl: string, name: string, format = 'prebuild'): Promise<void> {
+  buildingLayerName.set(name);
   buildProgress.set({ state: 'pending', progress: 0, error: null, output_path: null });
 
   const { layer_id } = await buildLayer({ sourceUrl, format, layerName: name });
@@ -282,6 +288,7 @@ export async function importLayer(sourceUrl: string, name: string, format = 'pre
   layers.set(getDynamicLayers());
 
   buildProgress.set(null);
+  buildingLayerName.set(null);
 }
 
 /**
@@ -289,6 +296,7 @@ export async function importLayer(sourceUrl: string, name: string, format = 'pre
  * Downloads tar.gz, extracts directly — no on-device build_to_memory.
  */
 export async function installPackage(url: string, name: string): Promise<void> {
+  buildingLayerName.set(name);
   buildProgress.set({ state: 'pending', progress: 0, error: null, output_path: null });
 
   const { layer_id } = await buildLayer({ sourceUrl: url, format: 'built', layerName: name });
@@ -319,6 +327,7 @@ export async function installPackage(url: string, name: string): Promise<void> {
   layers.set(getDynamicLayers());
 
   buildProgress.set(null);
+  buildingLayerName.set(null);
 }
 
 /** Add a layer directly by URL (already-built index served over HTTP). */

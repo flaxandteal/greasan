@@ -14,6 +14,7 @@
   import TabBar from './views/TabBar.svelte';
   import LicenseToast from './views/LicenseToast.svelte';
   import LayerSheet from './views/LayerSheet.svelte';
+  import LayerManager from './views/LayerManager.svelte';
   import Faq from './views/Faq.svelte';
   import FlagsPage from './views/FlagsPage.svelte';
 
@@ -94,6 +95,8 @@
       <Faq />
     {:else if $overlayView === 'flags'}
       <FlagsPage />
+    {:else if $overlayView === 'layers'}
+      <LayerManager />
     {:else if $currentLayer}
       <LayerDetail layer={$currentLayer} />
     {:else if $currentExample}

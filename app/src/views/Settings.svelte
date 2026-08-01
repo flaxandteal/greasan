@@ -1,21 +1,10 @@
 <script lang="ts">
-  import { darkMode, density, listStyle, visibleDialects, activeFamily, familyConfig, setActiveFamily, layers, importLayer, installPackage, removeLayer, buildProgress, recentLimit, recentEntries, showLicenseToast } from '../lib/store';
-  import { FAMILIES, type FamilyId, type SuggestedLayer } from '../lib/family';
+  import { darkMode, density, listStyle, visibleDialects, activeFamily, familyConfig, setActiveFamily, overlayView, recentLimit, recentEntries, showLicenseToast } from '../lib/store';
+  import { FAMILIES, type FamilyId } from '../lib/family';
   import { t, localePreference } from '../lib/i18n';
   import { diagEntries, diagTotalMs, diagTotalBytes, diagReset } from '../lib/diagnostics';
-  import { open } from '@tauri-apps/plugin-dialog';
-  import { onMount } from 'svelte';
-  import LayerBlockCard from './LayerBlockCard.svelte';
-  import { loadLayerCatalogue, type LayerEntry } from '../lib/layers-catalogue';
 
   const familyIds = Object.keys(FAMILIES) as FamilyId[];
-
-  // Layer catalogue — rich metadata for installed/available layers (block cards).
-  let catalogue = $state<LayerEntry[]>([]);
-  onMount(() => { loadLayerCatalogue().then((c) => (catalogue = c)).catch(() => {}); });
-  function catEntry(name: string): LayerEntry | undefined {
-    return catalogue.find((e) => e.slug === name || e.integrationSlug === name || e.integrationSlug === `${name}-v2`);
-  }
 
   function toggleDialect(value: string) {
     visibleDialects.update(current => {
@@ -29,71 +18,6 @@
 
   // Derive dialect groups from the active family config
   let dialectGroups = $derived([...new Set($familyConfig.dialectOptions.map(d => d.group))]);
-
-  // Layer import form
-  let layerUrl = $state('');
-  let layerName = $state('');
-  let layerError = $state('');
-  let layerFormat = $state<'built' | 'prebuild' | 'prebuild-v2' | 'tbx' | 'tbx-v2'>('built');
-  let tbxFilePath = $state('');
-
-  let isBuilding = $derived($buildProgress !== null && $buildProgress.state !== 'failed');
-
-  // Suggested layers not yet installed
-  let availableSuggestions = $derived(
-    $familyConfig.suggestedLayers.filter(
-      s => !$layers.some(l => l.name === s.name)
-    )
-  );
-
-  function prefillSuggested(s: SuggestedLayer) {
-    layerName = s.name;
-    layerUrl = s.url;
-    layerFormat = s.format;
-    // Reset the picked-file label: a chip with an empty url (e.g. the Téarma
-    // "choose a file" chip) clears layerUrl, so a stale tbxFilePath would
-    // otherwise show "a file is chosen" while the Build button stays disabled.
-    tbxFilePath = '';
-  }
-
-  async function handleChooseTbxFile() {
-    const selected = await open({
-      multiple: false,
-      filters: [{ name: 'All files', extensions: ['*/*'] }],
-    });
-    if (selected) {
-      const picked = selected as string;
-      layerError = '';
-      tbxFilePath = decodeURIComponent(picked.split('/').pop() || 'file.tbx');
-      // Pass content:// URI directly — Rust builder handles it via JNI
-      layerUrl = picked;
-    }
-  }
-
-  async function handleImportLayer() {
-    if (!layerUrl.trim() || !layerName.trim()) return;
-    layerError = '';
-    try {
-      if (layerFormat === 'built') {
-        await installPackage(layerUrl.trim(), layerName.trim());
-      } else {
-        await importLayer(layerUrl.trim(), layerName.trim(), layerFormat);
-      }
-      layerUrl = '';
-      layerName = '';
-      tbxFilePath = '';
-    } catch (err) {
-      layerError = String(err);
-    }
-  }
-
-  async function handleRemoveLayer(name: string) {
-    try {
-      await removeLayer(name);
-    } catch (err) {
-      console.warn('[settings] removeLayer failed:', err);
-    }
-  }
 
   const densityOptions = [
     { value: 'compact' as const, key: 'settings.densityCompact' },
@@ -160,145 +84,10 @@
 
   <div class="ge-block-title">{$t('settings.layers')}</div>
   <div style="padding:0 16px;">
-    {#if $layers.length > 0}
-      <div style="margin-bottom:8px;">
-        {#each $layers as layer}
-          {@const ce = catEntry(layer.name)}
-          {#if ce}
-            <LayerBlockCard layer={ce} actionLabel={$t('settings.removeLayer')} onAction={() => handleRemoveLayer(layer.name)} />
-          {:else}
-            <div class="ge-layer-row">
-              <span class="ge-layer-label">{layer.name}</span>
-              <button
-                class="ge-layer-action"
-                onclick={() => handleRemoveLayer(layer.name)}
-                aria-label={$t('settings.removeLayer')}
-              >
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                  <path d="M18 6L6 18M6 6l12 12"/>
-                </svg>
-              </button>
-            </div>
-          {/if}
-        {/each}
-      </div>
-    {:else}
-      <div style="font-size:var(--fs-small);color:var(--fg-muted);padding:4px 0 8px;">{$t('settings.noLayers')}</div>
-    {/if}
-
-    {#if availableSuggestions.length > 0}
-      <div style="margin-bottom:8px;">
-        <div style="font-size:var(--fs-small);color:var(--fg-muted);margin-bottom:4px;">{$t('settings.suggestedLayers')}</div>
-        {#each availableSuggestions as s}
-          <button
-            class="ge-suggested-layer"
-            onclick={() => prefillSuggested(s)}
-            disabled={isBuilding}
-          >
-            <span class="ge-suggested-label">{s.label}</span>
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <path d="M12 5v14M5 12h14"/>
-            </svg>
-          </button>
-        {/each}
-      </div>
-    {/if}
-
-    {#if isBuilding && $buildProgress}
-      <div style="padding:6px 0;">
-        <div style="font-size:var(--fs-small);color:var(--fg-muted);margin-bottom:4px;display:flex;justify-content:space-between;gap:8px;">
-          <span>{$buildProgress.state === 'fetching' ? $t('settings.buildFetching') :
-           $buildProgress.state === 'extracting' ? $t('settings.buildExtracting') :
-           $buildProgress.state === 'parsing' ? $t('settings.buildParsing') :
-           $buildProgress.state === 'building' ? $t('settings.buildBuilding') :
-           $buildProgress.state === 'indexing' ? $t('settings.buildIndexing') :
-           $buildProgress.state === 'writing' ? $t('settings.buildWriting') :
-           $buildProgress.state}</span>
-          <span style="font-variant-numeric:tabular-nums;">{Math.round($buildProgress.progress * 100)}%</span>
-        </div>
-        <div style="height:4px;background:var(--srf-rule);border-radius:2px;overflow:hidden;">
-          <div style="height:100%;background:var(--accent-deep);border-radius:2px;transition:width 0.3s;width:{$buildProgress.progress * 100}%;"></div>
-        </div>
-      </div>
-    {:else}
-      <div style="display:flex;flex-direction:column;gap:6px;">
-        <input
-          bind:value={layerName}
-          placeholder={$t('settings.layerName')}
-          style="padding:6px 10px;border:1px solid var(--srf-rule);border-radius:6px;font-size:var(--fs-body);background:var(--srf-base);color:var(--fg-body);"
-        />
-        {#if layerFormat === 'tbx' || layerFormat === 'tbx-v2'}
-          <div style="display:flex;align-items:center;gap:8px;">
-            <button
-              onclick={handleChooseTbxFile}
-              style="padding:6px 12px;border:1px solid var(--srf-rule);border-radius:6px;font-size:var(--fs-body);background:var(--srf-card);color:var(--fg-body);cursor:pointer;white-space:nowrap;"
-            >
-              {$t('settings.chooseTbxFile')}
-            </button>
-            <span style="font-size:var(--fs-small);color:var(--fg-muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">
-              {tbxFilePath ? tbxFilePath.split('/').pop() : $t('settings.noFileChosen')}
-            </span>
-          </div>
-        {:else}
-          <input
-            bind:value={layerUrl}
-            placeholder={layerFormat === 'built' ? $t('settings.layerUrlPackage') : $t('settings.layerUrl')}
-            style="padding:6px 10px;border:1px solid var(--srf-rule);border-radius:6px;font-size:var(--fs-body);background:var(--srf-base);color:var(--fg-body);"
-          />
-        {/if}
-        <div class="ge-segs" style="margin:2px 0;">
-          <button
-            class="ge-seg"
-            class:active={layerFormat === 'built'}
-            onclick={() => { layerFormat = 'built'; tbxFilePath = ''; layerUrl = ''; }}
-          >
-            {$t('settings.formatBuilt')}
-          </button>
-          <button
-            class="ge-seg"
-            class:active={layerFormat === 'prebuild'}
-            onclick={() => { layerFormat = 'prebuild'; tbxFilePath = ''; layerUrl = ''; }}
-          >
-            {$t('settings.formatPrebuild')}
-          </button>
-          <button
-            class="ge-seg"
-            class:active={layerFormat === 'prebuild-v2'}
-            onclick={() => { layerFormat = 'prebuild-v2'; tbxFilePath = ''; layerUrl = ''; }}
-          >
-            v2 head
-          </button>
-          <button
-            class="ge-seg"
-            class:active={layerFormat === 'tbx'}
-            onclick={() => { layerFormat = 'tbx'; layerUrl = ''; }}
-          >
-            {$t('settings.formatTbx')}
-          </button>
-          <button
-            class="ge-seg"
-            class:active={layerFormat === 'tbx-v2'}
-            onclick={() => { layerFormat = 'tbx-v2'; layerUrl = ''; }}
-          >
-            TBX v2
-          </button>
-        </div>
-        <button
-          onclick={handleImportLayer}
-          disabled={!layerUrl.trim() || !layerName.trim()}
-          style="padding:6px 12px;border:1px solid var(--srf-rule);border-radius:6px;font-size:var(--fs-body);background:var(--accent-deep);color:white;cursor:pointer;opacity:{!layerUrl.trim() || !layerName.trim() ? '0.5' : '1'};"
-        >
-          {layerFormat === 'built' ? $t('settings.installPackage') : layerFormat === 'tbx' ? $t('settings.buildTbx') : $t('settings.importLayer')}
-        </button>
-      </div>
-    {/if}
-
-    {#if layerError}
-      <div style="font-size:var(--fs-small);color:var(--danger,#c00);padding-top:4px;">{layerError}</div>
-    {/if}
-    {#if $buildProgress?.state === 'failed'}
-      <div style="font-size:var(--fs-small);color:var(--danger,#c00);padding-top:4px;">{$buildProgress.error}</div>
-    {/if}
+    <button class="ge-suggested-layer" onclick={() => overlayView.set('layers')}>
+      <span class="ge-suggested-label">{$t('layers.manageAll')}</span>
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18l6-6-6-6"/></svg>
+    </button>
   </div>
 
   <div class="ge-block-title">{$t('settings.dialects')}</div>
