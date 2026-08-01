@@ -84,6 +84,9 @@ impl FtsBuilder {
 pub struct FtsHit {
     pub uri: String,
     pub headword: String,
+    /// The full gloss (subtitle for a headword-tab result).
+    pub gloss: String,
+    /// Highlighted snippet of the matched column (subtitle for a gloss-tab result).
     pub snippet: String,
     pub score: f64,
 }
@@ -152,7 +155,7 @@ pub fn v2_search_fts(
         )
         .map_err(|e| format!("open {}: {e}", path.display()))?;
 
-        let sql = "SELECT uri, headword, snippet(fts, ?1, '[', ']', '…', 8), bm25(fts) \
+        let sql = "SELECT uri, headword, gloss, snippet(fts, ?1, '[', ']', '…', 8), bm25(fts) \
                    FROM fts WHERE fts MATCH ?2 ORDER BY bm25(fts) LIMIT ?3";
         let mut stmt = conn.prepare(sql).map_err(|e| format!("prepare fts search: {e}"))?;
         let rows = stmt
@@ -162,9 +165,10 @@ pub fn v2_search_fts(
                     Ok(FtsHit {
                         uri: r.get::<_, String>(0)?,
                         headword: r.get::<_, String>(1)?,
-                        snippet: r.get::<_, String>(2)?,
+                        gloss: r.get::<_, String>(2)?,
+                        snippet: r.get::<_, String>(3)?,
                         // Negate bm25 so higher = better (SQLite bm25 is lower=better).
-                        score: -r.get::<_, f64>(3)?,
+                        score: -r.get::<_, f64>(4)?,
                     })
                 },
             )

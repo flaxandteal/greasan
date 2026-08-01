@@ -7,7 +7,7 @@ import { getPagefind, resetPagefind, type PagefindInstance } from './pagefind';
 import { FAMILIES, DEFAULT_FAMILY, type FamilyConfig, type FamilyId } from './family';
 import { diagStart, diagEnd } from './diagnostics';
 import { loadEntryV2 } from './dictionary-v2';
-import { prepareOffline, descriptors, hydrateV2, citedBy, searchDisplay } from './v2';
+import { prepareOffline, descriptors, hydrateV2, citedBy, searchDisplay, searchFts } from './v2';
 
 let activeFamilyConfig: FamilyConfig = FAMILIES[DEFAULT_FAMILY];
 
@@ -343,9 +343,18 @@ export async function search(query: string, lang: SearchLang = 'ga', dialects?: 
   if (!query.trim()) return [];
 
   try {
-    // Search is pure Pagefind over the registered layers.
+    // Two text engines, per layer: Pagefind for shipped layers, FTS5 for
+    // on-device-built ones (Téarma). Each layer's index is separate anyway, so
+    // we query both and merge — the merge below re-ranks by our own text tiers,
+    // so the engines' incompatible scores never need reconciling (no RRF).
     const bases = allPagefindBasesForLang(lang);
-    if (bases.length === 0) return []; // No layers installed — no data to search
+    // v2_search_fts probes each dir for `search.sqlite` and skips those without
+    // one, so passing the whole active stack is safe. Samplaí has no FTS column,
+    // so FTS only joins headword (ga) / gloss (en) search.
+    const ftsField: 'headword' | 'gloss' | null =
+      lang === 'en' ? 'gloss' : lang === 'sampla' ? null : 'headword';
+    const ftsDirs = ftsField ? currentV2HeadDirs() : [];
+    if (bases.length === 0 && ftsDirs.length === 0) return []; // nothing to search
 
     // Normalize query: strip diacritics so "focal" matches "fócal"
     const normQuery = stripDiacritics(query);
@@ -355,15 +364,37 @@ export async function search(query: string, lang: SearchLang = 'ga', dialects?: 
     // lemmas like "bó" / "cú" / "ó" stay findable without the noise.
     const pfQuery = query.trim().length < 3 ? `"${normQuery}"` : normQuery;
 
-    // Query all pagefind instances in parallel
-    const resultSets = await Promise.all(
-      bases.map(base =>
-        searchOneInstance(base, pfQuery, lang, dialects).catch(err => {
-          console.warn(`[dictionary] Search failed for ${base}:`, err);
-          return [] as EntrySummary[];
-        })
-      )
-    );
+    // Query all Pagefind instances + the FTS sidecars in parallel.
+    const [pfSets, ftsHits] = await Promise.all([
+      Promise.all(
+        bases.map(base =>
+          searchOneInstance(base, pfQuery, lang, dialects).catch(err => {
+            console.warn(`[dictionary] Search failed for ${base}:`, err);
+            return [] as EntrySummary[];
+          })
+        )
+      ),
+      ftsField && ftsDirs.length
+        ? searchFts(ftsDirs, query, ftsField, 50).catch(err => {
+            console.warn('[dictionary] FTS search failed:', err);
+            return [];
+          })
+        : Promise.resolve([]),
+    ]);
+    const resultSets: EntrySummary[][] = [...pfSets];
+    if (ftsHits.length) {
+      // FTS layers carry no dialect facet (Téarma is all GA); headword/POS get
+      // canonicalised from the head by searchDisplay below, same as Pagefind hits.
+      resultSets.push(
+        ftsHits.map(h => ({
+          uri: h.uri,
+          headword: h.headword,
+          pos: '',
+          gloss: lang === 'en' ? h.snippet || h.gloss || undefined : h.gloss || undefined,
+          dialect: undefined,
+        }))
+      );
+    }
 
     // Merge across layers, UNIONING dialects for a shared slug. The slug is
     // dialect-neutral (goi-<head>-<pos>), so the same uri comes back from

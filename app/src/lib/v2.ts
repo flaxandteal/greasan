@@ -144,6 +144,24 @@ export async function searchDisplay(headDirs: string[], uris: string[]): Promise
   });
 }
 
+export interface FtsHit { uri: string; headword: string; gloss: string; snippet: string; score: number }
+
+/**
+ * Full-text search over the FTS5 `search.sqlite` sidecars of the given layer
+ * dirs (on-device-built layers like Téarma, where pagefind is impractical).
+ * The command probes each dir for `search.sqlite` and skips those without one,
+ * so `headDirs` can be the whole active stack — pagefind and FTS layers coexist.
+ * `field` is 'headword' (Ceannfhocail) or 'gloss' (Gluais).
+ */
+export async function searchFts(
+  headDirs: string[],
+  query: string,
+  field: 'headword' | 'gloss',
+  limit: number,
+): Promise<FtsHit[]> {
+  return await invoke<FtsHit[]>('v2_search_fts', { ftsDirs: headDirs, query, field, limit });
+}
+
 /**
  * Reverse-cognate lookup: the resources that LINK TO `uri` through `nodePath`
  * (a link-datatype node alias, e.g. `cognate_entry_id`) in the composed view.
