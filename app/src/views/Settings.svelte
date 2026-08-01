@@ -223,7 +223,7 @@
           placeholder={$t('settings.layerName')}
           style="padding:6px 10px;border:1px solid var(--srf-rule);border-radius:6px;font-size:var(--fs-body);background:var(--srf-base);color:var(--fg-body);"
         />
-        {#if layerFormat === 'tbx'}
+        {#if layerFormat === 'tbx' || layerFormat === 'tbx-v2'}
           <div style="display:flex;align-items:center;gap:8px;">
             <button
               onclick={handleChooseTbxFile}

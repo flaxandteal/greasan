@@ -153,9 +153,19 @@ export const FAMILIES: Record<FamilyId, FamilyConfig> = {
         format: 'built',
       },
       {
+        // Téarma can't ship, and tearma.ie has no direct-download API (the old
+        // /api/tbx 404s). The flow is: download the TBX yourself (browser) then
+        // pick it here. Empty url → the chip just presets name + TBX-v2 format
+        // and the "Choose file" picker takes it from there.
         name: 'tearma',
-        url: 'https://www.tearma.ie/api/tbx',
-        label: 'Téarma — Irish terminology (on-device v2 build)',
+        url: '',
+        label: 'Téarma — choose a downloaded TBX file',
+        format: 'tbx-v2',
+      },
+      {
+        name: 'tearma-sample',
+        url: 'file:///data/user/0/org.flaxandteal.greasan/files/tearma-sample.tbx',
+        label: 'Téarma (sample — tbx-v2 test)',
         format: 'tbx-v2',
       },
       {
