@@ -29,6 +29,11 @@ mod android_ctx;
 /// backgrounded and shows a progress notification. No-op off Android.
 mod fg_service;
 
+/// SQLite FTS5 full-text sidecar for on-device-built layers (Téarma). Replaces
+/// pagefind on the tbx-v2 path — seconds, not ~40 min. v2-gated (needs rusqlite).
+#[cfg(feature = "v2")]
+mod fts;
+
 use std::collections::HashMap;
 use std::sync::Mutex;
 
@@ -93,6 +98,7 @@ pub fn run() {
         v2::v2_closure,
         v2::v2_descriptors,
         v2::v2_search_display,
+        fts::v2_search_fts,
         v2::v2_cited_by,
         v2::v2_geo_points,
         v2::v2_emit_overlay,

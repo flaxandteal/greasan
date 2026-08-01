@@ -328,111 +328,6 @@ fn write_prebuild_and_emit_v2(
     Ok(())
 }
 
-/// Create one pagefind index forced to `lang`.
-#[cfg(feature = "v2-emit")]
-fn pagefind_new_index(lang: &str) -> Result<PagefindIndex, String> {
-    let cfg = PagefindServiceConfig::builder()
-        .force_language(lang.to_string())
-        .build();
-    PagefindIndex::new(Some(cfg)).map_err(|e| format!("pagefind {lang} init: {e}"))
-}
-
-/// Add one resource to the ga (headword) and en (gloss) pagefind indices.
-/// Mirrors the record shape of `build_pagefind_indices_inner` so the streaming
-/// tbx-v2 path produces the same index as the batch v1 path — but one resource
-/// at a time, so the full resource set is never held in memory at once.
-#[cfg(feature = "v2-emit")]
-async fn pagefind_add_resource(
-    ga: &mut PagefindIndex,
-    en: &mut PagefindIndex,
-    indexed_graph: &StaticGraph,
-    resource: &StaticResource,
-) {
-    let uuid = &resource.resourceinstance.resourceinstanceid;
-    let Some(tiles) = &resource.tiles else { return };
-    let descriptors = indexed_graph.build_descriptors(tiles);
-    let headword = descriptors.name.as_deref().unwrap_or("").trim();
-    if headword.is_empty() {
-        return;
-    }
-    let gloss = descriptors
-        .description
-        .as_deref()
-        .unwrap_or("")
-        .trim()
-        .to_string();
-
-    let headword_norm = strip_diacritics(headword);
-    let content = if headword == headword_norm {
-        headword.to_string()
-    } else {
-        format!("{headword} {headword_norm}")
-    };
-    let mut meta = BTreeMap::new();
-    meta.insert("title".to_string(), headword.to_string());
-    meta.insert("gloss".to_string(), gloss.clone());
-    meta.insert("dialect".to_string(), "GA".to_string());
-    let mut filters = BTreeMap::new();
-    filters.insert("dialect".to_string(), vec!["GA".to_string()]);
-
-    if let Err(e) = ga
-        .add_custom_record(
-            uuid.clone(),
-            content,
-            "ga".to_string(),
-            Some(meta),
-            Some(filters.clone()),
-            None,
-        )
-        .await
-    {
-        eprintln!("[pagefind] ga record failed for {uuid}: {e}");
-    }
-    if !gloss.is_empty() {
-        let mut en_meta = BTreeMap::new();
-        en_meta.insert("title".to_string(), gloss.clone());
-        en_meta.insert("headword".to_string(), headword.to_string());
-        en_meta.insert("dialect".to_string(), "GA".to_string());
-        if let Err(e) = en
-            .add_custom_record(
-                uuid.clone(),
-                gloss.clone(),
-                "en".to_string(),
-                Some(en_meta),
-                Some(filters),
-                None,
-            )
-            .await
-        {
-            eprintln!("[pagefind] en record failed for {uuid}: {e}");
-        }
-    }
-}
-
-/// Write + zip both pagefind indices into `output_dir` (beside `head.sqlite`).
-#[cfg(feature = "v2-emit")]
-async fn pagefind_finalize(
-    ga: &mut PagefindIndex,
-    en: &mut PagefindIndex,
-    output_dir: &Path,
-) -> Result<(), String> {
-    ga.write_files(Some(output_dir.join("pagefind-ga").to_string_lossy().to_string()))
-        .await
-        .map_err(|e| format!("pagefind ga write: {e}"))?;
-    en.write_files(Some(output_dir.join("pagefind-en").to_string_lossy().to_string()))
-        .await
-        .map_err(|e| format!("pagefind en write: {e}"))?;
-    for dir_name in ["pagefind-ga", "pagefind-en"] {
-        let src = output_dir.join(dir_name);
-        let dest = output_dir.join(format!("{dir_name}.zip"));
-        if src.exists() {
-            zip_directory_store(&src, &dest)?;
-            let _ = std::fs::remove_dir_all(&src);
-        }
-    }
-    Ok(())
-}
-
 /// Streaming tbx-v2 build: the memory-bounded counterpart of
 /// `build_resources_from_business_csv` (whole corpus → `Vec` → emit), which
 /// OOMs at Téarma scale (~189k resources ≈ 3GB resident before emit ever runs).
@@ -489,23 +384,18 @@ fn stream_tbx_v2_build(
     )
     .map_err(|e| e.to_string())?;
 
-    // Descriptor graph for pagefind headword/gloss extraction.
+    // Descriptor graph for headword/gloss extraction (name → headword,
+    // description → gloss) — the two fields the FTS index searches.
     let mut desc_graph = graph.clone();
     let _ = desc_graph.set_descriptor_template("name", "<Headword>");
     let _ = desc_graph.set_descriptor_template("description", "<Gloss>");
 
-    // pagefind's futures are !Send; this runs on a spawn_blocking thread with no
-    // ambient runtime, so a dedicated current-thread runtime is safe. emit and
-    // build_resources are sync and simply block this single task — fine.
-    let rt = tokio::runtime::Builder::new_current_thread()
-        .enable_all()
-        .build()
-        .map_err(|e| format!("pagefind runtime: {e}"))?;
+    // FTS5 full-text sidecar (search.sqlite beside head.sqlite) — the on-device
+    // text index that replaces pagefind on this path: seconds, not ~40 min, and
+    // a fraction of the size. Fed from the same descriptors pagefind used.
+    let mut fts = crate::fts::FtsBuilder::create(out_dir)?;
 
-    let total = rt.block_on(async {
-        let mut ga = pagefind_new_index("ga")?;
-        let mut en = pagefind_new_index("en")?;
-
+    let total = {
         let bd_path = bd.join(format!("{gid}.json"));
         let file =
             std::fs::File::create(&bd_path).map_err(|e| format!("create business_data: {e}"))?;
@@ -542,12 +432,19 @@ fn stream_tbx_v2_build(
                 first = false;
                 serde_json::to_writer(&mut w, r)
                     .map_err(|e| format!("serialize resource: {e}"))?;
-                pagefind_add_resource(&mut ga, &mut en, &desc_graph, r).await;
+                // Feed the FTS index — headword + gloss from the descriptors.
+                if let Some(tiles) = &r.tiles {
+                    let d = desc_graph.build_descriptors(tiles);
+                    fts.add(
+                        &r.resourceinstance.resourceinstanceid,
+                        d.name.as_deref().unwrap_or(""),
+                        d.description.as_deref().unwrap_or(""),
+                    )?;
+                }
                 total += 1;
             }
-            // The build+pagefind-add loop is the long, visible phase — animate
-            // it across 0.10..0.75 so the bar/notification actually moves.
-            report("building", 0.10 + 0.65 * (bi + 1) as f64 / n_batches as f64);
+            // The build loop is the visible phase — animate 0.10..0.65.
+            report("building", 0.10 + 0.55 * (bi + 1) as f64 / n_batches as f64);
         }
         w.write_all(br#"]}}"#).map_err(|e| e.to_string())?;
         w.flush().map_err(|e| e.to_string())?;
@@ -558,9 +455,14 @@ fn stream_tbx_v2_build(
             "build_resources (batched, size {batch_size}): {build_ms} ms, {total} resources"
         ));
 
-        // emit and pagefind-finalize are single opaque steps (no sub-progress
-        // available), so the bar parks at these marks for their duration.
-        report("indexing", 0.78);
+        // Commit the FTS index (fast — seconds even at Téarma scale).
+        let t = std::time::Instant::now();
+        let fts_n = fts.finish()?;
+        stamp(format!("fts: {} ms, {fts_n} entries", t.elapsed().as_millis()));
+
+        // emit is a single opaque step (no sub-progress), so the bar parks here
+        // for its duration — now the long pole (~7.5 min at Téarma scale).
+        report("indexing", 0.70);
         let t = std::time::Instant::now();
         ros_madair_emit::emit(
             src.to_str().ok_or("non-utf8 prebuild path")?,
@@ -570,13 +472,8 @@ fn stream_tbx_v2_build(
         .map_err(|e| format!("emit: {e}"))?;
         stamp(format!("emit: {} ms", t.elapsed().as_millis()));
 
-        report("indexing", 0.88);
-        let t = std::time::Instant::now();
-        pagefind_finalize(&mut ga, &mut en, out_dir).await?;
-        stamp(format!("pagefind: {} ms", t.elapsed().as_millis()));
-
-        Ok::<usize, String>(total)
-    })?;
+        total
+    };
 
     std::fs::copy(models.join(format!("{gid}.json")), out_dir.join("graph.json"))
         .map_err(|e| format!("copy graph.json: {e}"))?;
