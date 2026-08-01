@@ -113,7 +113,7 @@
       <Settings showLicenseSection={showLicenseInSettings} />
     {/if}
 
-    {#if !$currentEntry && !$currentExample && !$currentLayer && !$overlayView && !$mapState}
+    {#if !$currentEntry && !$currentExample && !$currentLayer && (!$overlayView || $overlayView === 'layers') && !$mapState}
       <TabBar />
     {/if}
 

@@ -131,19 +131,20 @@
   }
 </script>
 
-<div class="ge-page ge-layer-mgr" style="padding-bottom:24px;">
-  <header class="lm-hero">
-    <button class="lm-back" onclick={close} aria-label={$t('nav.back')}>
-      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg>
-    </button>
-    <div>
-      <h1 class="lm-title">{$t('layers.managerTitle')}</h1>
-      <p class="lm-sub">{$t('layers.managerCount', { active: active.length, total: $layerStack.length })}</p>
+<div class="ge-page ge-layer-mgr">
+  <div class="ge-navbar">
+    <div class="ge-navbar-side">
+      <button class="ge-back" onclick={close} aria-label={$t('nav.back')}>
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg>
+        {$t('nav.settings')}
+      </button>
     </div>
-  </header>
+    <div class="ge-navbar-title">{$t('layers.managerTitle')}</div>
+    <div class="ge-navbar-side right"></div>
+  </div>
 
   <!-- ── Your layers ─────────────────────────────────────────── -->
-  <div class="ge-block-title">{$t('layers.yours')}</div>
+  <div class="ge-block-title">{$t('layers.yours')} · {$t('layers.managerCount', { active: active.length, total: $layerStack.length })}</div>
   <div class="lm-body">
     {#if building}
       <div class="lm-row building">
@@ -264,10 +265,6 @@
 
 <style>
   .ge-layer-mgr { color: var(--fg-body); }
-  .lm-hero { display: flex; align-items: center; gap: 12px; padding: calc(14px + env(safe-area-inset-top, 0px)) 16px 6px; }
-  .lm-back { background: none; border: none; color: var(--fg-body); padding: 4px; cursor: pointer; display: flex; }
-  .lm-title { font-size: var(--fs-title, 22px); font-weight: 700; margin: 0; }
-  .lm-sub { font-size: var(--fs-small); color: var(--fg-muted); margin: 2px 0 0; }
   .lm-body { padding: 0 16px 8px; display: flex; flex-direction: column; gap: 8px; }
   .lm-group { font-size: var(--fs-small); color: var(--fg-muted); text-transform: uppercase; letter-spacing: .06em; margin: 6px 0 0; }
 
