@@ -11,6 +11,15 @@
     return dialect ? dialect.replace('.', '·') : '';
   }
 
+  /** Does this entry overlap Irish (GA)? True for the GA-family (GA, GA.CON,
+   *  GA.ULS, GA.MUN) AND for "G" — the multi-branch marker set when a slug spans
+   *  more than one Goidelic branch (GA+GD), which therefore INCLUDES GA. Only
+   *  purely non-GA entries (e.g. GD Scottish Gaelic) render de-emphasised/greyer. */
+  function isIrish(dialect?: string): boolean {
+    const d = (dialect || '').toUpperCase();
+    return d.includes('GA') || d === 'G';
+  }
+
   let searchInput: HTMLInputElement;
   let debounceTimer: ReturnType<typeof setTimeout>;
 
@@ -142,6 +151,7 @@
       {#each $searchResults as result}
         <button
           class="ge-list-row"
+          class:ge-dim-nonga={!isIrish(result.dialect)}
           onclick={() => selectResult(result)}
           style="width:100%;background:transparent;border:0;text-align:left;cursor:pointer;"
         >

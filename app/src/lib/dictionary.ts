@@ -383,15 +383,17 @@ export async function search(query: string, lang: SearchLang = 'ga', dialects?: 
     ]);
     const resultSets: EntrySummary[][] = [...pfSets];
     if (ftsHits.length) {
-      // FTS layers carry no dialect facet (Téarma is all GA); headword/POS get
-      // canonicalised from the head by searchDisplay below, same as Pagefind hits.
+      // The FTS index carries no dialect column, but every FTS-built layer is
+      // Téarma, which is uniformly Irish → tag GA (matches the Pagefind builder's
+      // hardcoded GA, and keeps Téarma headwords from being dimmed as non-GA).
+      // headword/POS get canonicalised from the head by searchDisplay below.
       resultSets.push(
         ftsHits.map(h => ({
           uri: h.uri,
           headword: h.headword,
           pos: '',
           gloss: lang === 'en' ? h.snippet || h.gloss || undefined : h.gloss || undefined,
-          dialect: undefined,
+          dialect: 'GA',
         }))
       );
     }

@@ -200,6 +200,8 @@
 }
 .ge-list-row .row-main { flex: 1; min-width: 0; }
 .ge-list-row .row-after { color: var(--fg-muted); font-size: var(--fs-small); }
+/* Non-Irish (non-GA dialect) headwords are de-emphasised in the result list. */
+.ge-list-row.ge-dim-nonga { opacity: 0.5; }
 .ge-list-title { color: var(--fg-strong); font-weight: 500; line-height: 1.35; }
 .ge-list-subtitle { color: var(--fg-muted); font-size: var(--fs-small); margin-top: 2px; line-height: 1.4; text-wrap: pretty; }
 
