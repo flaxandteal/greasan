@@ -1,7 +1,7 @@
 import { writable, derived, readable, get, type Writable } from 'svelte/store';
 import { ready } from './wasm';
 import { FAMILIES, DEFAULT_FAMILY, layerSwatch, type FamilyId } from './family';
-import { switchFamily, addDynamicLayer, addV2Layer, removeDynamicLayer, getDynamicLayers, registerV2Layers, initOfflineLayers, setHiddenLayers, search, loadEntryFlagged, type DynamicLayerInfo, type ExampleDetail } from './dictionary';
+import { switchFamily, addDynamicLayer, addV2Layer, removeV2Layer, getDynamicLayers, registerV2Layers, initOfflineLayers, setHiddenLayers, search, loadEntryFlagged, type DynamicLayerInfo, type ExampleDetail } from './dictionary';
 import { buildLayer, waitForBuild, listLayers, listV2Layers, assetUrl, removeLayerFiles, type BuildLayerStatus } from './tauri-builder';
 import type { SearchLang } from './dictionary';
 
@@ -337,8 +337,10 @@ export async function addLayerDirect(baseUrl: string, name: string, pagefindBase
 }
 
 export async function removeLayer(name: string): Promise<void> {
-  await removeDynamicLayer(name);
-  // Clean up files from disk
+  // Drop ONLY this layer from the active v2 head set (no store teardown, which
+  // previously wiped every layer). Head dirs are read live via currentV2HeadDirs.
+  removeV2Layer(name);
+  // Clean up files from disk (no-op for bundled heads, which aren't in layers_dir).
   try {
     await removeLayerFiles(name);
   } catch (err) {
@@ -347,6 +349,7 @@ export async function removeLayer(name: string): Promise<void> {
   // Don't leave the name in the hidden set: a later reinstall would come back
   // invisible, looking like a failed install.
   hiddenLayerNames.update(h => h.filter(n => n !== name));
+  // Refresh the reactive store so the Layer Manager live-updates.
   layers.set(getDynamicLayers());
 }
 
