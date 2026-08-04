@@ -16,5 +16,7 @@
     "checkJs": true,
     "moduleDetection": "force"
   },
-  "include": ["src/**/*.ts", "src/**/*.js", "src/**/*.svelte"]
+  "include": ["src/**/*.ts", "src/**/*.js", "src/**/*.svelte"],
+  // Generated wasm-bindgen glue — typed via its own .d.ts; don't checkJs the impl.
+  "exclude": ["src/lib/gramadan-pkg/**"]
 }

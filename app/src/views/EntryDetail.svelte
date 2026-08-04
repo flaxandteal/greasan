@@ -3,7 +3,8 @@
   import { loadEntryFlagged, placeHeadDir, type EntryDetail } from '../lib/dictionary';
   import { dialectCode, sourceLabelSwatch } from '../lib/family';
   import { t } from '../lib/i18n';
-  import { buildParadigm, posKind, type FlatGroup } from '../lib/paradigm';
+  import { buildParadigm, posKind, type FlatGroup, type FormItem } from '../lib/paradigm';
+  import { generateForms } from '../lib/gramadan';
   import ExampleList from './ExampleList.svelte';
   import LayerPill from './LayerPill.svelte';
   import FlagButton from './FlagButton.svelte';
@@ -28,8 +29,66 @@
     return dialectCode($familyConfig.id, entry.dialect || '') || '';
   });
 
-  // Structured paradigm (noun grid / verb tense-accordion / adjective / flat fallback).
-  let paradigm = $derived(entry ? buildParadigm(entry.forms, entry.pos) : null);
+  // gramadan-generated forms for an entry that has a grammatical class but no
+  // attested (BuNaMo) forms. POS-general: we hand gramadan-rs the entry's real
+  // class and it answers per POS — nouns are implemented, verb/adjective return
+  // `supported:false` for now and light up here with no change once gramadan-rs
+  // gains them. `generated` is null until the async wasm resolves; the paradigm
+  // re-derives when it fills.
+  let generated = $state<FormItem[] | null>(null);
+  $effect(() => {
+    const e = entry;
+    generated = null;
+    const kind = e ? posKind(e.pos) : 'other';
+    // Run for any classed noun/verb/adjective — even when BuNaMo forms exist — so
+    // gramadan can FILL the cells BuNaMo doesn't attest (voc/dat). Attested forms
+    // still win per cell in the blend below; only the gaps come through generated.
+    if (
+      e &&
+      (kind === 'noun' || kind === 'verb' || kind === 'adjective') &&
+      (e.grammarClass ?? '') !== ''
+    ) {
+      const key = e.uri;
+      generateForms(e.headword, kind, e.gender ?? '', e.grammarClass ?? '').then((g) => {
+        // Guard against a stale resolve after the entry changed.
+        if (entry?.uri === key && g.supported && g.forms.length) generated = g.forms;
+      });
+    }
+  });
+
+  // Structured paradigm. BLEND: attested (BuNaMo) forms first so they win the
+  // per-cell dedup and render plain; gramadan-generated forms follow, tagged so
+  // the cells BuNaMo doesn't attest (voc/dat, or the whole grid when BuNaMo lacks
+  // the lemma) render with a subtle inferred marker.
+  // Article toggle: gramadan also emits definite (articled) forms tagged
+  // 'definite' — "an bhróg" / "na mbróg". Available only for nouns.
+  let showDefinite = $state(false);
+  let hasDefinite = $derived(
+    !!entry && posKind(entry.pos) === 'noun' && !!generated?.some((f) => f.tags.includes('definite')),
+  );
+
+  let paradigm = $derived.by(() => {
+    if (!entry) return null;
+    const genAll = generated ?? [];
+    if (showDefinite && hasDefinite) {
+      // Definite view: only the articled forms (all gramadan-generated → marked).
+      const def = genAll
+        .filter((f) => f.tags.includes('definite'))
+        .map((f) => ({
+          writtenRep: f.writtenRep,
+          tags: [...f.tags.filter((t) => t !== 'definite'), '__generated'],
+        }));
+      return buildParadigm(def, entry.pos);
+    }
+    // Indefinite view: attested (BuNaMo) wins per cell; generated-indefinite fills gaps.
+    const attested = (entry.forms ?? []) as FormItem[];
+    const gen = genAll
+      .filter((f) => !f.tags.includes('definite'))
+      .map((f) => ({ ...f, tags: [...f.tags, '__generated'] }));
+    return buildParadigm([...attested, ...gen], entry.pos);
+  });
+  /** True when the shown paradigm is gramadan-generated (not sourced from BuNaMo). */
+  let isGenerated = $derived(!!entry && (entry.forms?.length ?? 0) === 0 && !!generated?.length);
 
   // Person-slot → Irish pronoun label (content, so not localised); base/autonomous via i18n.
   const PRONOUN: Record<string, string> = {
@@ -230,7 +289,12 @@
 
     <!-- Forms / paradigm -->
     {#if paradigm && (paradigm.kind !== 'flat' || paradigm.groups.length > 0)}
-      <div class="ge-block-title">{$t('entry.forms')}</div>
+      <div class="ge-block-title">
+        {$t('entry.forms')}
+        {#if isGenerated}
+          <span title={$t('forms.generatedHint')} style="margin-left:8px;font-size:11px;font-weight:600;color:var(--danger,#b0463c);background:color-mix(in srgb, var(--danger,#b0463c) 12%, transparent);padding:1px 7px;border-radius:8px;letter-spacing:0.02em;">⚠ {$t('forms.generated')}</span>
+        {/if}
+      </div>
       <div style="padding:0 16px;">
 
         {#if paradigm.kind === 'noun' || paradigm.kind === 'adjective'}
@@ -238,7 +302,18 @@
           <table class="ge-para">
             <thead>
               <tr>
-                <th></th>
+                <th class="ge-para-corner">
+                  {#if hasDefinite}
+                    <button
+                      type="button"
+                      class="art-toggle"
+                      class:on={showDefinite}
+                      onclick={() => (showDefinite = !showDefinite)}
+                      aria-pressed={showDefinite}
+                      title={showDefinite ? 'Show indefinite forms' : 'Show definite forms (an …)'}
+                    >an</button>
+                  {/if}
+                </th>
                 <th>{$t('forms.singular')}</th>
                 {#if paradigm.hasPlural}<th>{$t('forms.plural')}</th>{/if}
               </tr>
@@ -249,13 +324,13 @@
                   <th class="ge-para-axis">{$t('forms.' + row.case)}</th>
                   <td>
                     {#each row.sg as c}
-                      <span class="ge-para-cell">{c.text}{#if c.extra.length}<small>{c.extra.map(tagLabel).join(' · ')}</small>{/if}</span>
+                      <span class="ge-para-cell" class:ge-gen={c.generated}>{c.text}{#if c.extra.length}<small>{c.extra.map(tagLabel).join(' · ')}</small>{/if}{#if c.generated}<sup class="ge-gen-mark" title={$t('forms.generatedHint')}>?</sup>{/if}</span>
                     {/each}
                   </td>
                   {#if paradigm.hasPlural}
                     <td>
                       {#each row.pl as c}
-                        <span class="ge-para-cell">{c.text}{#if c.extra.length}<small>{c.extra.map(tagLabel).join(' · ')}</small>{/if}</span>
+                        <span class="ge-para-cell" class:ge-gen={c.generated}>{c.text}{#if c.extra.length}<small>{c.extra.map(tagLabel).join(' · ')}</small>{/if}{#if c.generated}<sup class="ge-gen-mark" title={$t('forms.generatedHint')}>?</sup>{/if}</span>
                       {/each}
                     </td>
                   {/if}
@@ -436,6 +511,20 @@
   }
   .ge-para-cell { display: inline-flex; align-items: baseline; gap: 5px; margin-right: 12px; color: var(--fg-default); }
   .ge-para-cell:last-child { margin-right: 0; }
+  /* Generated (not attested in BuNaMo): dimmed, with a subtle inferred marker. */
+  .ge-para-cell.ge-gen { color: var(--fg-soft); }
+  .ge-gen-mark { font-size: 9px; color: var(--danger, #b0463c); opacity: 0.7; cursor: help; }
+  /* Article toggle — subtle pill in the grid's top-left corner. */
+  .ge-para-corner { padding: 4px 6px !important; }
+  .art-toggle {
+    font: italic 12px/1 inherit; padding: 2px 8px; border-radius: 999px; cursor: pointer;
+    border: 1px solid color-mix(in srgb, var(--fg-soft) 35%, transparent);
+    background: transparent; color: var(--fg-soft); transition: all 0.12s;
+  }
+  .art-toggle.on {
+    color: var(--fg-default); background: color-mix(in srgb, var(--accent, #4a7a63) 16%, transparent);
+    border-color: color-mix(in srgb, var(--accent, #4a7a63) 45%, transparent);
+  }
   .ge-para-cell small { color: var(--fg-soft); font-size: 11px; }
 
   /* Adjective comparison + section subheads */
