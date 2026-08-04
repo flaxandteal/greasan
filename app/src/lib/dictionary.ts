@@ -416,7 +416,7 @@ export async function search(query: string, lang: SearchLang = 'ga', dialects?: 
         if (branch) branchesByUri.get(r.uri)!.add(branch);
       }
     }
-    const merged: EntrySummary[] = [];
+    let merged: EntrySummary[] = [];
     for (const [uri, r] of byUri) {
       if (branchesByUri.get(uri)!.size > 1) r.dialect = 'G';
       merged.push(r);
@@ -441,22 +441,50 @@ export async function search(query: string, lang: SearchLang = 'ga', dialects?: 
       console.warn('[dictionary] searchDisplay failed:', err);
     }
 
+    // Collapse residual dialect-split duplicates. A lexeme that still carries a
+    // legacy `ga-`/`gd-` slug in one head (e.g. an un-migrated MacBain entry keyed
+    // to a pre-`goi-` Wiktionary id) surfaces as a second row beside the neutral
+    // `goi-` "G" row. Keep only the broadest-dialect row per (headword, pos): "G"
+    // (both branches) wins over a single-branch "GA"/"GD". This is a DISPLAY de-dup
+    // — the dropped URI is a distinct resource, so full content only merges once the
+    // slug is unified upstream (rebuild the offending head). Same-breadth ties keep
+    // the first seen.
+    const breadth = (d: string) => (d === 'G' ? 3 : d ? 1 : 0);
+    const bestByKey = new Map<string, EntrySummary>();
+    const collapseKey = (r: EntrySummary) =>
+      `${stripDiacritics(r.headword).toLowerCase()} ${(r.pos || '').toLowerCase()}`;
+    for (const r of merged) {
+      const key = collapseKey(r);
+      const prev = bestByKey.get(key);
+      if (!prev || breadth(r.dialect || '') > breadth(prev.dialect || '')) bestByKey.set(key, r);
+    }
+    merged = [...bestByKey.values()];
+
     const q = query.toLowerCase();
     const qNorm = normQuery.toLowerCase();
+    // Whole-word match: the query as a complete token in a multi-word / compound
+    // headword ("mór" in "cnoc mór"), accent-insensitive. Regexes built once, word
+    // boundaries = start/end/space/hyphen.
+    const esc = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const wordReQ = new RegExp(`(^|[\\s-])${esc(q)}($|[\\s-])`);
+    const wordReNorm = new RegExp(`(^|[\\s-])${esc(qNorm)}($|[\\s-])`);
     merged.sort((a, b) => {
       const aText = (lang === 'en' ? a.gloss || '' : a.headword).toLowerCase();
       const bText = (lang === 'en' ? b.gloss || '' : b.headword).toLowerCase();
       // Tier order: exact-with-accent > exact-up-to-accent > prefix/compound-with-accent
-      // > prefix-up-to-accent > everything else (inflected forms, gloss hits). Putting
-      // exact-up-to-accent ABOVE the prefix tiers is the fix: a whole headword ("bó"
-      // searched as "bo") now outranks a compound/prefix ("bo-…"), instead of the
-      // compound jumping ahead just for sharing the leading letters.
+      // > prefix-up-to-accent > whole-word-in-headword > everything else (substring,
+      // gloss, inflected). exact-up-to-accent sits ABOVE the prefix tiers so a whole
+      // headword ("bó" searched as "bo") outranks a compound/prefix ("bo-…"); the new
+      // whole-word tier lifts "cnoc mór" (mór a full word) above substring/gloss noise.
+      const wholeWord = (t: string): boolean =>
+        wordReQ.test(t) || wordReNorm.test(stripDiacritics(t));
       const rank = (t: string): number =>
         t === q ? 0
           : stripDiacritics(t) === qNorm ? 1
             : t.startsWith(q) ? 2
               : stripDiacritics(t).startsWith(qNorm) ? 3
-                : 4;
+                : wholeWord(t) ? 4
+                  : 5;
       return rank(aText) - rank(bText);
     });
 
@@ -783,6 +811,16 @@ export function addV2Layer(headDir: string, name: string): void {
   const i = dynamicLayers.findIndex((l) => l.name === name);
   if (i >= 0) dynamicLayers.splice(i, 1);
   dynamicLayers.push({ name, baseUrl: headDir, pagefindBase: null });
+  dialectCache.clear();
+}
+
+/** Remove a single INSTALLED v2 head from the active set (the counterpart of
+ *  addV2Layer). Drops ONLY the named layer — no store teardown — so the other
+ *  heads stay registered; head dirs are read live via currentV2HeadDirs(). */
+export function removeV2Layer(name: string): void {
+  activeV2Layers = activeV2Layers.filter((l) => l.name !== name);
+  const i = dynamicLayers.findIndex((l) => l.name === name);
+  if (i >= 0) dynamicLayers.splice(i, 1);
   dialectCache.clear();
 }
 
