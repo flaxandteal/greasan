@@ -1,6 +1,7 @@
 parent_alias,alias,name,datatype,cardinality,ontology_class,parent_property,description,collection_name,required,searchable,exportable,sortorder
 ,headword,Headword,string,1,http://www.w3.org/ns/lemon/ontolex#Form,http://www.w3.org/ns/lemon/ontolex#canonicalForm,Written representation of the canonical form,,true,true,true,1
 ,part_of_speech,Part of Speech,concept,1,http://www.lexinfo.net/ontology/3.0/lexinfo#PartOfSpeech,http://www.lexinfo.net/ontology/3.0/lexinfo#partOfSpeech,Grammatical category,Parts of Speech,true,true,true,2
+,gender,Gender,concept,1,http://www.lexinfo.net/ontology/3.0/lexinfo#Gender,http://www.lexinfo.net/ontology/3.0/lexinfo#gender,Grammatical gender of the lexeme (inherent LexicalEntry property; lexinfo:gender),Grammatical Features,false,true,true,8
 ,dialect,Dialect,concept,1,https://flaxandteal.org/ontology/goidelic#Dialect,https://flaxandteal.org/ontology/goidelic#hasDialect,Rollup of per-tile dialects (pipe-separated); authoritative dialect is on the sense/form/pronunciation tiles,Dialects,false,true,true,0
 ,pronunciation,Pronunciation,semantic,n,http://www.w3.org/ns/lemon/ontolex#Form,http://www.w3.org/ns/lemon/ontolex#lexicalForm,Phonetic representation,,,,true,3
 pronunciation,ipa_value,IPA Value,string,1,http://www.w3.org/2000/01/rdf-schema#Literal,http://www.w3.org/ns/lemon/ontolex#phoneticRep,IPA transcription,,false,true,true,1

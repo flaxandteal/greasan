@@ -80,6 +80,7 @@ def shape_entry(entry: dict) -> dict:
         # the next increment; `headword` stays the display fallback for now.
         "headwords": [{"dialect": dialect, "word": entry["word"]}],
         "part_of_speech": entry["pos"],
+        "gender": entry.get("gender", ""),
         "grammar_class": entry.get("grammar_class", ""),
         "grammar_class_confidence": entry.get("grammar_class_confidence", ""),
         "dialect": dialect,

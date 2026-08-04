@@ -14,6 +14,7 @@ COLUMNS = [
     "ResourceID",
     "headword",
     "part_of_speech",
+    "gender",
     "grammar_class",
     "grammar_class_confidence",
     "dialect",
@@ -36,7 +37,7 @@ COLUMNS = [
 ]
 
 
-def entry_to_rows(entry: dict) -> list[dict[str, str]]:
+def entry_to_rows(entry: dict, include_forms: bool = True) -> list[dict[str, str]]:
     """Convert a shaped entry into one or more CSV rows.
 
     Business data format: multiple rows per ResourceID for cardinality-n groups.
@@ -49,7 +50,11 @@ def entry_to_rows(entry: dict) -> list[dict[str, str]]:
     # Collect all cardinality-n items
     pronunciations = entry.get("pronunciations", [])
     senses = entry.get("senses", [])
-    forms = entry.get("forms", [])
+    # Wiktionary inflectional forms are noisy (inconsistent lenited/eclipsed
+    # tagging), so with include_forms=False we drop them from the layer and let
+    # attested BuNaMo forms — or the gramadan-rs decliner as a fallback — own the
+    # paradigm instead. See config [pipeline] include_wiktionary_forms.
+    forms = entry.get("forms", []) if include_forms else []
     domains = entry.get("domains", [])
 
     # Determine how many rows we need (at least 1)
@@ -62,6 +67,8 @@ def entry_to_rows(entry: dict) -> list[dict[str, str]]:
         if i == 0:
             row["headword"] = entry.get("headword", "")
             row["part_of_speech"] = entry.get("part_of_speech", "")
+            # Inherent lexeme gender (lexinfo:gender). Empty for POS without gender.
+            row["gender"] = entry.get("gender", "")
             gc = entry.get("grammar_class", "")
             row["grammar_class"] = gc
             # Confidence comes from the enrichment stage (tbx.py): "attested" for an
@@ -100,10 +107,10 @@ def entry_to_rows(entry: dict) -> list[dict[str, str]]:
     return rows
 
 
-def emit_csv(input_path: Path, output_path: Path) -> dict:
+def emit_csv(input_path: Path, output_path: Path, include_forms: bool = True) -> dict:
     """Read shaped JSONL, emit business_data.csv.
 
-    Returns manifest dict.
+    `include_forms` gates the Form nodegroup (see entry_to_rows). Returns manifest dict.
     """
     output_path.parent.mkdir(parents=True, exist_ok=True)
 
@@ -116,7 +123,7 @@ def emit_csv(input_path: Path, output_path: Path) -> dict:
 
         for line in fin:
             entry = orjson.loads(line)
-            rows = entry_to_rows(entry)
+            rows = entry_to_rows(entry, include_forms=include_forms)
             for row in rows:
                 writer.writerow(row)
                 total_rows += 1

@@ -29,6 +29,10 @@ external_example = "6d502e2e-7fe6-5414-99e4-ac981cebc493"
 
 [pipeline]
 stages = ["filter", "normalise", "ontolex", "arches", "examples"]
+# Wiktionary's forms[] are inconsistently tagged (lenited/eclipsed as free text),
+# so we do not ship them as grammar. Attested BuNaMo forms — or the gramadan-rs
+# decliner as a fallback (see app gramadan.ts) — own the paradigm instead.
+include_wiktionary_forms = false
 
 [sources.tearma]
 url = "https://www.tearma.ie/api/tbx"

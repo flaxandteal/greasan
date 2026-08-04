@@ -54,6 +54,7 @@ def load_config(config_path: Path, fixture: bool = False) -> dict:
         "lang_codes": lang_codes,
         "lang_configs": lang_configs,
         "graphs": config.get("graphs", {}),
+        "include_wiktionary_forms": config.get("pipeline", {}).get("include_wiktionary_forms", True),
         "fixture": fixture,
         # For fixture mode, use a single raw_input
         "fixture_raw_input": base / config["fixture"]["raw_input"] if fixture and "fixture" in config else None,
@@ -160,7 +161,7 @@ def run_pipeline(config_path: Path, fixture: bool = False) -> None:
 
     # Stage 4: Arches CSV
     print("[pipeline] Stage 4/5: arches", file=sys.stderr)
-    m = emit_csv(paths["shaped"], paths["business_data"])
+    m = emit_csv(paths["shaped"], paths["business_data"], include_forms=cfg["include_wiktionary_forms"])
     manifests.append(m)
     print(f"  → {m['total_entries']} entries → {m['total_rows']} CSV rows", file=sys.stderr)
 

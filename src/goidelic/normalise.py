@@ -8,6 +8,8 @@ from pathlib import Path
 
 import orjson
 
+from .grammar import enrich_grammar_class
+
 # Séimhiú-dot precomposed characters → lenis-h equivalents
 _DOT_ABOVE_MAP: dict[str, str] = {
     "\u1e02": "Bh",  # Ḃ
@@ -225,6 +227,21 @@ def _detect_dialect(entry: dict, default_dialect: str) -> str:
     return default_dialect
 
 
+def extract_gender(entry: dict) -> str:
+    """Lemma gender from Wiktionary head templates (args ``g``/``g2``/``g3``, e.g.
+    ``'m'``/``'f'``). Inherent LexicalEntry property (lexinfo:gender). Goidelic is
+    masculine/feminine only, so ignore number suffixes (``'m-p'``) and other codes."""
+    for ht in entry.get("head_templates", []):
+        args = ht.get("args", {}) or {}
+        for key in ("g", "g2", "g3"):
+            code = str(args.get(key, "")).strip().lower()
+            if code.startswith("m"):
+                return "masculine"
+            if code.startswith("f"):
+                return "feminine"
+    return ""
+
+
 def normalise_entry(entry: dict, default_dialect: str = "Irish (General)") -> dict:
     """Normalise a single entry. Returns enriched entry with normalised fields."""
     word = normalise_text(entry.get("word", ""))
@@ -285,6 +302,16 @@ def normalise_entry(entry: dict, default_dialect: str = "Irish (General)") -> di
                 examples.append(example_str)
         senses.append({"gloss": gloss, "examples": examples})
 
+    gender = extract_gender(entry)
+    # Embed the declension/conjugation class at bundle time: BuNaMo db lookup wins
+    # (attested), else the gramadan guess tagged inferred/uncertain. Only for the
+    # POS gramadan classes; empty otherwise. Attested source data still overrides
+    # this downstream (e.g. tbx codes), and the frontend marks non-attested with '?'.
+    grammar_class = ""
+    grammar_class_confidence = ""
+    if pos_label in ("noun", "verb", "adjective"):
+        grammar_class, grammar_class_confidence = enrich_grammar_class(word, pos_label, gender)
+
     return {
         "word": word,
         "word_search": word_search,
@@ -292,6 +319,9 @@ def normalise_entry(entry: dict, default_dialect: str = "Irish (General)") -> di
         "dialect": dialect,
         "pos": pos_label,
         "raw_pos": raw_pos,
+        "gender": gender,
+        "grammar_class": grammar_class,
+        "grammar_class_confidence": grammar_class_confidence,
         "pronunciations": pronunciations,
         "senses": senses,
         "forms": forms,

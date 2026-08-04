@@ -255,12 +255,16 @@ export async function loadEntryV2(uri: string, headDirs: string[]): Promise<Entr
       if (writtenRep) forms.push({ writtenRep, tags });
     }
 
-    // Gender is an entry-level property carried on the (BuNaMo) form tiles; surface
-    // the first masculine/feminine tag for the title badge.
-    let gender: string | undefined;
-    for (const f of forms) {
-      const g = f.tags.find((t) => t === 'masculine' || t === 'feminine');
-      if (g) { gender = g; break; }
+    // Gender (lexinfo:gender) is an inherent entry-level property — a concept
+    // reference resolved to its label via the closure, exactly like part_of_speech.
+    // Fall back to scanning BuNaMo form tiles for a masculine/feminine tag when the
+    // entry node is empty (older heads predating the gender node).
+    let gender: string | undefined = label(tree.gender) || undefined;
+    if (!gender) {
+      for (const f of forms) {
+        const g = f.tags.find((t) => t === 'masculine' || t === 'feminine');
+        if (g) { gender = g; break; }
+      }
     }
 
     // Etymology — cardinality n, deduplicated by text, merge source labels.
