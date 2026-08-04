@@ -93,6 +93,27 @@ const models = [
 const allGraphMeta = {};     // graphId -> meta for _all.json
 const allCollections = [];   // all collections across models
 const allResources = {};     // graphId -> resources array
+
+// Build a NapiRdmCache from a collections array (the SKOS reference data). Passed
+// into buildResourcesFromBusinessCsv so concept/reference labels resolve through
+// the SAME identity the read side (v2_closure) resolves back — no parallel minting.
+function makeRdmCache(cols) {
+  if (!usingNapi) return null;
+  const napi = createRequire(resolve(root, 'app/package.json'))('@alizarin/napi');
+  const cache = new napi.NapiRdmCache();
+  for (const collection of cols) {
+    const cid = collection.collectionid || collection.id;
+    if (!cid) continue;
+    const concepts = Object.values(collection.__allConcepts || {}).map(c => ({
+      id: c.id,
+      prefLabels: c.prefLabels || {},
+      broader: c.broader || [],
+      narrower: (c.children || []).map(ch => ch.id || ch),
+    }));
+    cache.addCollectionFromJson(cid, JSON.stringify(concepts));
+  }
+  return cache;
+}
 const allGraphObjs = {};     // graphId -> plain graph object
 const allTypedGraphs = {};    // graphId -> StaticGraph (NAPI or WASM, for populateCaches)
 
@@ -140,7 +161,7 @@ for (const model of models) {
   // Layer-specific UUID namespace so tile IDs don't collide with other layers
   // (uuid5 of alizarin base namespace + "layer/wiktionary-goidelic")
   const layerNamespace = '020572f1-e1c6-53dd-b743-8a7b9112f4a3';
-  const result = buildResourcesFromBusinessCsv(bdCsv, graph, collections, 'en', false, layerNamespace);
+  const result = buildResourcesFromBusinessCsv(bdCsv, graph, collections, 'en', false, layerNamespace, makeRdmCache(collections));
   const resources = result?.business_data?.resources || [];
   console.log(`[build-wiktionary] Built ${resources.length} resources (${elapsed(tBd)})`);
 

@@ -2,7 +2,12 @@ use std::collections::{BTreeMap, HashMap};
 use std::io::Read;
 use std::path::{Path, PathBuf};
 
-use alizarin_core::{build_resources_from_business_csv, BusinessDataCsvOptions};
+use alizarin_core::label_resolution::ConceptLookup;
+use alizarin_core::rdm_cache::RdmCache;
+use alizarin_core::type_serialization::SerializationContext;
+use alizarin_core::{
+    build_resources_from_business_csv_with_context, BusinessDataCsvOptions,
+};
 use flate2::read::GzDecoder;
 use pagefind::api::PagefindIndex;
 use pagefind::options::PagefindServiceConfig;
@@ -408,20 +413,37 @@ fn stream_tbx_v2_build(
         let mut first = true;
         let mut total = 0usize;
         let mut build_ms = 0u128;
+        // Registry of extension datatype handlers (CLM `reference`, etc.) so
+        // reference labels (POS, dialect) resolve to concept UUIDs and index into
+        // concept_tags for head-side search display.
+        let registry = ros_madair_emit::default_registry();
+        // Resolve concept/reference labels through a shared RdmCache built from the
+        // SAME SKOS reference data the head vocab uses — one concept identity on
+        // serialize + deserialize, so on-device Téarma references resolve instead of
+        // falling back to raw "source:id". See reference-rdmcache-architecture.
+        let mut rdm_cache = RdmCache::new();
+        rdm_cache.add_from_skos_collections(collections);
+        let ser_ctx = SerializationContext {
+            concept_lookup: Some(&rdm_cache as &dyn ConceptLookup),
+            extension_registry: Some(&registry),
+            ..SerializationContext::empty()
+        };
 
         for (bi, batch) in records.chunks(batch_size).enumerate() {
             let mut csv = header.clone();
             tbx_parser::append_records_csv(batch, source_label, &mut seen_ids, &mut csv);
             let t = std::time::Instant::now();
-            let resources = build_resources_from_business_csv(
+            let resources = build_resources_from_business_csv_with_context(
                 &csv,
                 graph,
                 collections,
+                Some(&registry),
                 BusinessDataCsvOptions {
                     strict_concepts: false,
                     uuid_namespace: Some(uuid_ns.to_string()),
                     ..Default::default()
                 },
+                Some(&ser_ctx),
             )
             .map_err(|e| format!("build resources failed: {e}"))?;
             build_ms += t.elapsed().as_millis();
@@ -780,16 +802,27 @@ pub async fn build_layer<R: Runtime>(
                 }
             };
 
-            // 5. Build StaticResources from CSV
-            let resources = match build_resources_from_business_csv(
+            // 5. Build StaticResources from CSV — concept/reference labels resolve
+            // through the shared RdmCache (same identity as the head vocab).
+            let registry = ros_madair_emit::default_registry();
+            let mut rdm_cache = RdmCache::new();
+            rdm_cache.add_from_skos_collections(&collections);
+            let ser_ctx = SerializationContext {
+                concept_lookup: Some(&rdm_cache as &dyn ConceptLookup),
+                extension_registry: Some(&registry),
+                ..SerializationContext::empty()
+            };
+            let resources = match build_resources_from_business_csv_with_context(
                 &csv_data,
                 &graph,
                 &collections,
+                Some(&registry),
                 BusinessDataCsvOptions {
                     strict_concepts: false,
                     uuid_namespace: Some(TEARMA_UUID_NS.to_string()),
                     ..Default::default()
                 },
+                Some(&ser_ctx),
             ) {
                 Ok(r) => r,
                 Err(e) => {

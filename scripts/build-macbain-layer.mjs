@@ -14,6 +14,7 @@
  */
 
 import { createRequire } from 'module';
+import { makeRdmCache } from './lib/rdm-cache.mjs';
 import {
   initWasm,
   buildGraphFromModelCsvs,
@@ -434,6 +435,37 @@ if (existsSync(wkCsvPath)) {
   console.log('[build-macbain] No WK CSV found — all entries will be standalone');
 }
 
+// Forms lemmatization now sources from BuNaMo, not Wiktionary: WK no longer ships
+// inflected forms (dropped from the layer), so its written_rep column is empty.
+// BuNaMo carries the full paradigm keyed by the shared goi- slug, so it restores
+// the "match an inflected MacBain spelling to its lemma" fallback.
+const bunamoCsvPath = resolve(root, 'data/processed/bunamo_lexical_entry_data.csv');
+if (existsSync(bunamoCsvPath)) {
+  const lines = readFileSync(bunamoCsvPath, 'utf8').split('\n');
+  const header = lines[0].split(',');
+  const ridIdx = header.indexOf('ResourceID');
+  const wrIdx = header.indexOf('written_rep');
+  let added = 0;
+  for (let i = 1; i < lines.length; i++) {
+    if (!lines[i].trim()) continue;
+    const fields = parseCsvLine(lines[i]);
+    const rid = fields[ridIdx] || '';
+    const wr = wrIdx >= 0 ? (fields[wrIdx] || '') : '';
+    if (!wr || !rid) continue;
+    const key = normalizeHead(wr);
+    // BuNaMo emits goi- slugs → candidates for both Irish and Scottish matches.
+    const fmTargets = rid.startsWith('goi-') ? [gaFormsLookup, gdFormsLookup]
+      : rid.startsWith('ga-') ? [gaFormsLookup]
+      : rid.startsWith('gd-') ? [gdFormsLookup] : [];
+    for (const lk of fmTargets) {
+      if (!lk.has(key)) { lk.set(key, rid); added++; }
+    }
+  }
+  console.log(`[build-macbain] BuNaMo forms: ga=${gaFormsLookup.size}, gd=${gdFormsLookup.size} unique forms (+${added})`);
+} else {
+  console.log('[build-macbain] No BuNaMo CSV — forms lemmatization stays empty');
+}
+
 // Combined lookup for MacBain headword matching (gd-* only, same as before)
 const wkLookup = gdLookup;
 
@@ -625,7 +657,7 @@ typedGraph.setDescriptorTemplate('description', '<Gloss>');
 
 // Build resources from MacBain business data CSV
 const tBd = performance.now();
-const result = buildResourcesFromBusinessCsv(csvContent, graph, collections, 'en', false, LAYER_NAMESPACE);
+const result = buildResourcesFromBusinessCsv(csvContent, graph, collections, 'en', false, LAYER_NAMESPACE, makeRdmCache(collections, root, usingNapi));
 const resources = result?.business_data?.resources || [];
 console.log(`[build-macbain] Built ${resources.length} resources (${elapsed(tBd)})`);
 

@@ -23,6 +23,7 @@
  */
 
 import { createRequire } from 'module';
+import { makeRdmCache } from './lib/rdm-cache.mjs';
 import {
   initWasm,
   buildGraphFromModelCsvs,
@@ -117,7 +118,7 @@ typedGraph.setDescriptorTemplate('name', '<Headword>');
 typedGraph.setDescriptorTemplate('description', '<Gloss>');
 
 const tBd = performance.now();
-const result = buildResourcesFromBusinessCsv(csvContent, graph, collections, 'en', false, LAYER_NAMESPACE);
+const result = buildResourcesFromBusinessCsv(csvContent, graph, collections, 'en', false, LAYER_NAMESPACE, makeRdmCache(collections, root, usingNapi));
 const resources = result?.business_data?.resources || [];
 console.log(`[build-bunamo] Built ${resources.length} resources (${elapsed(tBd)})`);
 
