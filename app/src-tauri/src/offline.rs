@@ -25,8 +25,10 @@ use serde::Serialize;
 use tauri::{AppHandle, Manager, Runtime};
 
 /// Bump this when the bundled artifact FORMAT changes, so already-installed apps
-/// re-extract instead of reusing a stale layout.
-const READY_MARKER: &str = ".offline-ready-v2";
+/// re-extract instead of reusing a stale layout. v3: lexical-entry graph gained
+/// the `gender` node + all concepts re-emitted through the shared RdmCache, so the
+/// old unpacked heads must be replaced (they lack gender / have stale concept ids).
+const READY_MARKER: &str = ".offline-ready-v4";
 
 struct CorpusSpec {
     /// Layer name — the `dynamicLayers` registry key and V2 layer name.

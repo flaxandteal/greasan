@@ -37,6 +37,17 @@ shows a live progress notification in the shade. Driven from Rust over JNI
        android:foregroundServiceType="dataSync" />
    ```
 
+3. **ProGuard/R8 keep rule** (`proguard-rules.pro`)
+   → append `proguard-rules.pro` (this dir) to
+   `gen/android/app/proguard-rules.pro`.
+
+   The release build sets `isMinifyEnabled = true`. `BuildForegroundService`'s
+   `@JvmStatic` `start`/`update`/`stop` are called ONLY from Rust over JNI, which
+   R8 cannot see, so without a keep rule it strips them (the class survives via
+   the manifest `<service>`, its static methods do not) and the on-device build
+   crashes with `NoSuchMethodError` on the first progress notification. Miss this
+   step after a `tauri android init` and remove+reinstall of a TBX layer crashes.
+
 ## Notes
 
 - `dataSync` foreground-service type + its permission are required on
