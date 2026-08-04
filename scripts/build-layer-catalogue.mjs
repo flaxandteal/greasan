@@ -15,6 +15,7 @@
  * Output: data/layer-v2/ (head.sqlite + chunks + graph.json).
  */
 import { createRequire } from 'module';
+import { makeRdmCache } from './lib/rdm-cache.mjs';
 import {
   initWasm, buildGraphFromModelCsvs, buildResourcesFromBusinessCsv,
   createResourceRegistry, parseStaticGraph, setNapiModule, collectionsToSkosXml,
@@ -63,21 +64,26 @@ const LAYERS = [
     types: ['Glosses', 'Senses', 'Etymology', 'Pronunciation', 'Cognates'], formats: ['Arches JSON', 'RM'],
     swatch: 'var(--layer-wk)', default_on: 'true', descType: 'Overview',
     desc: 'Crowd-sourced Irish and Scottish Gaelic dictionary content extracted from Wiktionary — glosses, senses, etymologies, pronunciations and cognates.',
-    config: { searchable: true, langs: ['ga', 'en'] },
+    config: { searchable: true, langs: ['ga', 'en'],
+      install: { name: 'wiktionary-goidelic', url: 'http://localhost:8080/wiktionary-layer.tar.gz', format: 'built' } },
     links: [{ t: 'Wiktionary', u: 'https://www.wiktionary.org/', ty: 'Homepage' }, { t: 'Data dumps', u: 'https://dumps.wikimedia.org/', ty: 'Source' }], downloads: [] },
   { slug: 'macbain', head: 'macbain-v2', name: 'MacBain (1911)',
     licence: 'Public Domain', attribution: "MacBain's Etymological Dictionary of the Gaelic Language (1911) — public domain",
     types: ['Etymology', 'Cognates', 'Glosses'], formats: ['Arches JSON', 'RM'],
     swatch: 'var(--layer-mb)', default_on: 'true', descType: 'Overview',
     desc: "Alexander MacBain's 1911 etymological dictionary of Scottish Gaelic — etymologies and cognates. Out of copyright.",
-    config: { searchable: true, langs: ['ga', 'en'] },
+    config: { searchable: true, langs: ['ga', 'en'],
+      install: { name: 'macbain', url: 'http://localhost:8080/macbain-layer.tar.gz', format: 'built' } },
     links: [{ t: 'Archive.org', u: 'https://archive.org/details/etymologicaldict00macbuoft', ty: 'Source' }], downloads: [] },
   { slug: 'tearma', head: 'tearma-v2', name: 'Téarma',
-    licence: 'CC BY 4.0', attribution: 'Téarma.ie — Fiontar & Scoil na Gaeilge, DCU (CC BY 4.0)',
+    licence: 'No open reuse licence', attribution: 'Téarma.ie - terminology data (c) Foras na Gaeilge; implementation (c) Gaois, Fiontar & Scoil na Gaeilge, DCU. Not redistributed; loaded on-device from your own downloaded TBX.',
     types: ['Terminology', 'Glosses'], formats: ['TBX', 'RM'],
     swatch: 'var(--layer-te)', default_on: 'true', descType: 'Overview',
     desc: 'The National Terminology Database for Irish — domain-specific terminology across many fields.',
-    config: { searchable: true, langs: ['ga', 'en'] },
+    config: { searchable: true, langs: ['ga', 'en'],
+      // url:'' → the "choose a file" flow: Téarma can't ship, so the user picks a
+      // TBX they downloaded from tearma.ie and it builds on-device.
+      install: { name: 'tearma', url: '', format: 'tbx-v2' } },
     links: [{ t: 'Téarma.ie', u: 'https://www.tearma.ie/', ty: 'Homepage' }],
     downloads: [{ f: 'RM', u: '', n: 'Regenerated as an RM head from the source TBX.' }] },
   { slug: 'bunamo', head: 'bunamo-v2', name: 'BuNaMo',
@@ -190,7 +196,7 @@ writeFileSync(resolve(root, 'data/layer-business.csv'), businessCsv);
 console.log(`[build-layer] business CSV: ${businessCsv.split('\n').length - 1} rows, ${LAYERS.length} layers`);
 
 const LAYER_NAMESPACE = uuidv5('layer/catalogue', ALIZARIN_NS);
-const result = buildResourcesFromBusinessCsv(businessCsv, graph, collections, 'en', false, LAYER_NAMESPACE);
+const result = buildResourcesFromBusinessCsv(businessCsv, graph, collections, 'en', false, LAYER_NAMESPACE, makeRdmCache(collections, root, usingNapi));
 const resources = result?.business_data?.resources || [];
 
 for (const node of graph.nodes) {

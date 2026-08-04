@@ -8,7 +8,7 @@
   import { currentLayer } from '../lib/store';
   import type { LayerEntry } from '../lib/layers-catalogue';
 
-  let { layer, actionLabel, actionText, onAction, toggle, toggled, onToggle, disabled }: {
+  let { layer, actionLabel, actionText, onAction, toggle, toggled, onToggle, disabled, onRemove, removeLabel }: {
     layer: LayerEntry;
     /** Icon-button (X) action, e.g. remove. */
     actionLabel?: string;
@@ -20,6 +20,9 @@
     toggled?: boolean;
     onToggle?: () => void;
     disabled?: boolean;
+    /** Uninstall (delete from device). Rendered as a trash icon beside the toggle. */
+    onRemove?: () => void;
+    removeLabel?: string;
   } = $props();
 
   function openDetail() { currentLayer.set(layer); }
@@ -44,6 +47,11 @@
     </div>
   </button>
   {#if toggle}
+    {#if onRemove}
+      <button class="ge-layer-block-remove" onclick={onRemove} aria-label={removeLabel} title={removeLabel}>
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18M8 6V4a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2m2 0v14a1 1 0 0 1-1 1H7a1 1 0 0 1-1-1V6"/><path d="M10 11v6M14 11v6"/></svg>
+      </button>
+    {/if}
     <button class="ge-layer-block-toggle" class:on={toggled} onclick={onToggle} aria-label={actionLabel}><span></span></button>
   {:else if actionText}
     <button class="ge-layer-block-textaction" onclick={onAction} disabled={disabled}>{actionText}</button>
@@ -86,6 +94,11 @@
     padding: 0 12px; display: inline-flex; align-items: center;
   }
   .ge-layer-block-action:active { background: color-mix(in srgb, var(--fg-soft) 14%, transparent); }
+  .ge-layer-block-remove {
+    align-self: center; border: 0; background: transparent; color: var(--fg-soft);
+    cursor: pointer; padding: 0 8px; display: inline-flex; align-items: center;
+  }
+  .ge-layer-block-remove:active { color: var(--danger, #b0463c); }
   .ge-layer-block-textaction {
     align-self: center; margin-right: 12px; border: 0; background: transparent;
     color: var(--accent-deep, var(--accent)); font-weight: 700; font-size: 14px;

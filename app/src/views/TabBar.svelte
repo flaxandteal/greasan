@@ -5,16 +5,30 @@
   const tabs = [
     { id: 'search' as const, key: 'nav.search' },
     { id: 'starred' as const, key: 'nav.starred' },
+    // Layers is an overlay (the Layer Manager), not a main tab — but it lives in
+    // the tab row, left of Settings, as a library.
+    { id: 'layers' as const, key: 'nav.layers' },
     { id: 'settings' as const, key: 'nav.settings' },
   ];
+
+  function selectTab(id: (typeof tabs)[number]['id']) {
+    if (id === 'layers') {
+      overlayView.set('layers');
+    } else {
+      activeTab.set(id);
+      overlayView.set(null);
+    }
+  }
 </script>
 
-<nav class="ge-tabbar" style="grid-template-columns:repeat(3,1fr);">
+<nav class="ge-tabbar" style="grid-template-columns:repeat(4,1fr);">
   {#each tabs as tab}
     <button
       class="ge-tab"
-      class:active={$activeTab === tab.id}
-      onclick={() => { activeTab.set(tab.id); overlayView.set(null); }}
+      class:active={tab.id === 'layers'
+        ? $overlayView === 'layers'
+        : $activeTab === tab.id && $overlayView !== 'layers'}
+      onclick={() => selectTab(tab.id)}
     >
       {#if tab.id === 'search'}
         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
@@ -23,6 +37,10 @@
       {:else if tab.id === 'starred'}
         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
           <path d="M12 3l2.7 5.5 6.1.9-4.4 4.3 1 6.1L12 17l-5.4 2.8 1-6.1L3.2 9.4l6.1-.9z"/>
+        </svg>
+      {:else if tab.id === 'layers'}
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+          <path d="m16 6 4 14"/><path d="M12 6v14"/><path d="M8 8v12"/><path d="M4 4v16"/>
         </svg>
       {:else}
         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">

@@ -36,6 +36,13 @@ export interface LayerPresentation {
   sourceLabels?: string[];
 }
 
+/**
+ * A user-installable layer source shown in the Layer Manager's "Add a layer"
+ * list. No longer hardcoded here — the list is derived from the layer CATALOGUE
+ * (each installable layer carries an `install` block in its `layer-v2` config;
+ * see layers-catalogue.ts `LayerInstall`). This interface is just the shape
+ * LayerManager maps those catalogue entries into.
+ */
 export interface SuggestedLayer {
   name: string;
   url: string;
@@ -55,7 +62,6 @@ export interface FamilyConfig {
   sortLocale: string;
   searchLangs: SearchLangOption[];
   defaultLayers: LayerConfig[];
-  suggestedLayers: SuggestedLayer[];
   /** Per-layer display config, keyed by layer name. Unlisted layers fall back
    *  to their raw name and a neutral swatch. */
   layerPresentation?: Record<string, LayerPresentation>;
@@ -139,48 +145,6 @@ export const FAMILIES: Record<FamilyId, FamilyConfig> = {
       bunamo: { label: 'BuNaMo', swatch: 'var(--layer-bn)', sourceLabels: ['bn'] },
     },
     defaultLayers: [],
-    suggestedLayers: [
-      {
-        name: 'wiktionary-goidelic',
-        url: 'http://localhost:8080/wiktionary-layer.tar.gz',
-        label: 'Wiktionary — Irish + Scottish Gaelic',
-        format: 'built',
-      },
-      {
-        name: 'wiktionary-fixture',
-        url: 'http://localhost:8080/wiktionary-fixture-layer.tar.gz',
-        label: 'Wiktionary (fixture — ~60 lemmas)',
-        format: 'built',
-      },
-      {
-        // Téarma can't ship, and tearma.ie has no direct-download API (the old
-        // /api/tbx 404s). The flow is: download the TBX yourself (browser) then
-        // pick it here. Empty url → the chip just presets name + TBX-v2 format
-        // and the "Choose file" picker takes it from there.
-        name: 'tearma',
-        url: '',
-        label: 'Téarma — choose a downloaded TBX file',
-        format: 'tbx-v2',
-      },
-      {
-        name: 'tearma-sample',
-        url: 'file:///data/user/0/org.flaxandteal.greasan/files/tearma-sample.tbx',
-        label: 'Téarma (sample — tbx-v2 test)',
-        format: 'tbx-v2',
-      },
-      {
-        name: 'macbain',
-        url: 'http://localhost:8080/macbain-layer.tar.gz',
-        label: 'MacBain — Scottish Gaelic etymology (1911)',
-        format: 'built',
-      },
-      {
-        name: 'macbain-emit',
-        url: 'file:///data/user/0/org.flaxandteal.greasan/files/macbain-prebuild-v2.tar.gz',
-        label: 'MacBain (on-device emit — v2 test)',
-        format: 'prebuild-v2',
-      },
-    ],
   },
   scots: {
     id: 'scots',
@@ -200,6 +164,5 @@ export const FAMILIES: Record<FamilyId, FamilyConfig> = {
       { id: 'en', label: 'English' },
     ],
     defaultLayers: [],
-    suggestedLayers: [],
   },
 };

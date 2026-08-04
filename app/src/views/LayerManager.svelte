@@ -10,9 +10,9 @@
   // they want (a catalogue entry, a downloaded file, a URL) and the ingest
   // format is inferred, never chosen from a row of build-pipeline buttons.
   import {
-    layerStack, toggleLayerVisibility, layers,
+    layerStack, toggleLayerVisibility, layers, removeLayer,
     buildProgress, buildingLayerName, importLayer, installPackage,
-    overlayView, familyConfig,
+    overlayView,
   } from '../lib/store';
   import type { SuggestedLayer } from '../lib/family';
   import { t } from '../lib/i18n';
@@ -34,11 +34,18 @@
       resourceId: '', name: label, slug: name, icon: '', types: [], formats: [],
       licence: '', attribution: '', descriptionType: '', description: '',
       links: [], resourceCount: '', statistics: null, integrationSlug: name,
-      defaultOn: false, swatch, config: null, downloads: [],
+      defaultOn: false, swatch, config: null, install: null, downloads: [],
     };
   }
   function entryFor(l: { name: string; label: string; swatch: string }): LayerEntry {
     return catEntry(l.name) ?? stubEntry(l.name, l.label, l.swatch);
+  }
+  // Uninstall (delete from device). Confirm first — a device-built layer (e.g.
+  // Téarma) has to be rebuilt from its TBX to come back.
+  async function confirmRemove(l: { name: string; label: string }) {
+    const ok = typeof window === 'undefined' || window.confirm($t('layers.removeConfirm', { name: l.label }));
+    if (!ok) return;
+    try { await removeLayer(l.name); } catch (e) { console.warn('[layers] remove failed:', e); }
   }
 
   // Installed layers split by visibility. The pinned "base" (last one standing)
@@ -59,10 +66,31 @@
   );
   let isBuilding = $derived(building !== null);
 
-  // Suggested sources not yet installed (family config). These are SOURCES, not
-  // formats — each carries the ingest format so the user never picks one.
-  let suggestions = $derived(
-    $familyConfig.suggestedLayers.filter(s => !$layers.some(l => l.name === s.name)),
+  // When a build STARTS, the progress card renders at the top of the list, but
+  // the user usually tapped an install action further down. Scroll the manager
+  // back to the top so the loading bar is in view. Rising-edge only (not on every
+  // progress tick); scrollIntoView finds whichever ancestor actually scrolls.
+  let managerEl: HTMLElement | undefined = $state();
+  let wasBuilding = false;
+  $effect(() => {
+    const now = isBuilding;
+    if (now && !wasBuilding) managerEl?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    wasBuilding = now;
+  });
+
+  // Suggested sources not yet installed, derived from the CATALOGUE (the single
+  // source): any layer whose definition carries an `install` block is offered,
+  // minus the ones already installed. These are SOURCES, not formats — each
+  // carries the ingest format so the user never picks one.
+  let suggestions = $derived<SuggestedLayer[]>(
+    catalogue
+      .filter(e => e.install && !$layers.some(l => l.name === e.install!.name))
+      .map(e => ({
+        name: e.install!.name,
+        url: e.install!.url,
+        label: e.name,
+        format: e.install!.format as SuggestedLayer['format'],
+      })),
   );
 
   // ── Add a layer: source-first ────────────────────────────────────────────
@@ -137,14 +165,9 @@
   }
 </script>
 
-<div class="ge-page ge-layer-mgr">
+<div class="ge-page ge-layer-mgr" bind:this={managerEl}>
   <div class="ge-navbar">
-    <div class="ge-navbar-side">
-      <button class="ge-back" onclick={close} aria-label={$t('nav.back')}>
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg>
-        {$t('nav.settings')}
-      </button>
-    </div>
+    <div class="ge-navbar-side"></div>
     <div class="ge-navbar-title">{$t('layers.managerTitle')}</div>
     <div class="ge-navbar-side right"></div>
   </div>
@@ -183,13 +206,13 @@
     {/if}
 
     {#each active as l}
-      <LayerBlockCard layer={entryFor(l)} toggle toggled onToggle={() => toggleLayerVisibility(l.name)} actionLabel={$t('layers.aria')} />
+      <LayerBlockCard layer={entryFor(l)} toggle toggled onToggle={() => toggleLayerVisibility(l.name)} actionLabel={$t('layers.aria')} onRemove={() => confirmRemove(l)} removeLabel={$t('layers.removeLayer')} />
     {/each}
 
     {#if hidden.length > 0}
       <div class="lm-group">{$t('layers.stHidden')}</div>
       {#each hidden as l}
-        <LayerBlockCard layer={entryFor(l)} toggle toggled={false} onToggle={() => toggleLayerVisibility(l.name)} actionLabel={$t('layers.aria')} />
+        <LayerBlockCard layer={entryFor(l)} toggle toggled={false} onToggle={() => toggleLayerVisibility(l.name)} actionLabel={$t('layers.aria')} onRemove={() => confirmRemove(l)} removeLabel={$t('layers.removeLayer')} />
       {/each}
     {/if}
 

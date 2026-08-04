@@ -8,6 +8,12 @@ import { layerCatalogueHeadDir } from './dictionary';
 
 export interface LayerLink { title: string; url: string; type: string }
 export interface LayerDownload { format: string; url: string; notes: string }
+/** Where + how to install this layer, when it is user-installable. The catalogue
+ *  is the single source for the "Add a layer" list — an entry with an `install`
+ *  block is offered; one without is bundled/internal. `url:''` means "choose a
+ *  file" (e.g. a Téarma TBX the user downloaded). Mirrors the old
+ *  family.ts SuggestedLayer, now data rather than hardcoded config. */
+export interface LayerInstall { name: string; url: string; format: string }
 export interface LayerEntry {
   resourceId: string;
   name: string;
@@ -26,6 +32,8 @@ export interface LayerEntry {
   defaultOn: boolean;
   swatch: string;
   config: Record<string, unknown> | null;
+  /** Install source, if this layer is user-installable (else null). */
+  install: LayerInstall | null;
   downloads: LayerDownload[];
 }
 
@@ -68,12 +76,23 @@ function parseJson(v: unknown): Record<string, unknown> | null {
   try { return JSON.parse(s); } catch { return null; }
 }
 
+/** Pull the install source out of a layer's config block, if present + valid. */
+function parseInstall(cfg: Record<string, unknown> | null): LayerInstall | null {
+  const i = cfg?.install as any;
+  if (!i || typeof i !== 'object') return null;
+  const name = str(i.name);
+  const format = str(i.format);
+  if (!name || !format) return null;
+  return { name, url: str(i.url), format };
+}
+
 function toEntry(id: string, tree: any): LayerEntry {
   const t = tree || {};
   const lic = t.licensing || {};
   const desc = t.description || {};
   const st = t.statistics || {};
   const integ = t.integration || {};
+  const cfg = parseJson(integ.config_block);
   const links = asArray(t.links)
     .map((l: any) => ({ title: str(l?.link_title), url: str(l?.link_url), type: refLabel(l?.link_type) }))
     .filter((l) => l.title || l.url);
@@ -92,7 +111,8 @@ function toEntry(id: string, tree: any): LayerEntry {
     integrationSlug: str(integ.integration_slug),
     defaultOn: str(integ.default_on).toLowerCase() === 'true',
     swatch: str(integ.swatch),
-    config: parseJson(integ.config_block),
+    config: cfg,
+    install: parseInstall(cfg),
     downloads,
   };
 }
