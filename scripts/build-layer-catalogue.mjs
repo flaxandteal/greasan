@@ -1,7 +1,7 @@
 /**
  * build-layer-catalogue.mjs
  *
- * Builds the `layer-v2` head: the Layer catalogue — one Layer resource per data
+ * Builds the `layer-v2` head: the Layer catalogue - one Layer resource per data
  * layer in the stack, describing its licensing + attribution, types, formats,
  * links, description, build statistics, and Gréasán integration config. Shipped
  * by default as the source for finding + installing layers, independent of
@@ -46,7 +46,7 @@ function csvEscape(v) {
 }
 
 /** Best-effort resource count from a layer's head spine table (via python3
- * sqlite3 — the sqlite3 CLI isn't always present). '' if unavailable. */
+ * sqlite3 - the sqlite3 CLI isn't always present). '' if unavailable. */
 function countResources(head) {
   if (!head) return '';
   const db = resolve(root, `data/${head}/head.sqlite`);
@@ -63,15 +63,15 @@ const LAYERS = [
     licence: 'CC BY-SA 4.0', attribution: 'Wiktionary contributors (CC BY-SA 4.0)',
     types: ['Glosses', 'Senses', 'Etymology', 'Pronunciation', 'Cognates'], formats: ['Arches JSON', 'RM'],
     swatch: 'var(--layer-wk)', default_on: 'true', descType: 'Overview',
-    desc: 'Crowd-sourced Irish and Scottish Gaelic dictionary content extracted from Wiktionary — glosses, senses, etymologies, pronunciations and cognates.',
+    desc: 'Crowd-sourced Irish and Scottish Gaelic dictionary content extracted from Wiktionary - glosses, senses, etymologies, pronunciations and cognates.',
     config: { searchable: true, langs: ['ga', 'en'],
       install: { name: 'wiktionary-goidelic', url: 'http://localhost:8080/wiktionary-layer.tar.gz', format: 'built' } },
     links: [{ t: 'Wiktionary', u: 'https://www.wiktionary.org/', ty: 'Homepage' }, { t: 'Data dumps', u: 'https://dumps.wikimedia.org/', ty: 'Source' }], downloads: [] },
   { slug: 'macbain', head: 'macbain-v2', name: 'MacBain (1911)',
-    licence: 'Public Domain', attribution: "MacBain's Etymological Dictionary of the Gaelic Language (1911) — public domain",
+    licence: 'Public Domain', attribution: "MacBain's Etymological Dictionary of the Gaelic Language (1911) - public domain",
     types: ['Etymology', 'Cognates', 'Glosses'], formats: ['Arches JSON', 'RM'],
     swatch: 'var(--layer-mb)', default_on: 'true', descType: 'Overview',
-    desc: "Alexander MacBain's 1911 etymological dictionary of Scottish Gaelic — etymologies and cognates. Out of copyright.",
+    desc: "Alexander MacBain's 1911 etymological dictionary of Scottish Gaelic - etymologies and cognates. Out of copyright.",
     config: { searchable: true, langs: ['ga', 'en'],
       install: { name: 'macbain', url: 'http://localhost:8080/macbain-layer.tar.gz', format: 'built' } },
     links: [{ t: 'Archive.org', u: 'https://archive.org/details/etymologicaldict00macbuoft', ty: 'Source' }], downloads: [] },
@@ -79,7 +79,7 @@ const LAYERS = [
     licence: 'No open reuse licence', attribution: 'Téarma.ie - terminology data (c) Foras na Gaeilge; implementation (c) Gaois, Fiontar & Scoil na Gaeilge, DCU. Not redistributed; loaded on-device from your own downloaded TBX.',
     types: ['Terminology', 'Glosses'], formats: ['TBX', 'RM'],
     swatch: 'var(--layer-te)', default_on: 'true', descType: 'Overview',
-    desc: 'The National Terminology Database for Irish — domain-specific terminology across many fields.',
+    desc: 'The National Terminology Database for Irish - domain-specific terminology across many fields.',
     config: { searchable: true, langs: ['ga', 'en'],
       // url:'' → the "choose a file" flow: Téarma can't ship, so the user picks a
       // TBX they downloaded from tearma.ie and it builds on-device.
@@ -87,10 +87,10 @@ const LAYERS = [
     links: [{ t: 'Téarma.ie', u: 'https://www.tearma.ie/', ty: 'Homepage' }],
     downloads: [{ f: 'RM', u: '', n: 'Regenerated as an RM head from the source TBX.' }] },
   { slug: 'bunamo', head: 'bunamo-v2', name: 'BuNaMo',
-    licence: 'CC BY 4.0', attribution: 'BuNaMo (Gramadán) — Michal Boleslav Měchura (CC BY 4.0)',
+    licence: 'CC BY 4.0', attribution: 'BuNaMo (Gramadán) - Michal Boleslav Měchura (CC BY 4.0)',
     types: ['Grammar', 'Morphology'], formats: ['RM'],
     swatch: 'var(--layer-bn)', default_on: 'true', descType: 'Overview',
-    desc: 'Irish morphology database — full inflectional paradigms, composed onto the shared lemma ids via Gramadán.',
+    desc: 'Irish morphology database - full inflectional paradigms, composed onto the shared lemma ids via Gramadán.',
     config: { searchable: true, langs: ['ga'] },
     links: [{ t: 'BuNaMo (GitHub)', u: 'https://github.com/michmech/BuNaMo', ty: 'Source' }], downloads: [] },
   { slug: 'place', head: 'place-v2', name: 'Logainm',
@@ -108,7 +108,7 @@ const LAYERS = [
     config: { searchable: true, langs: ['sampla'] },
     links: [{ t: 'Tatoeba', u: 'https://tatoeba.org/', ty: 'Homepage' }], downloads: [] },
   { slug: 'example-gaois', head: 'example-gaois-v2', name: 'Gaois',
-    licence: 'CC BY 4.0', attribution: 'Gaois — Parallel Corpus of Legislation (Fiontar & Scoil na Gaeilge, DCU; CC BY 4.0). Legislation © Government of Ireland.',
+    licence: 'CC BY 4.0', attribution: 'Gaois - Parallel Corpus of Legislation (Fiontar & Scoil na Gaeilge, DCU; CC BY 4.0). Legislation © Government of Ireland.',
     types: ['Examples'], formats: ['RM'],
     swatch: 'var(--layer-default)', default_on: 'true', descType: 'Overview',
     desc: 'Bilingual example sentences from the Gaois Parallel Corpus of Legislation.',
@@ -118,13 +118,13 @@ const LAYERS = [
     licence: 'CC0 1.0', attribution: 'App-generated',
     types: ['Annotations'], formats: ['RM'],
     swatch: 'var(--layer-default)', default_on: 'true', descType: 'Overview',
-    desc: 'Internal person records — the seeded User who authors notes and flags.',
+    desc: 'Internal person records - the seeded User who authors notes and flags.',
     config: { searchable: false, internal: true }, links: [], downloads: [] },
   { slug: 'note', head: 'note-v2', name: 'Nótaí · Notes',
     licence: 'CC0 1.0', attribution: 'App-generated (user notes)',
     types: ['Annotations'], formats: ['RM'],
     swatch: 'var(--layer-default)', default_on: 'true', descType: 'Overview',
-    desc: 'User notes and flags attached to resources — the app\'s mutable overlay.',
+    desc: 'User notes and flags attached to resources - the app\'s mutable overlay.',
     config: { searchable: false, internal: true, mutable: true }, links: [], downloads: [] },
   { slug: 'basemap', head: '', name: 'Léarscáil · Basemap',
     licence: 'ODbL 1.0', attribution: '© OpenMapTiles © OpenStreetMap contributors',
