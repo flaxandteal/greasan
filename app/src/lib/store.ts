@@ -175,7 +175,11 @@ export const buildProgress = writable<BuildLayerStatus | null>(null);
 
 /** Names of layers hidden from composition. Any layer may be hidden; the only
  *  rule (enforced in `setHiddenLayers`) is that the stack can't be emptied. */
-export const hiddenLayerNames = persisted<string[]>('ge:hiddenLayers', []);
+// BuNaMo ships hidden by default: it's the heavy attested-morphology layer, opt-in
+// per user. It stays a listed, toggleable card (just visible:false); turning it on
+// composes its attested paradigms and adds the 'BuNaMo' grammar tab. A `persisted`
+// default only applies to fresh installs; existing users keep their saved set.
+export const hiddenLayerNames = persisted<string[]>('ge:hiddenLayers', ['bunamo']);
 hiddenLayerNames.subscribe(names => setHiddenLayers(names));
 
 /** Whether the layer sheet is showing. */

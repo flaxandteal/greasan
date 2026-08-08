@@ -45,25 +45,26 @@ BASE_CSV = REPO / "data" / "processed" / "lexical_entry_data.csv"
 OUT_CSV = REPO / "data" / "processed" / "bunamo_lexical_entry_data.csv"
 # Sidecar consumed by build-bunamo-layer.mjs's Pagefind stage: the true accented
 # lemma per goi slug (the CSV carries only inflected surface forms, not a headword
-# node — so the search-record title comes from here). {resourceId: lemma}.
+# node - so the search-record title comes from here). {resourceId: lemma}.
 LEMMA_JSON = REPO / "data" / "processed" / "bunamo_lemmas.json"
 
 # POS folders that map cleanly onto dictionary headwords. preposition/possessive/
-# nounPhrase are skipped for v1 (see report) — not silent: counted below.
+# nounPhrase are skipped for v1 (see report) - not silent: counted below.
 POS_FOLDERS = ("noun", "adjective", "verb")
 
 # --- 1:1 slot / enum -> gram_features label maps -------------------------------
 
+# Only the slots BuNaMo's noun XML actually attests: nominative + genitive,
+# singular + plural. The gramadan parser SYNTHESISES sgVoc/sgDat/plVoc/plDat
+# (dative insertion = nominative, etc.) even when the source XML has no such
+# slot, so emitting them would ship generated forms as if attested. We show only
+# what BuNaMo confirms; vocative/dative are left to a (clearly-labelled) generated
+# path, never the attested layer. The counting form has no clean case concept.
 NOUN_SLOT = {
     "sgNom": ["singular", "nominative"],
     "sgGen": ["singular", "genitive"],
-    "sgVoc": ["singular", "vocative"],
-    "sgDat": ["singular", "dative"],
     "plNom": ["plural", "nominative"],
     "plGen": ["plural", "genitive"],
-    "plVoc": ["plural", "vocative"],
-    "plDat": ["plural", "dative"],
-    "count": [],  # special counting form ("trí bhliana") — no clean concept
 }
 
 ADJ_SLOT = {
@@ -74,7 +75,7 @@ ADJ_SLOT = {
     "sgVocFem": ["singular", "vocative", "feminine"],
     "plNom": ["plural", "nominative"],
     "graded": ["comparative", "superlative"],  # the single graded degree form
-    "abstractNoun": [],  # derived abstract noun — no adjective-form concept
+    "abstractNoun": [],  # derived abstract noun - no adjective-form concept
 }
 
 TENSE_MAP = {
@@ -185,7 +186,7 @@ def grammar_class(pos: str, word) -> str:
     if pos == "verb":
         try:
             return _VERB_CONJ.get(word.get_conjugation(), "")
-        except Exception:  # noqa: BLE001 — never fabricate; leave empty on failure
+        except Exception:  # noqa: BLE001 - never fabricate; leave empty on failure
             return ""
     return ""
 
