@@ -87,7 +87,7 @@
     rdfs:domain ontolex:Form ;
     rdfs:range ontolex:Form ;
     rdfs:comment
-        "Links a derived Form (e.g. lenited or eclipsed) back to the Form from which it was produced. Distinct from ontolex:canonicalForm — a lenited Form's base may itself be a non-canonical Form (e.g. a plural that has then been eclipsed)."@en .
+        "Links a derived Form (e.g. lenited or eclipsed) back to the Form from which it was produced. Distinct from ontolex:canonicalForm - a lenited Form's base may itself be a non-canonical Form (e.g. a plural that has then been eclipsed)."@en .
 
 
 #####################################################################
@@ -409,7 +409,7 @@
 
 # --- Lexical concepts (Logainm toponymic elements) --------------------------
 # The 211 recurring toponymic elements (baile, cill, mór, …) are modelled as
-# ontolex:LexicalConcept resources — the geographic MEANING a placename evokes,
+# ontolex:LexicalConcept resources - the geographic MEANING a placename evokes,
 # distinct from any one dictionary headword. A placename links to a concept; the
 # concept links back to the headword(s) that lexicalise it. See ONTOLEX-ALIGNMENT
 # Phase 1a and HANDOFF-lexeme-concept-split.md.
@@ -478,7 +478,7 @@
     a owl:Class ;
     rdfs:label "confidence"@en ;
     rdfs:comment
-        "A confidence level for an asserted value. Controlled list; the individuals below back the 'Confidence Levels' collection (label-only until the collection carries these URIs — see ONTOLEX-ALIGNMENT Phase 5)."@en .
+        "A confidence level for an asserted value. Controlled list; the individuals below back the 'Confidence Levels' collection (label-only until the collection carries these URIs - see ONTOLEX-ALIGNMENT Phase 5)."@en .
 
 :hasConfidence
     a owl:ObjectProperty ;
@@ -489,7 +489,7 @@
 
 :Attested a :Confidence ;
     rdfs:label "attested"@en ;
-    rdfs:comment "Taken directly from an explicit source — a TBX declension code or a real BuNaMo paradigm. No inference."@en .
+    rdfs:comment "Taken directly from an explicit source - a TBX declension code or a real BuNaMo paradigm. No inference."@en .
 
 :Inferred a :Confidence ;
     rdfs:label "inferred"@en ;
@@ -497,4 +497,4 @@
 
 :Uncertain a :Confidence ;
     rdfs:label "uncertain"@en ;
-    rdfs:comment "A low-confidence guess — the guesser's fallback when the evidence is weak or conflicting."@en .
+    rdfs:comment "A low-confidence guess - the guesser's fallback when the evidence is weak or conflicting."@en .

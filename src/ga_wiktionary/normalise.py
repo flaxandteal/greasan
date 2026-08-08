@@ -203,7 +203,7 @@ def normalise_entry(entry: dict) -> dict:
             if text:
                 example_str = text
                 if translation:
-                    example_str += f" — {translation}"
+                    example_str += f" - {translation}"
                 examples.append(example_str)
         senses.append({"gloss": gloss, "examples": examples})
 

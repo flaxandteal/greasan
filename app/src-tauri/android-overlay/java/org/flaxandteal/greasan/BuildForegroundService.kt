@@ -19,7 +19,7 @@ import android.os.IBinder
  *
  * Rust (`fg_service.rs`) drives it over JNI: [start] when a build begins,
  * [update] on each progress tick, [stop] when it finishes or fails. The service
- * itself does no work — it exists purely to hold the process up and own the
+ * itself does no work - it exists purely to hold the process up and own the
  * notification; the build runs on its own thread in the same process.
  */
 class BuildForegroundService : Service() {
@@ -36,7 +36,7 @@ class BuildForegroundService : Service() {
             @Suppress("DEPRECATION")
             startForeground(NOTIF_ID, notif)
         }
-        // Don't auto-restart if the OS kills us — a half-finished build can't resume.
+        // Don't auto-restart if the OS kills us - a half-finished build can't resume.
         return START_NOT_STICKY
     }
 
@@ -114,7 +114,7 @@ class BuildForegroundService : Service() {
         /**
          * On API 33+ the notification is hidden unless POST_NOTIFICATIONS is
          * granted. Request it (fire-and-forget) when we have an Activity context;
-         * the foreground service itself runs regardless — only the visible bar
+         * the foreground service itself runs regardless - only the visible bar
          * depends on the grant.
          */
         private fun maybeRequestNotifPermission(ctx: Context) {

@@ -1,4 +1,4 @@
-"""Tests for goidelic.ontolex — goi-HEAD-POS slugs + dialect-merge shaping.
+"""Tests for goidelic.ontolex - goi-HEAD-POS slugs + dialect-merge shaping.
 
 Covers the identity/merge core of docs/goidelic-slug-identity.md at the shape
 stage: dialect variants of a lexeme share a slug and merge into one resource with

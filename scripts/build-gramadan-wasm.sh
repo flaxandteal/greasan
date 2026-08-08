@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 #
 # Build the gramadan-wasm binding into app/src/lib/gramadan-pkg/ (gitignored, like
-# RosMadair's pkg-alizarin). Run once on a fresh checkout before `npm run build` —
+# RosMadair's pkg-alizarin). Run once on a fresh checkout before `npm run build` -
 # the entry view imports the generated `gramadan.js` to produce noun paradigms.
 #
 # Crate: ../Gramadan/gramadan-wasm  (see gramadan-rs/HANDOFF-verb-adjective-paradigms.md

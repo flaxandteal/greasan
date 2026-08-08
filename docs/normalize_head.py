@@ -4,7 +4,7 @@ Reference implementation of the Goidelic slug-identity normalization.
 See docs/goidelic-slug-identity.md (§2 identity, §3 HEAD normalization). This is
 the ONE piece every layer builder must implement identically, so that dialect
 variants of a lexeme (Irish `fear`, Scottish `fear`) resolve to the SAME
-`resourceid` and compose into one resource — while genuinely different words
+`resourceid` and compose into one resource - while genuinely different words
 (different spelling, or different POS) stay distinct.
 
 Deterministic and side-effect free: given a source slug `<lang>-<HEAD>-<POS>` it
@@ -12,7 +12,7 @@ returns the dialect-neutral `goi-<normHEAD>-<POS>` slug; `resourceid()` hashes t
 with the pipeline's EXISTING uuid5 namespace. Validated against the real
 Wiktionary / MacBain / Téarma corpora (run this file to check).
 
-Pure string work + uuid5 — port to any builder language verbatim.
+Pure string work + uuid5 - port to any builder language verbatim.
 """
 
 from __future__ import annotations
@@ -20,10 +20,10 @@ from __future__ import annotations
 import unicodedata
 import uuid
 
-# Long-vowel marks — Irish acute AND Scottish grave, from ANY source — fold to a
+# Long-vowel marks - Irish acute AND Scottish grave, from ANY source - fold to a
 # MACRON, a dialect-neutral length marker. Accent does NOT track dialect: MacBain
 # (1911, pre-reform orthography) writes Scottish `mór` with an acute, and Wiktionary
-# lists `gd-mór` as "alternative form of mòr" — so both accents, every source. Length
+# lists `gd-mór` as "alternative form of mòr" - so both accents, every source. Length
 # is PRESERVED, never stripped: `fear` (man) and `féar`→`fēar` (grass) stay distinct.
 # Applied after casefold, so only lowercase forms are listed.
 _MACRON = {
@@ -91,7 +91,7 @@ def resourceid(goi_slug: str, namespace: uuid.UUID) -> uuid.UUID:
 if __name__ == "__main__":
     import collections
 
-    # Expected goi slug per source slug — validated against the real corpora.
+    # Expected goi slug per source slug - validated against the real corpora.
     cases = {
         # same word + POS across dialects -> MERGE (share a resourceid)
         "ga-fear-noun": "goi-fear-noun",

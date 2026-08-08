@@ -9,7 +9,7 @@ import type { Plugin } from 'vite'
 const host = process.env.TAURI_DEV_HOST;
 
 // Vite 8 doesn't serve files with non-standard extensions (.pf_meta, .pf_index,
-// .pagefind) from public/ — they fall through to the SPA fallback. This plugin
+// .pagefind) from public/ - they fall through to the SPA fallback. This plugin
 // intercepts those requests and serves the binary files directly.
 function pagefindServe(): Plugin {
   const PAGEFIND_EXT = /\.(pf_meta|pf_index|pf_filter|pf_fragment|pagefind)$/;
@@ -52,7 +52,7 @@ function v2LayerServe(): Plugin {
     '/layer-tearma/': resolve(__dirname, '../data/tearma-index'),
     // BuNaMo keeps its extracted pagefind-<lang>/ dirs in the head dir itself.
     '/layer-bunamo/': resolve(__dirname, '../data/bunamo-v2'),
-    // Place (Logainm) — bundled but excluded from search for now (NON_SEARCH_LAYERS).
+    // Place (Logainm) - bundled but excluded from search for now (NON_SEARCH_LAYERS).
     '/layer-place/': resolve(__dirname, '../data/place-v2'),
   };
   return {
@@ -119,7 +119,7 @@ function combinedWasmPlugin(): Plugin {
           /let wasmURL: string = \(\(\) => \{[\s\S]*?\}\)\(\);/,
           'let wasmURL: string = "combined-binary";',
         );
-        // Call init() with no arguments — combined binary knows its own WASM URL
+        // Call init() with no arguments - combined binary knows its own WASM URL
         code = code.replace(
           /await init\(\{ module_or_path: wasmURL \}\);/,
           'await init();',

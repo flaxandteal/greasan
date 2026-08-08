@@ -87,7 +87,7 @@
     rdfs:domain ontolex:Form ;
     rdfs:range ontolex:Form ;
     rdfs:comment
-        "Links a derived Form (e.g. lenited or eclipsed) back to the Form from which it was produced. Distinct from ontolex:canonicalForm — a lenited Form's base may itself be a non-canonical Form (e.g. a plural that has then been eclipsed)."@en .
+        "Links a derived Form (e.g. lenited or eclipsed) back to the Form from which it was produced. Distinct from ontolex:canonicalForm - a lenited Form's base may itself be a non-canonical Form (e.g. a plural that has then been eclipsed)."@en .
 
 
 #####################################################################

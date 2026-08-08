@@ -1,4 +1,4 @@
-"""Tests for goidelic.arches — per-tile dialect emission (dialect-on-tiles)."""
+"""Tests for goidelic.arches - per-tile dialect emission (dialect-on-tiles)."""
 
 import csv
 

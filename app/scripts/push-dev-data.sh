@@ -25,4 +25,4 @@ rm -f /tmp/greasan-core.tar.gz
 adb shell rm -f /data/local/tmp/greasan-core.tar.gz
 
 echo "Done. Core index cached on device."
-echo "Restart 'npx tauri android dev --host 127.0.0.1' — data loads from device storage."
+echo "Restart 'npx tauri android dev --host 127.0.0.1' - data loads from device storage."

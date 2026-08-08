@@ -10,7 +10,7 @@ build/
 .venv/
 .nenv/
 
-# Data (all derived — raw downloads, interim, processed, prebuilds, indices, layers)
+# Data (all derived - raw downloads, interim, processed, prebuilds, indices, layers)
 data/
 
 # Node
@@ -29,7 +29,7 @@ notebooks/.ipynb_checkpoints/
 # uv
 uv.lock
 
-# Build scripts — compiled binary (ros-madair-build is a checked-in binary, keep it;
+# Build scripts - compiled binary (ros-madair-build is a checked-in binary, keep it;
 # but if you want to exclude it, uncomment the next line)
 # scripts/ros-madair-build
 
@@ -40,6 +40,6 @@ app/src-tauri/basemap/*.pmtiles
 app/src-tauri/basemap/*.layerstats.tsv.gz
 scripts/ros-madair-build
 
-# Env files with secrets (LOGAINM_API_KEY etc.) — never commit
+# Env files with secrets (LOGAINM_API_KEY etc.) - never commit
 .env
 .env.*

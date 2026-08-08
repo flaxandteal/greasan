@@ -2,11 +2,11 @@
 /**
  * i18n guardrail. Two checks, run over src/:
  *
- *  1. Locale coverage — keys in the canonical `en` locale that `ga` has not yet
+ *  1. Locale coverage - keys in the canonical `en` locale that `ga` has not yet
  *     translated (informational: `ga` is intentionally partial and falls back
- *     to `en`), and keys in `ga` absent from `en` (a failure — orphan/typo).
+ *     to `en`), and keys in `ga` absent from `en` (a failure - orphan/typo).
  *
- *  2. Hardcoded strings — user-facing text in .svelte that bypasses `$t`:
+ *  2. Hardcoded strings - user-facing text in .svelte that bypasses `$t`:
  *     `aria-label`/`placeholder`/`title` literals, and bilingual " · " literals
  *     in markup. Heuristic, deliberately conservative.
  *
@@ -56,7 +56,7 @@ for (const file of walk(SRC)) {
       findings.push(`${rel}:${i + 1}  ${m[1]}="${m[2]}"`);
     }
     // Bilingual heading: a static "Word · Word" text node. Lines containing a
-    // `{` are skipped — there the middot is a data separator (e.g. join(' · '),
+    // `{` are skipped - there the middot is a data separator (e.g. join(' · '),
     // `{a} · {b}`), which is punctuation, not a translatable string.
     if (!line.includes('{') && /[A-Za-zÁÉÍÓÚáéíóú]\s·\s[A-Za-zÁÉÍÓÚáéíóú]/.test(line)) {
       findings.push(`${rel}:${i + 1}  bilingual '·' literal: ${line.trim().slice(0, 80)}`);
@@ -75,7 +75,7 @@ if (orphans.length) {
 
 if (findings.length) {
   failed = true;
-  console.error(`\n✗ ${findings.length} hardcoded string(s) — route through $t:`);
+  console.error(`\n✗ ${findings.length} hardcoded string(s) - route through $t:`);
   for (const f of findings) console.error(`    ${f}`);
 }
 
@@ -85,7 +85,7 @@ if (untranslated.length) {
 }
 
 if (!failed) {
-  console.log(`\n✓ i18n clean — no orphan keys, no hardcoded strings. ` +
+  console.log(`\n✓ i18n clean - no orphan keys, no hardcoded strings. ` +
     `ga covers ${ga.size}/${en.size} keys.`);
 }
 

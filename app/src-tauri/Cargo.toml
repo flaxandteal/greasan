@@ -17,13 +17,13 @@ tauri-plugin-dialog = "2"
 tauri-plugin-fs = "2"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
-# Irish morphology — declension/conjugation enrichment for classless TBX records
+# Irish morphology - declension/conjugation enrichment for classless TBX records
 # (the on-device counterpart of the Python tbx.py pipeline). `default-features`
 # off so the optional PyO3 `python` feature is NOT pulled into the app build.
 gramadan = { path = "../../../Gramadan/gramadan-rs", default-features = false }
 ros-madair-core = { path = "../../../magic/RosMadair/crates/ros-madair-core" }
 # v1 and the shipping app build against the REAL core (2.0.0-alpha.120). The v2
-# pilot links a *second* copy — the sandbox core, 2.0.0-alpha.121 — under the
+# pilot links a *second* copy - the sandbox core, 2.0.0-alpha.121 - under the
 # `alizarin-core-v2` alias below.
 #
 # That used to be impossible: both cores were 2.0.0-alpha.120, and a lockfile
@@ -44,14 +44,14 @@ unicode-normalization = "0.1"
 pagefind = { path = "../../../svg/malazan-experiment/pagefind/pagefind", default-features = false }
 
 # --- v2 static-assets pilot (optional; see src/v2.rs) -----------------------
-# NOTE: alizarin-core-v2 alias removed — line 30 `alizarin-core` now points at
+# NOTE: alizarin-core-v2 alias removed - line 30 `alizarin-core` now points at
 # the sandbox core directly, so the app and v2 stack share ONE core (.122).
 # v2.rs uses `alizarin_core` (not the old `alizarin_core_v2` alias).
 # The native read path: hydration, tile recovery, manifest loading. Replaces the
 # hand-rolled dict/spine/fragment_dir/chunks join and the msgpack read loop that
 # used to live in v2.rs.
 ros-madair-read = { path = "../../../magic/RosMadair-sandbox/crates/ros-madair-read", optional = true }
-# The artifact format types — notably `Manifest.handlers`, which is what makes
+# The artifact format types - notably `Manifest.handlers`, which is what makes
 # the registry below derivable instead of guessable.
 ros-madair-format = { path = "../../../magic/RosMadair-sandbox/crates/ros-madair-format", optional = true }
 # The single source of the extension-type registry. We no longer hand-build one
@@ -61,7 +61,7 @@ ros-madair-format = { path = "../../../magic/RosMadair-sandbox/crates/ros-madair
 ros-madair-handlers = { path = "../../../magic/RosMadair-sandbox/crates/ros-madair-handlers", optional = true }
 ros-madair-query = { path = "../../../magic/RosMadair-sandbox/crates/ros-madair-query", optional = true }
 rusqlite = { version = "0.32", features = ["bundled"], optional = true }
-# Regeneration only (`v2-emit`) — see examples/regen-macbain-v2.rs. Emitting from
+# Regeneration only (`v2-emit`) - see examples/regen-macbain-v2.rs. Emitting from
 # *this* workspace keeps us off the sandbox's target/ lock and Cargo.lock, which
 # `cargo run -p ros-madair-emit --manifest-path <sandbox>` would take.
 ros-madair-emit = { path = "../../../magic/RosMadair-sandbox/crates/ros-madair-emit", optional = true }
@@ -99,16 +99,16 @@ ndk-context = "0.1"
 ndk = "0.9"
 ndk-sys = "0.6"
 # Tauri v2 runs a Java `WryActivity` (not a NativeActivity), so nothing ever
-# calls `ndk_context::initialize_android_context` — leaving `android_context()`
+# calls `ndk_context::initialize_android_context` - leaving `android_context()`
 # to panic-abort. tao (already a transitive dep via wry) holds the real
 # JavaVM + Activity in `main_android_context()`; we bridge it into ndk_context
-# at startup. default-features=false keeps this to a feature-union no-op — the
+# at startup. default-features=false keeps this to a feature-union no-op - the
 # version resolves to the same tao wry already pulls, so no extra deps.
 tao = { version = "0.35", default-features = false }
 
 [patch.crates-io]
 # ros-madair-core (v1) asks crates.io for alizarin-core; point it at the same
 # real local core the app uses, so v1 types match. The sandbox core is NOT
-# patched in here — the v2 crates reach it by path, which is exactly what lets
+# patched in here - the v2 crates reach it by path, which is exactly what lets
 # the two versions coexist.
 alizarin-core = { path = "../../../magic/alizarin-sandbox/crates/alizarin-core" }
