@@ -78,10 +78,13 @@ ADJ_SLOT = {
     "abstractNoun": [],  # derived abstract noun - no adjective-form concept
 }
 
+# Learner-core tenses only, matching gramadan-wasm's verb_paradigm so the attested
+# and generated tabs show the same rows. "present" is the present-habitual
+# (PresCont, "déanann") - the everyday present. The past-habitual (PastCont),
+# simple present (Pres, rare/defective) and other tenses are omitted so they don't
+# pile into the simple-past / present rows.
 TENSE_MAP = {
     "Past": ["past"],
-    "PastCont": ["past"],       # habitual/continuous distinction dropped
-    "Pres": ["present"],
     "PresCont": ["present"],
     "Fut": ["future"],
     "Cond": ["conditional"],
@@ -131,18 +134,23 @@ def verb_forms(word):
     for f in word.verbalAdjective:
         if f.value:
             yield f.value, ["verbal-adjective"]
-    # Indicative tenses (Indep/Dep/RelIndep dependency distinction has no concept
-    # -> dropped; dedup collapses the duplicates).
+    # Indicative tenses. The dependency becomes a gram_feature so the frontend can
+    # toggle independent vs dependent (rinne / dearna): Dep -> "dependent", Indep ->
+    # no tag. The relative-independent form is skipped (not in the learner grid),
+    # matching gramadan-wasm which emits indep + dep only.
     for tense, deps in word.tenses.items():
         tfeats = TENSE_MAP.get(tense.name)
         if tfeats is None:
             continue
-        for person_dict in deps.values():
+        for dep, person_dict in deps.items():
+            if dep.name == "RelIndep":
+                continue
+            dfeats = ["dependent"] if dep.name == "Dep" else []
             for person, forms in person_dict.items():
                 pfeats = PERSON_MAP.get(person.name, [])
                 for f in forms:
                     if f.value:
-                        yield f.value, tfeats + pfeats + ["indicative"]
+                        yield f.value, tfeats + pfeats + ["indicative"] + dfeats
     # Imperative / subjunctive moods.
     for mood, persons in word.moods.items():
         mfeats = MOOD_MAP.get(mood.name)

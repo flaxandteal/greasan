@@ -57,12 +57,18 @@
   let showDependent = $state(false);
   const VERB_TENSES = ['past', 'present', 'future', 'conditional'];
   const isTenseForm = (f: FormItem) => VERB_TENSES.some((t) => f.tags.includes(t));
+  const anyDependent = (fs: FormItem[] | null | undefined) => !!fs?.some((f) => f.tags.includes('dependent'));
+  // Toggle shows for a verb whose active source carries dependent forms - the
+  // generated tab always does; the attested tab does once BuNaMo emits them.
   let hasDependent = $derived(
-    !!entry && posKind(entry.pos) === 'verb' && !!generated?.some((f) => f.tags.includes('dependent')),
+    !!entry &&
+      posKind(entry.pos) === 'verb' &&
+      (anyDependent(generated) || anyDependent((entry.forms ?? []) as FormItem[])),
   );
 
-  /** Scope generated forms per POS before pivoting. */
-  function scopeGenerated(forms: FormItem[]): FormItem[] {
+  /** Scope a form set per POS before pivoting: verbs by the indep/dep toggle,
+   *  nouns to the confirmable nom/gen. Used for both attested and generated. */
+  function scopeForms(forms: FormItem[]): FormItem[] {
     if (entry && posKind(entry.pos) === 'verb') {
       // Keep VN/VA/imperative always; swap tense forms by the ni toggle, then strip
       // the dependency marker so paradigm.ts pivots them uniformly.
@@ -84,11 +90,13 @@
 
   let attestedParadigm = $derived.by(() => {
     const attested = (entry?.forms ?? []) as FormItem[];
-    return entry && attested.length ? buildParadigm(attested, entry.pos) : null;
+    if (!entry || !attested.length) return null;
+    const scoped = scopeForms(attested);
+    return scoped.length ? buildParadigm(scoped, entry.pos) : null;
   });
   let generatedParadigm = $derived.by(() => {
     if (!entry || !generated?.length) return null;
-    const scoped = scopeGenerated(generated);
+    const scoped = scopeForms(generated);
     return scoped.length ? buildParadigm(scoped, entry.pos) : null;
   });
 
@@ -329,7 +337,7 @@
           <div class="gram-src">Gramadán<span class="gram-gen"> · generated</span></div>
         {/if}
 
-        {#if activeGenerated && hasDependent}
+        {#if hasDependent}
           <!-- Independent/dependent toggle, mirroring the noun article toggle. "ní"
                is the dependent particle; on = dependent forms (dearna), off = the
                independent forms (rinne). Tense rows only; VN/VA/imperative invariant. -->
