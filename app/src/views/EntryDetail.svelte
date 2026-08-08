@@ -29,21 +29,22 @@
     return dialectCode($familyConfig.id, entry.dialect || '') || '';
   });
 
-  // Grammar shown as source-tagged tabs. Two possible sources, both nom/gen only:
-  //  • BuNaMo (attested) - present only when its (opt-in, hidden-by-default) layer
+  // Grammar shown as source-tagged tabs:
+  //  - BuNaMo (attested): present only when its (opt-in, hidden-by-default) layer
   //    is on, so its forms compose onto the entry (entry.forms populated).
-  //  • Gramadán (generated) - always available for a classed noun; gramadan-rs
+  //  - Gramadan (generated): always available for a classed noun/verb; gramadan-rs
   //    generates from lemma+gender+class offline.
-  // One source → a single grid (no tab chrome); both → two tabs, BuNaMo first.
-  // dat/voc are rule-governed but NOT exception-free (láimh, a fhir, …) and
-  // unconfirmable against BuNaMo, so neither tab surfaces them; def/art dropped.
+  // One source -> a single grid (no tab chrome); both -> two tabs, BuNaMo first.
+  // Nouns: nom/gen only (dat/voc rule-governed but not exception-free, e.g. laimh /
+  // a fhir, and unconfirmable). Verbs: learner-core tenses + verbal noun/adjective,
+  // with a "ni" toggle swapping independent vs dependent forms (rinne / dearna) -
+  // the same idea as the noun article toggle.
   let generated = $state<FormItem[] | null>(null);
   $effect(() => {
     const e = entry;
     generated = null;
     const kind = e ? posKind(e.pos) : 'other';
-    // Nouns only for now; verb/adjective light up when gramadan-rs gains them.
-    if (e && kind === 'noun' && (e.grammarClass ?? '') !== '') {
+    if (e && (kind === 'noun' || kind === 'verb') && (e.grammarClass ?? '') !== '') {
       const key = e.uri;
       generateForms(e.headword, kind, e.gender ?? '', e.grammarClass ?? '').then((g) => {
         if (entry?.uri === key && g.supported && g.forms.length) generated = g.forms;
@@ -51,18 +52,44 @@
     }
   });
 
+  // Verb independent/dependent toggle. Only tense forms carry the split; verbal
+  // noun/adjective and imperative are invariant and always shown.
+  let showDependent = $state(false);
+  const VERB_TENSES = ['past', 'present', 'future', 'conditional'];
+  const isTenseForm = (f: FormItem) => VERB_TENSES.some((t) => f.tags.includes(t));
+  let hasDependent = $derived(
+    !!entry && posKind(entry.pos) === 'verb' && !!generated?.some((f) => f.tags.includes('dependent')),
+  );
+
+  /** Scope generated forms per POS before pivoting. */
+  function scopeGenerated(forms: FormItem[]): FormItem[] {
+    if (entry && posKind(entry.pos) === 'verb') {
+      // Keep VN/VA/imperative always; swap tense forms by the ni toggle, then strip
+      // the dependency marker so paradigm.ts pivots them uniformly.
+      return forms
+        .filter((f) =>
+          !isTenseForm(f)
+            ? true
+            : showDependent
+              ? f.tags.includes('dependent')
+              : !f.tags.includes('dependent'),
+        )
+        .map((f) => ({ ...f, tags: f.tags.filter((t) => t !== 'dependent') }));
+    }
+    // Nouns: confirmable nom/gen only; drop definite/articled and voc/dat.
+    return forms.filter(
+      (f) => !f.tags.includes('definite') && (f.tags.includes('nominative') || f.tags.includes('genitive')),
+    );
+  }
+
   let attestedParadigm = $derived.by(() => {
     const attested = (entry?.forms ?? []) as FormItem[];
     return entry && attested.length ? buildParadigm(attested, entry.pos) : null;
   });
   let generatedParadigm = $derived.by(() => {
     if (!entry || !generated?.length) return null;
-    const nomGen = generated.filter(
-      (f) =>
-        !f.tags.includes('definite') &&
-        (f.tags.includes('nominative') || f.tags.includes('genitive')),
-    );
-    return nomGen.length ? buildParadigm(nomGen, entry.pos) : null;
+    const scoped = scopeGenerated(generated);
+    return scoped.length ? buildParadigm(scoped, entry.pos) : null;
   });
 
   type GramTab = { label: string; paradigm: ReturnType<typeof buildParadigm>; generated: boolean };
@@ -76,6 +103,7 @@
   $effect(() => {
     entry?.uri;
     activeGramTab = 0;
+    showDependent = false;
   });
   let activeTabIndex = $derived(Math.min(activeGramTab, Math.max(0, gramTabs.length - 1)));
   let paradigm = $derived(gramTabs[activeTabIndex]?.paradigm ?? null);
@@ -301,6 +329,23 @@
           <div class="gram-src">Gramadán<span class="gram-gen"> · generated</span></div>
         {/if}
 
+        {#if activeGenerated && hasDependent}
+          <!-- Independent/dependent toggle, mirroring the noun article toggle. "ní"
+               is the dependent particle; on = dependent forms (dearna), off = the
+               independent forms (rinne). Tense rows only; VN/VA/imperative invariant. -->
+          <div class="dep-toggle-row">
+            <button
+              type="button"
+              class="dep-toggle"
+              class:on={showDependent}
+              aria-pressed={showDependent}
+              onclick={() => (showDependent = !showDependent)}
+              title={showDependent ? 'Dependent forms (after ní, go, an)' : 'Independent forms'}
+            >ní</button>
+            <span class="dep-hint">{showDependent ? 'spleách' : 'neamhspleách'}</span>
+          </div>
+        {/if}
+
         {#if paradigm.kind === 'noun' || paradigm.kind === 'adjective'}
           <!-- number × case grid -->
           <table class="ge-para">
@@ -520,6 +565,17 @@
   }
   .gram-src { font-size: 11px; color: var(--fg-soft); margin-bottom: 8px; }
   .gram-gen { font-style: italic; opacity: 0.85; }
+  .dep-toggle-row { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
+  .dep-toggle {
+    font: italic 12px/1 inherit; padding: 3px 12px; border-radius: 999px; cursor: pointer;
+    border: 1px solid color-mix(in srgb, var(--fg-soft) 35%, transparent);
+    background: transparent; color: var(--fg-soft); transition: all 0.12s;
+  }
+  .dep-toggle.on {
+    color: var(--fg-default); background: color-mix(in srgb, var(--accent, #4a7a63) 16%, transparent);
+    border-color: color-mix(in srgb, var(--accent, #4a7a63) 45%, transparent);
+  }
+  .dep-hint { font-size: 11px; color: var(--fg-soft); font-style: italic; }
 
   /* Adjective comparison + section subheads */
   .ge-para-sub {
