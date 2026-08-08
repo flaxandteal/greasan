@@ -452,7 +452,7 @@ export async function search(query: string, lang: SearchLang = 'ga', dialects?: 
     const breadth = (d: string) => (d === 'G' ? 3 : d ? 1 : 0);
     const bestByKey = new Map<string, EntrySummary>();
     const collapseKey = (r: EntrySummary) =>
-      `${stripDiacritics(r.headword).toLowerCase()} ${(r.pos || '').toLowerCase()}`;
+      `${r.headword.normalize('NFC').toLowerCase()} ${(r.pos || '').toLowerCase()}`;
     for (const r of merged) {
       const key = collapseKey(r);
       const prev = bestByKey.get(key);
