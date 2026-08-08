@@ -26,7 +26,7 @@ import {
   setNapiModule,
 } from '../app/node_modules/alizarin/dist/alizarin.js';
 import * as pagefind from '../app/node_modules/pagefind/lib/index.js';
-import { readFileSync, writeFileSync, mkdirSync, existsSync } from 'fs';
+import { readFileSync, writeFileSync, appendFileSync, mkdirSync, existsSync } from 'fs';
 import { execSync } from 'child_process';
 import { fileURLToPath } from 'url';
 import { dirname, resolve } from 'path';
@@ -118,7 +118,16 @@ for (const node of graph.nodes) {
 // --- Populate caches ---
 
 const registry = createResourceRegistry();
-registry.mergeFromResourcesJson(JSON.stringify(resources), true, true);
+// JSON.stringify on all ~193k resources at once overflows V8's max string
+// length (~512MB). mergeFromResourcesJson is additive, and tearma entries only
+// cross-reference concepts (resolved via rdmCache), not each other, so merging
+// in slices keeps each string well under the cap without breaking enrichment.
+const MERGE_BATCH = 20000;
+for (let i = 0; i < resources.length; i += MERGE_BATCH) {
+  registry.mergeFromResourcesJson(
+    JSON.stringify(resources.slice(i, i + MERGE_BATCH)), true, true,
+  );
+}
 
 let rdmCache = null;
 if (usingNapi) {
@@ -166,10 +175,18 @@ writeFileSync(
   resolve(prebuildDir, `graphs/resource_models/${graphId}.json`),
   JSON.stringify(graph)
 );
-writeFileSync(
-  resolve(prebuildDir, `business_data/${graphId}.json`),
-  JSON.stringify({ business_data: { resources: enrichedResources } })
-);
+// Stream the business_data file in batches: at 193k resources a single
+// JSON.stringify of the whole array overflows V8's max string length (~512MB).
+// Each resource is stringified in small groups and appended, so no single JS
+// string is huge; the on-disk file is still one valid JSON document.
+const bdPath = resolve(prebuildDir, `business_data/${graphId}.json`);
+writeFileSync(bdPath, '{"business_data":{"resources":[');
+const WRITE_BATCH = 5000;
+for (let i = 0; i < enrichedResources.length; i += WRITE_BATCH) {
+  const chunk = enrichedResources.slice(i, i + WRITE_BATCH).map((r) => JSON.stringify(r)).join(',');
+  appendFileSync(bdPath, i > 0 ? ',' + chunk : chunk);
+}
+appendFileSync(bdPath, ']}}');
 
 for (const collection of collections) {
   const cid = collection.collectionid || collection.id;
