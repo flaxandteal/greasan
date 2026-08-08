@@ -52,7 +52,7 @@ if (csvArgIdx !== -1 && process.argv[csvArgIdx + 1]) {
 if (!existsSync(csvPath)) {
   console.error(`[build-tearma] CSV not found: ${csvPath}`);
   console.error('[build-tearma] Run the TBX pipeline first:');
-  console.error('  uv run python -m goidelic.run --config config.toml --tbx data/raw/25.10.01-tearma.ie-concepts.tbx');
+  console.error('  uv run python -m goidelic.run --config config.toml --tbx data/raw/25.10.01-tearma.ie-concepts.tbx --layer-code TÉ');
   process.exit(1);
 }
 

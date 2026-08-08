@@ -140,9 +140,20 @@ export const FAMILIES: Record<FamilyId, FamilyConfig> = {
     layerPresentation: {
       wiktionary: { label: 'Vicífhoclóir', swatch: 'var(--layer-wk)', sourceLabels: ['wk'] },
       macbain: { label: 'MacBain (1911)', swatch: 'var(--layer-mb)', sourceLabels: ['mb'] },
-      tearma: { label: 'Téarma', swatch: 'var(--layer-te)', sourceLabels: ['te'] },
+      // 'té' is stamped by fresh builds; 'te' matches legacy builds pre-fada.
+      tearma: { label: 'Téarma', swatch: 'var(--layer-te)', sourceLabels: ['té', 'te'] },
       // Morphology only - no senses, so no source chips ever carry "BN".
       bunamo: { label: 'BuNaMo', swatch: 'var(--layer-bn)', sourceLabels: ['bn'] },
+      // Sense-less / infrastructural layers: named + coloured for the sheet,
+      // but they emit no per-sense source chips (no sourceLabels).
+      // Logainm/Tatoeba/Gaois are proper nouns (no translation). concept/person/
+      // note keep English descriptors - a human can Gaelicise them, we don't MT.
+      place: { label: 'Logainm', swatch: 'var(--layer-place)' },
+      concept: { label: 'Concepts', swatch: 'var(--layer-concept)' },
+      'example-tatoeba': { label: 'Tatoeba', swatch: 'var(--layer-tatoeba)' },
+      'example-gaois': { label: 'Gaois', swatch: 'var(--layer-gaois)' },
+      person: { label: 'Users', swatch: 'var(--layer-person)' },
+      note: { label: 'Notes', swatch: 'var(--layer-note)' },
     },
     defaultLayers: [],
   },

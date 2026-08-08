@@ -775,7 +775,7 @@ pub async fn build_layer<R: Runtime>(
             tbx_parser::enrich_records(&mut records);
 
             // 3. Generate business-data CSV
-            let csv_data = match tbx_parser::records_to_csv(&records, "TE") {
+            let csv_data = match tbx_parser::records_to_csv(&records, "TÉ") {
                 Ok(c) => c,
                 Err(e) => {
                     update_status_failed(&app, &id_clone, format!("CSV generation failed: {e}"));
@@ -978,7 +978,7 @@ pub async fn build_layer<R: Runtime>(
                         &graph,
                         &collections,
                         records,
-                        "TE",
+                        "TÉ",
                         TEARMA_UUID_NS,
                         5000,
                         &report,

@@ -204,7 +204,7 @@ def main() -> None:
     parser.add_argument("--config", required=True, type=Path)
     parser.add_argument("--fixture", action="store_true", help="Use fixture paths (small test slice)")
     parser.add_argument("--tbx", type=Path, help="Run TBX pipeline instead (path to .tbx file)")
-    parser.add_argument("--layer-code", type=str, default="", help="Two-letter source label stamped on every sense (e.g. TE)")
+    parser.add_argument("--layer-code", type=str, default="", help="Two-letter source label stamped on every sense (e.g. TÉ for Téarma)")
     args = parser.parse_args()
 
     if args.tbx:
