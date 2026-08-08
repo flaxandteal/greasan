@@ -4,6 +4,7 @@ import tailwindcss from '@tailwindcss/vite'
 import wasm from 'vite-plugin-wasm'
 import { existsSync, readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
+import { execFileSync } from 'node:child_process'
 import type { Plugin } from 'vite'
 
 const host = process.env.TAURI_DEV_HOST;
@@ -55,6 +56,7 @@ function v2LayerServe(): Plugin {
     // Place (Logainm) - bundled but excluded from search for now (NON_SEARCH_LAYERS).
     '/layer-place/': resolve(__dirname, '../data/place-v2'),
   };
+  const extracted = new Set<string>();
   return {
     name: 'v2-layer-serve',
     configureServer(server) {
@@ -65,6 +67,20 @@ function v2LayerServe(): Plugin {
           if (!url.startsWith(prefix)) continue;
           const rel = decodeURIComponent(url.slice(prefix.length));
           if (rel.includes('..')) return next();
+          // Lazily extract a pagefind-<lang>/ dir from its sibling .zip on first
+          // access, so a fresh clone/build needs no manual unzip. bunamo/place ship
+          // the dir already; the -index layers ship only the .zip.
+          const pf = rel.match(/^(pagefind-[a-z]+)\//);
+          if (pf) {
+            const dir = resolve(root, pf[1]);
+            const zip = `${dir}.zip`;
+            if (!extracted.has(dir) && !existsSync(dir) && existsSync(zip)) {
+              try {
+                execFileSync('unzip', ['-oq', zip, '-d', dir]);
+              } catch { /* fall through to next() below */ }
+              extracted.add(dir);
+            }
+          }
           const filePath = resolve(root, rel);
           if (!existsSync(filePath)) return next();
           const ext = (filePath.match(/\.[a-z0-9_]+$/i) || [''])[0].toLowerCase();

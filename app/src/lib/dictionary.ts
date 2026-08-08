@@ -246,7 +246,7 @@ async function getAvailableDialects(pf: PagefindInstance, base: string): Promise
  * discovered via the reverse-lookup on a word entry, not by searching for them.
  * (Flip this - remove `place` - when we add dedicated place search.)
  */
-const NON_SEARCH_LAYERS: ReadonlySet<string> = new Set(['place', 'example-tatoeba', 'example-gaois', 'person', 'note', 'layer']);
+const NON_SEARCH_LAYERS: ReadonlySet<string> = new Set(['place', 'concept', 'example-tatoeba', 'example-gaois', 'person', 'note', 'layer']);
 
 function allPagefindBasesForLang(lang: SearchLang): string[] {
   const bases: string[] = [];
