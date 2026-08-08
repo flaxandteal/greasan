@@ -88,6 +88,36 @@
     );
   }
 
+  // Dependent-clause particle shown as a grey prefix on the dependent forms (like
+  // the noun article), with its initial mutation applied to the bare stem - so it
+  // works identically for attested (BuNaMo) and generated forms. go (eclipsis) for
+  // the non-past and the irregular past; gur (lenition) for the regular past;
+  // nothing for the imperative (no dependent).
+  function depParticle(tense: string): string {
+    if (!showDependent || tense === 'imperative') return '';
+    if (tense === 'past') return (entry?.grammarClass ?? '') === 'irr' ? 'go' : 'gur';
+    return 'go';
+  }
+  const ECLIPSE: Record<string, string> = { b: 'mb', c: 'gc', d: 'nd', f: 'bhf', g: 'ng', p: 'bp', t: 'dt' };
+  function mutateForParticle(particle: string, w: string): string {
+    if (!w) return w;
+    const c = w[0].toLowerCase();
+    if (particle === 'go') {
+      if (ECLIPSE[c]) return ECLIPSE[c] + w.slice(1); // eclipsis
+      if ('aeiouáéíóú'.includes(c)) return 'n-' + w; // vowel -> n-
+      return w; // s, l, m, n, r, h unchanged
+    }
+    // gur -> lenition; s before c/m/p/t does not lenite.
+    if (c === 's' && 'cmpt'.includes((w[1] ?? '').toLowerCase())) return w;
+    if ('bcdfgmpst'.includes(c)) return w[0] + 'h' + w.slice(1);
+    return w; // vowels, l, n, r, h unchanged
+  }
+  /** A verb cell's grey particle + its (mutated) forms, for the dependent view. */
+  function depCell(tense: string, forms: { text: string }[]): { particle: string; text: string } {
+    const p = depParticle(tense);
+    return { particle: p, text: forms.map((f) => (p ? mutateForParticle(p, f.text) : f.text)).join(', ') };
+  }
+
   let attestedParadigm = $derived.by(() => {
     const attested = (entry?.forms ?? []) as FormItem[];
     if (!entry || !attested.length) return null;
@@ -412,9 +442,10 @@
                 </button>
                 <div class="ge-acc-body">
                   {#each tsec.rows as r}
+                    {@const dc = depCell(tsec.tense, r.forms)}
                     <div class="ge-form-line">
                       <span class="ge-para-person">{personLabel(r.person)}</span>
-                      <span class="gf-word">{r.forms.map(f => f.text).join(', ')}</span>
+                      <span class="gf-word">{#if dc.particle}<span class="dep-particle">{dc.particle}</span> {/if}{dc.text}</span>
                     </div>
                   {/each}
                 </div>
@@ -584,6 +615,7 @@
     border-color: color-mix(in srgb, var(--accent, #4a7a63) 45%, transparent);
   }
   .dep-hint { font-size: 11px; color: var(--fg-soft); font-style: italic; }
+  .dep-particle { color: var(--fg-soft); opacity: 0.65; margin-right: 0.3em; }
 
   /* Adjective comparison + section subheads */
   .ge-para-sub {
