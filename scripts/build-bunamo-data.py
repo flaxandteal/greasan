@@ -68,14 +68,15 @@ NOUN_SLOT = {
 }
 
 ADJ_SLOT = {
+    # Only the slots BuNaMo's adjective XML attests: nom sg, gen sg (masc/fem),
+    # nom pl, and the shared comparative/superlative form. The parser synthesises
+    # sgVocMasc/sgVocFem (not in the source), and abstractNoun is a derived noun,
+    # not an adjective form - both omitted so the attested tab matches gramadan-wasm.
     "sgNom": ["singular", "nominative"],
     "sgGenMasc": ["singular", "genitive", "masculine"],
     "sgGenFem": ["singular", "genitive", "feminine"],
-    "sgVocMasc": ["singular", "vocative", "masculine"],
-    "sgVocFem": ["singular", "vocative", "feminine"],
     "plNom": ["plural", "nominative"],
     "graded": ["comparative", "superlative"],  # the single graded degree form
-    "abstractNoun": [],  # derived abstract noun - no adjective-form concept
 }
 
 # Learner-core tenses only, matching gramadan-wasm's verb_paradigm so the attested

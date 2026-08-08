@@ -44,7 +44,7 @@
     const e = entry;
     generated = null;
     const kind = e ? posKind(e.pos) : 'other';
-    if (e && (kind === 'noun' || kind === 'verb') && (e.grammarClass ?? '') !== '') {
+    if (e && (kind === 'noun' || kind === 'verb' || kind === 'adjective') && (e.grammarClass ?? '') !== '') {
       const key = e.uri;
       generateForms(e.headword, kind, e.gender ?? '', e.grammarClass ?? '').then((g) => {
         if (entry?.uri === key && g.supported && g.forms.length) generated = g.forms;
@@ -81,6 +81,12 @@
               : !f.tags.includes('dependent'),
         )
         .map((f) => ({ ...f, tags: f.tags.filter((t) => t !== 'dependent') }));
+    }
+    // Adjectives: nom + gen (masc/fem) + pl + graded are all learner-core and
+    // attested, so pass them through (drop only any stray articled form). The
+    // masc/fem genitive split rides as a cell qualifier in paradigm.ts.
+    if (entry && posKind(entry.pos) === 'adjective') {
+      return forms.filter((f) => !f.tags.includes('definite'));
     }
     // Nouns: confirmable nom/gen only; drop definite/articled and voc/dat.
     return forms.filter(
