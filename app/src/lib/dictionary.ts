@@ -39,7 +39,7 @@ export interface EntryDetail {
   headword: string;
   pos: string;
   dialect?: string;
-  /** Gender concept label ('masculine'/'feminine'), when known — shown in the title. */
+  /** Gender concept label ('masculine'/'feminine'), when known - shown in the title. */
   gender?: string;
   /** Grammatical class token from BuNaMo: noun declension ('1'..'5'), verb conjugation,
    *  adjective declension. Combined with pos/gender into the title badge (e.g. 'm1'). */
@@ -89,7 +89,7 @@ let storeReady = false;
 let modelPromise: ReturnType<typeof graphManager.loadGraph> | null = null;
 
 // Serialise all async &mut self calls on the SparqlStore.
-// wasm_bindgen holds RefCell borrows across await points — concurrent
+// wasm_bindgen holds RefCell borrows across await points - concurrent
 // async calls on the same store cause "recursive use of an object" panics.
 let storeMutex: Promise<void> = Promise.resolve();
 function withStoreMut<T>(fn: () => Promise<T>): Promise<T> {
@@ -140,7 +140,7 @@ export async function addDynamicLayer(baseUrl: string, name: string, pagefindBas
   const store = await ensureStore();
   await withStoreMut(() => store.addLayer(baseUrl, name));
   dynamicLayers.push({ name, baseUrl, pagefindBase: pagefindBase ?? null });
-  // Invalidate dialect cache — the layer may introduce new dialect values
+  // Invalidate dialect cache - the layer may introduce new dialect values
   dialectCache.clear();
 }
 
@@ -239,12 +239,12 @@ async function getAvailableDialects(pf: PagefindInstance, base: string): Promise
 }
 
 /** Collect all pagefind base paths to search for a given language.
- * Pagefind comes exclusively from dynamic layers — no base index pagefind. */
+ * Pagefind comes exclusively from dynamic layers - no base index pagefind. */
 /**
  * Layers whose Pagefind index is bundled but deliberately kept OUT of the main
  * search: search returns dictionary headwords only. `place` placenames are
  * discovered via the reverse-lookup on a word entry, not by searching for them.
- * (Flip this — remove `place` — when we add dedicated place search.)
+ * (Flip this - remove `place` - when we add dedicated place search.)
  */
 const NON_SEARCH_LAYERS: ReadonlySet<string> = new Set(['place', 'example-tatoeba', 'example-gaois', 'person', 'note', 'layer']);
 
@@ -275,7 +275,7 @@ async function searchOneInstance(
 ): Promise<EntrySummary[]> {
   const pf = await getPagefind(pagefindBase);
 
-  // Build dialect filter — only apply if it actually excludes something.
+  // Build dialect filter - only apply if it actually excludes something.
   // Expand sub-dialect codes to include their parent: GD.ARG → also match GD,
   // so general-dialect entries show when any sub-dialect is selected.
   const filters: Record<string, Record<string, string[]>> = {};
@@ -316,7 +316,7 @@ async function searchOneInstance(
       headword: d.meta.title,
       pos: d.meta.pos || '',
       // Samplaí: the sentence is the title (headword); the translation is the
-      // subtitle (gloss). Don't surface pagefind's raw excerpt — its `content`
+      // subtitle (gloss). Don't surface pagefind's raw excerpt - its `content`
       // concatenates the sentence, its accent-stripped copy, and the translation,
       // which reads as the same line three times.
       gloss: lang === 'sampla' ? (d.meta.sentence_en || undefined) : (d.meta.gloss || undefined),
@@ -326,7 +326,7 @@ async function searchOneInstance(
 }
 
 /** Fold a set of dialect labels (from the composed entry, e.g. "Irish",
- * "Scottish Gaelic", "Munster Irish") to a branch code — GA / GD / GV, or "G"
+ * "Scottish Gaelic", "Munster Irish") to a branch code - GA / GD / GV, or "G"
  * when the slug spans more than one Goidelic branch. Mirrors the layer builders'
  * DIALECT_LABEL_TO_CODE, but branch-only (the search badge shows the branch). */
 function dialectsToCode(labels: string[]): string {
@@ -345,7 +345,7 @@ export async function search(query: string, lang: SearchLang = 'ga', dialects?: 
   try {
     // Two text engines, per layer: Pagefind for shipped layers, FTS5 for
     // on-device-built ones (Téarma). Each layer's index is separate anyway, so
-    // we query both and merge — the merge below re-ranks by our own text tiers,
+    // we query both and merge - the merge below re-ranks by our own text tiers,
     // so the engines' incompatible scores never need reconciling (no RRF).
     const bases = allPagefindBasesForLang(lang);
     // v2_search_fts probes each dir for `search.sqlite` and skips those without
@@ -360,7 +360,7 @@ export async function search(query: string, lang: SearchLang = 'ga', dialects?: 
     const normQuery = stripDiacritics(query);
 
     // 1-2 char queries: prefix/substring matching floods with hits (and is slow),
-    // so do an EXACT-WORD search instead (pagefind double-quote syntax) — short
+    // so do an EXACT-WORD search instead (pagefind double-quote syntax) - short
     // lemmas like "bó" / "cú" / "ó" stay findable without the noise.
     const pfQuery = query.trim().length < 3 ? `"${normQuery}"` : normQuery;
 
@@ -400,7 +400,7 @@ export async function search(query: string, lang: SearchLang = 'ga', dialects?: 
 
     // Merge across layers, UNIONING dialects for a shared slug. The slug is
     // dialect-neutral (goi-<head>-<pos>), so the same uri comes back from
-    // different heads — e.g. wiktionary GA + macbain GD for "fear". First-wins
+    // different heads - e.g. wiktionary GA + macbain GD for "fear". First-wins
     // would show only the leading layer's dialect; instead, if a slug spans more
     // than one Goidelic branch (GA/GD/GV) we tag it "G" (both), matching the
     // dialect-neutral slug and the composed entry the user will see on open.
@@ -422,7 +422,7 @@ export async function search(query: string, lang: SearchLang = 'ga', dialects?: 
       merged.push(r);
     }
 
-    // Canonical display from the COMPOSED heads — headword/POS/dialect come from
+    // Canonical display from the COMPOSED heads - headword/POS/dialect come from
     // the richest layer that owns each slug, not whichever Pagefind record won
     // the per-layer cap + dedup. Fixes bare/duplicate rows leaking from the
     // forms-only BuNaMo layer (no POS, dialect shown as raw "Irish"). Gloss is a
@@ -446,7 +446,7 @@ export async function search(query: string, lang: SearchLang = 'ga', dialects?: 
     // to a pre-`goi-` Wiktionary id) surfaces as a second row beside the neutral
     // `goi-` "G" row. Keep only the broadest-dialect row per (headword, pos): "G"
     // (both branches) wins over a single-branch "GA"/"GD". This is a DISPLAY de-dup
-    // — the dropped URI is a distinct resource, so full content only merges once the
+    // - the dropped URI is a distinct resource, so full content only merges once the
     // slug is unified upstream (rebuild the offending head). Same-breadth ties keep
     // the first seen.
     const breadth = (d: string) => (d === 'G' ? 3 : d ? 1 : 0);
@@ -510,7 +510,7 @@ function mapToObj(val: any): any {
  *
  * Fetches tiles via SparqlStore.loadTilesForResource (HTTP range requests to the
  * layer's tile files) and loads them into the wrapper BEFORE populate() is called.
- * This way tilesLoaded() returns true and ensureTilesLoaded never fires — no
+ * This way tilesLoaded() returns true and ensureTilesLoaded never fires - no
  * silent fallback to the ArchesClient.
  *
  * Must be called before populate() to avoid recursive mutable borrow of the store.
@@ -552,7 +552,7 @@ async function preloadTiles(
  * registry.
  */
 export interface V2LayerConfig {
-  /** Stable layer name — the `dynamicLayers` registry key. */
+  /** Stable layer name - the `dynamicLayers` registry key. */
   name: string;
   /** v2 head dir (SQLite head + content-addressed chunks + graph.json). */
   headDir: string;
@@ -566,9 +566,9 @@ export interface V2LayerConfig {
 }
 
 /**
- * DEV-PATH CONSTANT — the v2 pilot layer set (base -> overlay: wiktionary then
+ * DEV-PATH CONSTANT - the v2 pilot layer set (base -> overlay: wiktionary then
  * macbain). `headDir` values are absolute repo paths the native `v2_*` commands
- * open directly (`Path::new(dir)`) — valid for `tauri dev` on the pilot machine
+ * open directly (`Path::new(dir)`) - valid for `tauri dev` on the pilot machine
  * only; shipping needs real installed-layer resolution (Tauri path APIs / the
  * `dynamicLayers` registry). See the report's UI-run note.
  */
@@ -590,7 +590,7 @@ export const V2_LAYERS: V2LayerConfig[] = [
   },
   {
     // Morphology enrichment (BuNaMo via Gramadán): composes full paradigms onto the
-    // shared goi ids. Carries no senses/headwords — only `forms` + `grammar_class`.
+    // shared goi ids. Carries no senses/headwords - only `forms` + `grammar_class`.
     // Its Pagefind index holds inflected surface forms so a form search finds the
     // lemma (auto-ranked below headword matches). Order is precedence-neutral for the
     // card-n `forms` nodegroup (cross-layer merge is a union), so append at the end.
@@ -599,7 +599,7 @@ export const V2_LAYERS: V2LayerConfig[] = [
     pagefindBase: '/layer-bunamo/',
   },
   {
-    // Logainm placenames — its OWN graph (schema.org/Place), composed as a
+    // Logainm placenames - its OWN graph (schema.org/Place), composed as a
     // separate model in the stack (does NOT merge into the lexical_entry tree).
     // Pagefind ga index = Irish + English name text; feature_type in meta.
     name: 'place',
@@ -607,7 +607,7 @@ export const V2_LAYERS: V2LayerConfig[] = [
     pagefindBase: '/layer-place/',
   },
   {
-    // Logainm toponymic CONCEPTS (ontolex:LexicalConcept) — the geographic
+    // Logainm toponymic CONCEPTS (ontolex:LexicalConcept) - the geographic
     // MEANING a placename evokes. OWN graph (Lexical Concept), full-hydratable as
     // its own head: a placename's `concept_entry` is hydrated concept-authoritative
     // via conceptHeadDir(), mirroring placeHeadDir(). Infrastructure, not a user
@@ -617,7 +617,7 @@ export const V2_LAYERS: V2LayerConfig[] = [
     pagefindBase: '/layer-concept/',
   },
   {
-    // Corpus examples — OWN graph (like place): example resources + an
+    // Corpus examples - OWN graph (like place): example resources + an
     // `illustrates` nodegroup linking to goi entries. Kept as two separate heads
     // so the licences stay distinct (Tatoeba CC BY 2.0 / Gaois CC BY 4.0). The
     // entry page finds a headword's examples via cited_by('headword_entry').
@@ -631,13 +631,13 @@ export const V2_LAYERS: V2LayerConfig[] = [
     pagefindBase: '/layer-example-gaois/',
   },
   {
-    // Person graph — seeded with the single "User" resource that authors notes.
+    // Person graph - seeded with the single "User" resource that authors notes.
     name: 'person',
     headDir: '/home/philtweir/Cód/Oscailte/Gréasán/data/person-v2',
     pagefindBase: '/layer-person/',
   },
   {
-    // Note/flag graph (oa:Annotation) — subject → any resource, author → User.
+    // Note/flag graph (oa:Annotation) - subject → any resource, author → User.
     // The MUTABLE layer: Flag ② re-emits this head on each new flag. Flags on a
     // resource = cited_by('subject'); own graph, so it never merges into entries.
     name: 'note',
@@ -645,7 +645,7 @@ export const V2_LAYERS: V2LayerConfig[] = [
     pagefindBase: '/layer-note/',
   },
   {
-    // Layer catalogue — describes each layer (licence, types, stats, …). Queried
+    // Layer catalogue - describes each layer (licence, types, stats, …). Queried
     // on its own for the layer UI; not searched, not shown as a toggleable layer.
     name: 'layer',
     headDir: '/home/philtweir/Cód/Oscailte/Gréasán/data/layer-v2',
@@ -662,14 +662,14 @@ export const V2_LAYERS: V2LayerConfig[] = [
 let activeV2Layers: V2LayerConfig[] = V2_LAYERS;
 
 /**
- * Layer names the user has hidden from composition — a VIEW filter, not an
+ * Layer names the user has hidden from composition - a VIEW filter, not an
  * uninstall: the head stays on disk and toggling back is free (Pagefind
  * instances are cached by base in `pagefind.ts`).
  *
  * No single layer is privileged: `ros-madair-read::Layers` resolves a per-MODEL
  * base (the first layer that carries the queried graph), not the global head 0,
  * and hydrate merges topmost-first across every layer that has the resource. The
- * only hard rule is that `Layers::open` errors on a zero-dir stack — so the sole
+ * only hard rule is that `Layers::open` errors on a zero-dir stack - so the sole
  * constraint enforced here is "never hide EVERY layer", not "never hide head 0".
  * That lets wiktionary be hidden (e.g. a Scottish-Gaelic-only view over macbain).
  */
@@ -679,7 +679,7 @@ let hiddenLayers: ReadonlySet<string> = new Set();
 export function setHiddenLayers(names: Iterable<string>): void {
   const next = new Set(names);
   // RM needs a non-empty stack. If a request would hide every layer (a stale
-  // persisted set, a family switch), keep the first one visible — but don't
+  // persisted set, a family switch), keep the first one visible - but don't
   // otherwise privilege it: any single remaining layer is a valid base.
   const all = activeV2Layers.map((l) => l.name);
   if (all.length > 0 && all.every((n) => next.has(n))) next.delete(all[0]);
@@ -694,7 +694,7 @@ export function getHiddenLayers(): ReadonlySet<string> {
 
 /** Ordered ACTIVE v2 layer head dirs (composition order, hidden layers dropped). */
 export function currentV2HeadDirs(): string[] {
-  // The `layer` catalogue is a META head (describes layers) — queried on its own
+  // The `layer` catalogue is a META head (describes layers) - queried on its own
   // via layerCatalogueHeadDir(), never composed into the lexical/place stack.
   const visible = activeV2Layers.filter((l) => l.name !== 'layer' && !hiddenLayers.has(l.name));
   // setHiddenLayers already guards against an all-hidden set; this is the
@@ -706,7 +706,7 @@ export function currentV2HeadDirs(): string[] {
 /**
  * The Logainm `place-v2` head dir, or undefined if that layer is not active.
  * The placenames map queries this head directly (its `spine_place`/`geo_bbox`
- * tables carry the point geometry), NOT the composed lexical stack — see
+ * tables carry the point geometry), NOT the composed lexical stack - see
  * {@link geoPoints} / MapView. Tracks {@link initOfflineLayers} because it reads
  * the ACTIVE layer set, matching how `loadEntryV2` finds the same head.
  */
@@ -717,7 +717,7 @@ export function placeHeadDir(): string | undefined {
 /**
  * The `concept-v2` head dir (Logainm meaning-concepts), or undefined if not
  * active. A placename's `concept_entry` (and, later, a sense's `evokes`) is
- * hydrated against THIS head as base — its `graph.json` is the LexicalConcept
+ * hydrated against THIS head as base - its `graph.json` is the LexicalConcept
  * model, which the composed lexical/place stack does not carry. Mirrors
  * {@link placeHeadDir}.
  */
@@ -731,7 +731,7 @@ export function layerCatalogueHeadDir(): string | undefined {
 }
 
 /**
- * Which layers actually carry `uri` — "coverage at cursor", the map-legend
+ * Which layers actually carry `uri` - "coverage at cursor", the map-legend
  * readout for the open entry. One indexed descriptor lookup per layer, no
  * hydration and no graph load; a layer missing the resource returns no row.
  *
@@ -745,7 +745,7 @@ export async function layerCoverage(uri: string): Promise<Set<string>> {
         const found = await descriptors([l.headDir], [uri]);
         return found[uri] ? l.name : null;
       } catch {
-        return null; // unreadable head — treat as no coverage, not an error
+        return null; // unreadable head - treat as no coverage, not an error
       }
     }),
   );
@@ -780,9 +780,9 @@ export async function initOfflineLayers(): Promise<void> {
  *
  * v1 `addDynamicLayer` also calls `SparqlStore.addLayer` (via `ensureStore`),
  * which is meaningless in v2 mode and fails against v2 heads. This v2 variant
- * only populates the `dynamicLayers` registry — enough for the `layers` store
+ * only populates the `dynamicLayers` registry - enough for the `layers` store
  * (clears the "install a layer" empty state) and `collectPagefindBases`/search
- * — and never constructs a SparqlStore. Detail hydrate uses `V2_HEAD_DIRS`
+ * - and never constructs a SparqlStore. Detail hydrate uses `V2_HEAD_DIRS`
  * natively (see `loadEntryV2`), not this registry.
  */
 export function registerV2Layers(): void {
@@ -799,7 +799,7 @@ export function registerV2Layers(): void {
 /**
  * Register an INSTALLED v2 head (built on-device via `build_layer` format
  * `prebuild-v2`, or restored from disk) as an active layer so its resources join
- * the v2 head-dir set — `currentV2HeadDirs()` → hydrate/query/descriptors. Unlike
+ * the v2 head-dir set - `currentV2HeadDirs()` → hydrate/query/descriptors. Unlike
  * `addDynamicLayer` (v1 SparqlStore) this never constructs a store; it just adds
  * the head dir. Text search (Pagefind) for installed heads is a follow-on, so it
  * registers with a NULL pagefind base (search skips it; hydrate/badges still work).
@@ -815,7 +815,7 @@ export function addV2Layer(headDir: string, name: string): void {
 }
 
 /** Remove a single INSTALLED v2 head from the active set (the counterpart of
- *  addV2Layer). Drops ONLY the named layer — no store teardown — so the other
+ *  addV2Layer). Drops ONLY the named layer - no store teardown - so the other
  *  heads stay registered; head dirs are read live via currentV2HeadDirs(). */
 export function removeV2Layer(name: string): void {
   activeV2Layers = activeV2Layers.filter((l) => l.name !== name);
@@ -856,8 +856,8 @@ function parseSpanString(s: string): [number, number][] {
 
 export async function loadExample(resourceId: string): Promise<ExampleDetail | null> {
   // v2: the example is a resource in one of the example heads (Tatoeba / Gaois).
-  // Hydrate it and read the headwords it illustrates — with their per-headword
-  // spans — straight from its own `illustrates` tiles (no reverse lookup, no
+  // Hydrate it and read the headwords it illustrates - with their per-headword
+  // spans - straight from its own `illustrates` tiles (no reverse lookup, no
   // surface-form matching). The v1 SparqlStore / core-goidelic path is retired.
   const headDirs = currentV2HeadDirs();
   const exampleHeads = headDirs.filter((d) => d.includes('/example-'));
@@ -871,7 +871,7 @@ export async function loadExample(resourceId: string): Promise<ExampleDetail | n
       const source = head.includes('tatoeba') ? 'Tatoeba' : 'Gaois';
       const sourceId = exLocalStr(prov.source_id);
       const highlights = exLocalStr(prov.highlights);
-      // Gaois collection is bilingual "ga|en" — keep the Irish side.
+      // Gaois collection is bilingual "ga|en" - keep the Irish side.
       const collection = exLocalStr(prov.collection).split('|')[0];
       const citation = exLocalStr(prov.citation);
 
@@ -899,7 +899,7 @@ export async function loadExample(resourceId: string): Promise<ExampleDetail | n
       }
 
       // Real per-item link only where the source publishes one (Tatoeba). Gaois
-      // has no per-tuid permalink — the citation carries the provenance instead.
+      // has no per-tuid permalink - the citation carries the provenance instead.
       const sourceUrl = source === 'Tatoeba' && sourceId ? `https://tatoeba.org/sentences/${sourceId}` : '';
 
       return { resourceId, sentence, translation, source, sourceId, highlights, collection, citation, sourceUrl, headwords };
@@ -916,9 +916,9 @@ export interface Flag {
 }
 
 /**
- * Notes/flags attached to a resource — the reverse of `note.subject`. Runs
+ * Notes/flags attached to a resource - the reverse of `note.subject`. Runs
  * note-authoritative (`subject` is a note-graph node) against the note head in
- * the stack. Works for ANY resource (entry, example, place) — the caller just
+ * the stack. Works for ANY resource (entry, example, place) - the caller just
  * passes the resource UUID.
  */
 export async function loadFlags(uri: string): Promise<Flag[]> {

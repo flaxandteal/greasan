@@ -1,7 +1,7 @@
 parent_alias,alias,name,datatype,cardinality,ontology_class,parent_property,description,collection_name,required,searchable,exportable,sortorder
 ,name,Name,string,1,https://schema.org/name,https://schema.org/name,Human-readable layer name (the resource descriptor),,true,true,true,1
 ,slug,Slug,string,1,https://schema.org/identifier,https://schema.org/identifier,Dialect-neutral layer slug (as used across the stack),,false,true,true,2
-,icon,Icon,string,1,https://schema.org/image,https://schema.org/image,Layer icon — an inline SVG or a bundled asset reference,,false,false,true,3
+,icon,Icon,string,1,https://schema.org/image,https://schema.org/image,Layer icon - an inline SVG or a bundled asset reference,,false,false,true,3
 ,layer_type,Layer Type,concept-list,1,https://schema.org/about,https://schema.org/about,"What the layer contributes (Grammar, Etymology, Glosses, …)",Layer Types,false,true,true,4
 ,layer_format,Layer Format,concept-list,1,https://schema.org/encodingFormat,https://schema.org/encodingFormat,"Upstream formats the layer is available in (TBX, RM, …)",Layer Formats,false,true,true,5
 ,licensing,Licensing,semantic,1,https://schema.org/license,https://schema.org/license,Licence and the required visible attribution,,false,false,true,6

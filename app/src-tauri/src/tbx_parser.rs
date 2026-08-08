@@ -43,7 +43,7 @@ fn extract_gender(raw: &str) -> Option<&'static str> {
 }
 
 /// The declension class encoded in the Téarma POS code. Téarma states the
-/// declension in the gender abbreviation itself — `fir1`..`fir5` (masculine
+/// declension in the gender abbreviation itself - `fir1`..`fir5` (masculine
 /// noun) and `bain2`..`bain5` (feminine noun), plus `a1`..`a3` for adjective
 /// declension. The trailing digit IS the class, so we keep it as `grammar_class`
 /// (`goidelic#grammaticalClass`, same node BuNaMo populates) rather than
@@ -507,7 +507,7 @@ fn parse_single_entry(xml: &str) -> Result<Vec<TbxRecord>, String> {
 
             // Noun/adjective declension is STATED in the POS code, so we extract
             // it. Verb conjugation is NOT stated by Téarma and is left empty here
-            // — inferring it (and guessing the bare-fir/bain noun gap) is the
+            // - inferring it (and guessing the bare-fir/bain noun gap) is the
             // separate grammar-class-inference session's job. See the hand-off.
             let grammar_class = if tg.raw_pos.is_empty() {
                 String::new()
@@ -626,7 +626,7 @@ fn method_confidence(m: gramadan::enrich::Method) -> &'static str {
 }
 
 /// Fill `grammar_class` for classless noun/verb records via gramadan morphology
-/// (empty `LemmaDb` — heuristics + baked exception lists suffice; gramadan
+/// (empty `LemmaDb` - heuristics + baked exception lists suffice; gramadan
 /// hand-off §1b) and stamp `grammar_class_confidence`. The on-device counterpart
 /// of the Python `tbx.py` enrichment, so a phone-built Téarma matches the shipped
 /// corpus (~80% of classless nouns/verbs resolved). A class already given by the
@@ -675,7 +675,7 @@ pub fn csv_header() -> String {
 }
 
 /// Append CSV rows for `records` to `out`, threading `seen_ids` so ResourceID
-/// dedup is stable across batched calls — a sequence of batches produces the
+/// dedup is stable across batched calls - a sequence of batches produces the
 /// exact same rows (and thus the same resource UUIDs) as a single call over
 /// all records. This is what lets the streaming build split the corpus into
 /// memory-bounded batches without changing the output.

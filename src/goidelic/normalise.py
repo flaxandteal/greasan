@@ -164,7 +164,7 @@ _DIALECT_TAG_MAP: dict[str, str] = {
     "kerry": "Kerry Irish",
     "waterford": "Waterford Irish",
     "cois-fharraige": "Connemara Irish",
-    # Scottish Gaelic — coverage uncertain, start conservative
+    # Scottish Gaelic - coverage uncertain, start conservative
     "highland": "Highland Gaelic",
     "hebridean": "Hebridean Gaelic",
     "argyll": "Argyll Gaelic",
@@ -179,11 +179,11 @@ def _detect_dialect(entry: dict, default_dialect: str) -> str:
     Priority: sense tags > categories. Pronunciations are never consulted
     (a regional pronunciation doesn't make the word itself dialectal).
 
-    Only tag an entry as dialectal if ALL senses carry dialect tags — if any
+    Only tag an entry as dialectal if ALL senses carry dialect tags - if any
     sense is untagged, the word is general and used across dialects.
     Rule: 1–2 dialects → keep those specific ones. 3+ → general (all).
     """
-    # 1. Check sense tags — most authoritative (e.g. "(Connacht, Ulster) dog")
+    # 1. Check sense tags - most authoritative (e.g. "(Connacht, Ulster) dog")
     senses = entry.get("senses", [])
     sense_dialects: set[str] = set()
     has_untagged_sense = False
@@ -198,7 +198,7 @@ def _detect_dialect(entry: dict, default_dialect: str) -> str:
         else:
             has_untagged_sense = True
 
-    # If any sense is untagged, the word is general — don't restrict by dialect
+    # If any sense is untagged, the word is general - don't restrict by dialect
     if has_untagged_sense:
         return default_dialect
 
@@ -221,7 +221,7 @@ def _detect_dialect(entry: dict, default_dialect: str) -> str:
     if len(cat_dialects) >= 3:
         return default_dialect
 
-    # Pronunciations are NOT consulted — a word having a regional pronunciation
+    # Pronunciations are NOT consulted - a word having a regional pronunciation
     # contributed doesn't make the word itself dialectal.
 
     return default_dialect

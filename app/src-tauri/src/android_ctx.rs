@@ -1,8 +1,8 @@
 //! Android JNI context bridge.
 //!
 //! Tauri v2 mobile runs a Java `WryActivity` (not a `NativeActivity`). The
-//! `ndk_context` global — the shared slot every crate reads via
-//! `ndk_context::android_context()` — is normally initialized by `ndk-glue`,
+//! `ndk_context` global - the shared slot every crate reads via
+//! `ndk_context::android_context()` - is normally initialized by `ndk-glue`,
 //! which a `NativeActivity` app links but a `WryActivity` app does NOT. Nothing
 //! in wry/tao/tauri calls `ndk_context::initialize_android_context`, so that
 //! global stays `None` and `android_context()` panics with
@@ -57,7 +57,7 @@ pub fn init_from_tao() {
 
 /// Non-panicking accessor for the Android context.
 ///
-/// Returns `Err` — never panics/aborts — when the context is unavailable, so
+/// Returns `Err` - never panics/aborts - when the context is unavailable, so
 /// JNI-dependent commands can return a graceful error to JS. Attempts a lazy
 /// init in case a command runs before `.setup()`.
 pub fn context() -> Result<ndk_context::AndroidContext, String> {

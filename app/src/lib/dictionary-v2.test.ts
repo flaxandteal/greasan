@@ -10,16 +10,16 @@ vi.mock('./v2', () => ({
 
 import { normHead } from './dictionary-v2';
 
-describe('normHead — same-lexeme identity (cross-layer join key)', () => {
+describe('normHead - same-lexeme identity (cross-layer join key)', () => {
   it('folds accent CONVENTION: acute = grave = macron', () => {
-    // Irish acute, Scottish grave, MacBain macron — all the same lexeme.
+    // Irish acute, Scottish grave, MacBain macron - all the same lexeme.
     expect(normHead('bás')).toBe(normHead('bàs'));
     expect(normHead('mór')).toBe(normHead('mòr'));
     expect(normHead('mór')).toBe(normHead('mōr'));
   });
 
   it('PRESERVES length: accented ≠ unaccented', () => {
-    // This is the bug the gate fixes — MacBain "bàs" must NOT fold into "bas".
+    // This is the bug the gate fixes - MacBain "bàs" must NOT fold into "bas".
     expect(normHead('bás')).not.toBe(normHead('bas'));
     expect(normHead('fear')).not.toBe(normHead('féar'));
   });

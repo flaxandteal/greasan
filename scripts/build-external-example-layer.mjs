@@ -6,10 +6,10 @@
  * one example resource per sentence, carrying sentence / sentence_en /
  * provenance{source, source_id, highlights, collection, citation} and an
  * `illustrates` nodegroup (headword_entry -> goi lexical_entry UUID, surface,
- * span) — the mirror of place-v2's name_elements.
+ * span) - the mirror of place-v2's name_elements.
  *
  * This REPLACES the v1 core-goidelic external_example graph. Unlike
- * build-place-layer, there is no matching here — examples.py already resolved
+ * build-place-layer, there is no matching here - examples.py already resolved
  * illustrations; we only convert the goi ResourceID in `headword_entry` to the
  * cross-graph resource UUID and emit the head.
  *
@@ -39,7 +39,7 @@ const root = resolve(__dirname, '..');
 const namespace = 'https://flaxandteal.org/ontology/goidelic#';
 const ALIZARIN_NS = '1a79f1c8-9505-4bea-a18e-28a053f725ca';
 
-// One layer per corpus — kept separate so the two licences (Tatoeba CC BY 2.0 /
+// One layer per corpus - kept separate so the two licences (Tatoeba CC BY 2.0 /
 // Gaois CC BY 4.0) live in distinct heads that can be bundled/toggled
 // independently. Split is a pure filter over the already-matched
 // example_layer_data.csv (ResourceID prefix ex-<source>-), so it needs no
@@ -47,7 +47,7 @@ const ALIZARIN_NS = '1a79f1c8-9505-4bea-a18e-28a053f725ca';
 const SOURCE = (process.argv[2] || '').toLowerCase();
 const SOURCES = {
   tatoeba: { name: 'Tatoeba Example', tag: 'TA', license: 'CC-BY-2.0 (Tatoeba)' },
-  gaois: { name: 'Gaois Example', tag: 'GA', license: 'CC-BY-4.0 (Gaois — Fiontar & Scoil na Gaeilge, DCU; legislation © Government of Ireland)' },
+  gaois: { name: 'Gaois Example', tag: 'GA', license: 'CC-BY-4.0 (Gaois - Fiontar & Scoil na Gaeilge, DCU; legislation © Government of Ireland)' },
 };
 if (!SOURCES[SOURCE]) {
   console.error('[build-example] Usage: node scripts/build-external-example-layer.mjs <tatoeba|gaois>');
@@ -55,7 +55,7 @@ if (!SOURCES[SOURCE]) {
 }
 const SRC = SOURCES[SOURCE];
 const EXAMPLE_TAG = SRC.tag;
-// Shared lexical_entry graph — headword_entry must resolve to the SAME goi
+// Shared lexical_entry graph - headword_entry must resolve to the SAME goi
 // resource UUIDs the wiktionary/tearma/bunamo/macbain heads carry.
 const LEX_GRAPH_ID = '449c8695-253e-521b-8994-27701ce22305';
 

@@ -1,9 +1,9 @@
-"""Goidelic slug identity — `goi-HEAD-POS` resource slugs.
+"""Goidelic slug identity - `goi-HEAD-POS` resource slugs.
 
 Pipeline implementation of the identity scheme in `docs/goidelic-slug-identity.md`
 (and mirrored by the runnable reference `docs/normalize_head.py`). The point: a
-lexeme's dialect variants (Irish `fear`, Scottish `fear`) produce the SAME slug —
-hence the same `resource_uuid` under the single `lexical_entry` graph — so they
+lexeme's dialect variants (Irish `fear`, Scottish `fear`) produce the SAME slug -
+hence the same `resource_uuid` under the single `lexical_entry` graph - so they
 compose into one resource, while different spellings or POS stay distinct.
 
 `goi_slug("mór", "adjective")` and `goi_slug("mòr", "adjective")` both →
@@ -16,7 +16,7 @@ from __future__ import annotations
 import re
 import unicodedata
 
-# Irish acute + Scottish grave (from ANY source — accent does not track dialect:
+# Irish acute + Scottish grave (from ANY source - accent does not track dialect:
 # MacBain 1911 writes Scottish `mór` with an acute) fold to a MACRON, a
 # dialect-neutral length marker. Length is PRESERVED, never stripped, so
 # `fear`(man) and `féar`→`fēar`(grass) stay distinct. Applied after casefold.
@@ -38,7 +38,7 @@ def normalize_head(text: str) -> str:
 
     casefold; NFC; fold grave/acute → macron (length preserved, NOT ASCII-stripped);
     whitespace → hyphen; drop remaining punctuation. Deliberately non-ASCII (macron
-    chars) — it is the slug/uuid input, and macrons are URL-legal. Does NOT
+    chars) - it is the slug/uuid input, and macrons are URL-legal. Does NOT
     lemmatize: headwords already are lemmas (spec §6a).
     """
     text = unicodedata.normalize("NFC", text.casefold().strip())
@@ -49,7 +49,7 @@ def normalize_head(text: str) -> str:
 
 
 def goi_slug(word: str, pos: str) -> str:
-    """`goi-<normHEAD>-<normPOS>` — the dialect-neutral resource slug.
+    """`goi-<normHEAD>-<normPOS>` - the dialect-neutral resource slug.
 
     The `goi` (Goidelic) macro-prefix replaces the per-language `ga`/`gd`/`gv`;
     dialect moves onto the tiles. POS is normalized too (`proper noun` →

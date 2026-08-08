@@ -5,7 +5,7 @@
   const tabs = [
     { id: 'search' as const, key: 'nav.search' },
     { id: 'starred' as const, key: 'nav.starred' },
-    // Layers is an overlay (the Layer Manager), not a main tab — but it lives in
+    // Layers is an overlay (the Layer Manager), not a main tab - but it lives in
     // the tab row, left of Settings, as a library.
     { id: 'layers' as const, key: 'nav.layers' },
     { id: 'settings' as const, key: 'nav.settings' },

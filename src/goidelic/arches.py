@@ -52,7 +52,7 @@ def entry_to_rows(entry: dict, include_forms: bool = True) -> list[dict[str, str
     senses = entry.get("senses", [])
     # Wiktionary inflectional forms are noisy (inconsistent lenited/eclipsed
     # tagging), so with include_forms=False we drop them from the layer and let
-    # attested BuNaMo forms — or the gramadan-rs decliner as a fallback — own the
+    # attested BuNaMo forms - or the gramadan-rs decliner as a fallback - own the
     # paradigm instead. See config [pipeline] include_wiktionary_forms.
     forms = entry.get("forms", []) if include_forms else []
     domains = entry.get("domains", [])
@@ -83,19 +83,19 @@ def entry_to_rows(entry: dict, include_forms: bool = True) -> list[dict[str, str
             if domains:
                 row["domain"] = "|".join(domains)
 
-        # Pronunciation (cardinality-n) — dialect rides the tile
+        # Pronunciation (cardinality-n) - dialect rides the tile
         if i < len(pronunciations):
             row["ipa_value"] = pronunciations[i].get("ipa_value", "")
             row["pronunciation_dialect"] = pronunciations[i].get("dialect", "")
 
-        # Sense (cardinality-n) — dialect rides the tile
+        # Sense (cardinality-n) - dialect rides the tile
         if i < len(senses):
             row["gloss"] = senses[i].get("gloss", "")
             row["example"] = senses[i].get("example", "")
             row["source_label"] = senses[i].get("source_label", "")
             row["sense_dialect"] = senses[i].get("dialect", "")
 
-        # Form (cardinality-n) — dialect rides the tile
+        # Form (cardinality-n) - dialect rides the tile
         if i < len(forms):
             row["written_rep"] = forms[i].get("written_rep", "")
             features = forms[i].get("gram_features", [])

@@ -100,7 +100,7 @@ pub fn handle_request<R: Runtime>(
     let zip_path = match candidates.iter().find(|p| p.exists()) {
         Some(p) => p.clone(),
         None => {
-            eprintln!("[pfzip] zip not found for {index_name}/{lang_dir}.zip — tried: {:?}", candidates);
+            eprintln!("[pfzip] zip not found for {index_name}/{lang_dir}.zip - tried: {:?}", candidates);
             return response(404, "text/plain", format!("zip not found: {index_name}/{lang_dir}.zip").into_bytes());
         }
     };

@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 //! Acceptance test for the entry-level `gender` (lexinfo:gender) concept node.
-//! Hydrates a resource over the composed stack (the read API — NOT raw tiles) and
+//! Hydrates a resource over the composed stack (the read API - NOT raw tiles) and
 //! resolves its gender value through the head's closure (the same vocab->label
 //! join `v2_closure` uses). PASS iff the stored value resolves to a real label.
 //!
@@ -28,7 +28,7 @@ fn load_graph(path: &Path) -> StaticGraph {
     g
 }
 
-/// The head's UUID -> label closure — identical query to `v2::v2_closure`.
+/// The head's UUID -> label closure - identical query to `v2::v2_closure`.
 fn closure(dir: &Path) -> HashMap<String, String> {
     let conn = ros_madair_read::open_head(dir).expect("open head");
     let mut stmt = conn
@@ -51,7 +51,7 @@ fn closure(dir: &Path) -> HashMap<String, String> {
 }
 
 /// Extract the concept UUID a reference field hydrated to (string, or an object
-/// wrapping the id) — mirrors the frontend `makeLabel`.
+/// wrapping the id) - mirrors the frontend `makeLabel`.
 fn ref_id(v: &Value) -> Option<String> {
     match v {
         Value::String(s) => Some(s.clone()),
@@ -79,7 +79,7 @@ fn main() {
     let refs: Vec<&Path> = paths.iter().map(|p| p.as_path()).collect();
     let layers = Layers::open(&refs).expect("Layers::open");
     // hydrate folds each layer's vocab (id -> label) internally, so a reference
-    // field comes back already resolved to its label — or a raw UUID if the tile
+    // field comes back already resolved to its label - or a raw UUID if the tile
     // value has no vocab entry (the old mismatch bug).
     let tree = layers.hydrate_resource(&uuid, &graph, &["en"]).expect("hydrate");
 
@@ -120,7 +120,7 @@ fn main() {
     if s == "masculine" || s == "feminine" {
         println!("PASS: gender hydrates to the label '{s}'");
     } else if is_uuid {
-        // Unresolved UUID — try the closure to show what it *should* map to.
+        // Unresolved UUID - try the closure to show what it *should* map to.
         println!("FAIL: gender is an unresolved UUID '{s}' (closure -> {:?})", map.get(&s));
     } else if s.is_empty() {
         println!("FAIL: gender absent/empty on tree");

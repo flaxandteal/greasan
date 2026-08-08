@@ -16,7 +16,7 @@ def slugify(word: str, pos: str, lang_code: str = "") -> str:
     Now emits the dialect-neutral `goi-HEAD-POS` (see `slug_identity.goi_slug` and
     docs/goidelic-slug-identity.md): "focal" + "noun" → "goi-focal-noun", so a
     lexeme's dialect variants (`ga`/`gd`/`gv`) share one resource. `lang_code` is
-    accepted for call-site compatibility but IGNORED — dialect moves onto the tiles,
+    accepted for call-site compatibility but IGNORED - dialect moves onto the tiles,
     not the slug.
     """
     return goi_slug(word, pos)
@@ -35,7 +35,7 @@ def shape_entry(entry: dict) -> dict:
     - forms: list of {written_rep, gram_features}
     """
     resource_id = goi_slug(entry["word"], entry["pos"])
-    # Dialect now rides the TILES (senses/forms/pronunciations), not the slug — so
+    # Dialect now rides the TILES (senses/forms/pronunciations), not the slug - so
     # dialect variants of a lexeme merge into one goi resource yet stay attributable.
     dialect = entry.get("dialect", "Irish")
 
@@ -101,7 +101,7 @@ def _merge_dialect(existing: str, incoming: str) -> str:
 
     Reuses the pipeline's existing pipe-separated multi-dialect convention
     (PIPELINE_CAVEATS.md), so a merged Irish+Scottish resource reads
-    `Irish|Scottish Gaelic` — resolvable by the pagefind filter build as before.
+    `Irish|Scottish Gaelic` - resolvable by the pagefind filter build as before.
     """
     seen: list[str] = []
     for d in _dialects(existing) + _dialects(incoming):
@@ -114,7 +114,7 @@ def _merge_resource(acc: dict, new: dict) -> None:
     """Fold `new` (same `goi` resource_id) into `acc` in place.
 
     Card-n tiles (pronunciations/senses/forms) are unioned and de-duplicated
-    INCLUDING their dialect tag — so the same gloss in two dialects stays two tagged
+    INCLUDING their dialect tag - so the same gloss in two dialects stays two tagged
     tiles. Card-1 `dialect` becomes the pipe-separated union; per-dialect lemma
     spellings accumulate in `headwords`.
     """

@@ -33,7 +33,7 @@ import { createHash } from 'node:crypto';
 
 // RFC 4122 v5 (SHA-1), matching the `uuid` package's v5(name, namespace). The npm
 // `uuid` dep isn't present in this tree; this is deterministic and matches Python's
-// uuid.uuid5 / the Rust uuid5 used to derive resource UUIDs across the pipeline — so
+// uuid.uuid5 / the Rust uuid5 used to derive resource UUIDs across the pipeline - so
 // macbain's cognate_entry_id UUIDs equal the goi resource UUIDs (cross-layer links).
 function uuidv5(name, namespace) {
   const ns = Buffer.from(namespace.replace(/-/g, ''), 'hex');
@@ -74,7 +74,7 @@ function slugify(text) {
 
 // Identity normalization for matching against goi resources: fold acute AND grave to
 // a macron (length PRESERVED, not stripped), matching docs/goidelic-slug-identity.md
-// §3 / the pipeline's normalize_head — so macbain cognate/headword matches align with
+// §3 / the pipeline's normalize_head - so macbain cognate/headword matches align with
 // the goi slug identity (fear ≠ fēar; mór = mòr = mōr). Distinct from stripDiacritics,
 // which stays for accent-insensitive SEARCH recall.
 const _MACRON = { 'à': 'ā', 'á': 'ā', 'è': 'ē', 'é': 'ē', 'ì': 'ī', 'í': 'ī', 'ò': 'ō', 'ó': 'ō', 'ù': 'ū', 'ú': 'ū' };
@@ -174,13 +174,13 @@ const cognateRe = new RegExp(
 );
 
 // Bare language pattern: LANG abbreviation followed by comma/semicolon (no italic word)
-// e.g., "so Ir.," or "belly, Ir., O. Ir. brú" — means "same word in LANG"
+// e.g., "so Ir.," or "belly, Ir., O. Ir. brú" - means "same word in LANG"
 const bareLangRe = new RegExp(
   `(?:^|[;,:\\s])\\s*(${langPattern})\\s*(?=[,;.)])`,
   'gi',
 );
 
-// Language abbreviation followed by <i> — marks start of etymology region
+// Language abbreviation followed by <i> - marks start of etymology region
 const etymStartRe = new RegExp(`(${langPattern})\\s+<i>`, 'i');
 
 function parseEntries(html) {
@@ -280,7 +280,7 @@ function parseEntries(html) {
     }
 
     // Bare language pass: detect LANG abbreviations NOT followed by <i>
-    // (e.g., "so Ir.," or "belly, Ir., O. Ir. brú") — means "same word in LANG"
+    // (e.g., "so Ir.," or "belly, Ir., O. Ir. brú") - means "same word in LANG"
     const extractedLangs = new Set(cognates.map(c => c.language));
     bareLangRe.lastIndex = 0;
     while ((cm = bareLangRe.exec(content)) !== null) {
@@ -432,7 +432,7 @@ if (existsSync(wkCsvPath)) {
   console.log(`[build-macbain] WK lookup: ga=${gaLookup.size}, gd=${gdLookup.size} unique normalised headwords`);
   console.log(`[build-macbain] WK forms: ga=${gaFormsLookup.size}, gd=${gdFormsLookup.size} unique forms`);
 } else {
-  console.log('[build-macbain] No WK CSV found — all entries will be standalone');
+  console.log('[build-macbain] No WK CSV found - all entries will be standalone');
 }
 
 // Forms lemmatization now sources from BuNaMo, not Wiktionary: WK no longer ships
@@ -463,7 +463,7 @@ if (existsSync(bunamoCsvPath)) {
   }
   console.log(`[build-macbain] BuNaMo forms: ga=${gaFormsLookup.size}, gd=${gdFormsLookup.size} unique forms (+${added})`);
 } else {
-  console.log('[build-macbain] No BuNaMo CSV — forms lemmatization stays empty');
+  console.log('[build-macbain] No BuNaMo CSV - forms lemmatization stays empty');
 }
 
 // Combined lookup for MacBain headword matching (gd-* only, same as before)
@@ -782,7 +782,7 @@ if (existsSync(graphFile)) {
 }
 
 // --- Pagefind indices ---
-// Only standalone entries have headwords — matched entries are already searchable via WK pagefind.
+// Only standalone entries have headwords - matched entries are already searchable via WK pagefind.
 
 console.log('[build-macbain] Building Pagefind indices...');
 const tPf = performance.now();

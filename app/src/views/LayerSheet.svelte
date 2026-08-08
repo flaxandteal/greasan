@@ -1,12 +1,12 @@
 <script lang="ts">
   // SPDX-License-Identifier: AGPL-3.0-or-later
   //
-  // Layer visibility sheet — a map layer control, minus the map.
+  // Layer visibility sheet - a map layer control, minus the map.
   //
   // The stack genuinely behaves like map draw order (ordered composition,
   // topmost-wins per nodegroup, an unhideable basemap), so it borrows the
   // widget grammar: swatch, eye toggle, base pinned at the bottom. It does NOT
-  // borrow anything spatial — opacity and blending mean nothing when layers
+  // borrow anything spatial - opacity and blending mean nothing when layers
   // merge into one entry rather than tiling a plane, and the app's genuinely
   // geographic axis is dialect, not source.
   import { layerStack, toggleLayerVisibility, layerSheetOpen, currentEntry, activeTab, currentLayer } from '../lib/store';
@@ -21,7 +21,7 @@
   }
 
   // Coverage-at-cursor: which layers actually carry the open entry. Null when
-  // no entry is open (nothing to be covered) or the lookup failed — in both
+  // no entry is open (nothing to be covered) or the lookup failed - in both
   // cases rows render without a coverage claim rather than a wrong one.
   let coverage = $state<Set<string> | null>(null);
 
@@ -46,7 +46,7 @@
     if (e.key === 'Escape') close();
   }
 
-  // Overlays above, base below — the stack reads bottom-up, as a stack should.
+  // Overlays above, base below - the stack reads bottom-up, as a stack should.
   let rows = $derived([...$layerStack].reverse());
 </script>
 
@@ -137,7 +137,7 @@
     animation: slideUp 0.32s cubic-bezier(0.22, 1, 0.36, 1);
   }
 
-  /* Focused on open so Escape and screen readers land here — but it is a
+  /* Focused on open so Escape and screen readers land here - but it is a
      container, not a control, so it should not draw a ring. */
   .sheet:focus { outline: none; }
 
@@ -188,7 +188,7 @@
   .eye-btn:disabled { cursor: default; opacity: 0.6; }
 
   /* Hidden: the whole row recedes and the swatch drains. Distinct from
-     `.absent`, which dims nothing — "off" and "nothing here" must not look
+     `.absent`, which dims nothing - "off" and "nothing here" must not look
      alike, or the coverage readout teaches the wrong thing. */
   .row.off { opacity: 0.45; }
   .row.off .swatch { background: var(--fg-soft) !important; }

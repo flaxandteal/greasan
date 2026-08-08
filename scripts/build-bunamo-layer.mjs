@@ -10,11 +10,11 @@
  *
  * Each resource carries ONLY the `forms` nodegroup (no headword, no senses): the
  * slug is identical to the wiktionary/tearma goi entry for the same lemma+POS, so
- * the Layers engine composes them — senses from wiktionary, full paradigm here.
+ * the Layers engine composes them - senses from wiktionary, full paradigm here.
  * No pagefind stage: these resources enrich existing entries (already indexed by
  * the base layers) and carry no standalone headword to index.
  *
- * Data source: BuNaMo (github.com/michmech/BuNaMo) — LICENSE: ODbL-1.0
+ * Data source: BuNaMo (github.com/michmech/BuNaMo) - LICENSE: ODbL-1.0
  * (share-alike DATABASE license, (c) Foras na Gaeilge).
  *
  * Usage: node scripts/build-bunamo-layer.mjs [--skip-data]
@@ -44,14 +44,14 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const root = resolve(__dirname, '..');
 
 const namespace = 'https://flaxandteal.org/ontology/goidelic#';
-// Shared lexical_entry graph — MUST match wiktionary/tearma/macbain/logainm so
+// Shared lexical_entry graph - MUST match wiktionary/tearma/macbain/logainm so
 // goi slugs resolve to the same resource UUIDs and compose per-nodegroup.
 const GRAPH_ID = '449c8695-253e-521b-8994-27701ce22305';
-// uuid5(ALIZARIN_NS, "layer/bunamo") — layer-internal tile-id namespace.
+// uuid5(ALIZARIN_NS, "layer/bunamo") - layer-internal tile-id namespace.
 const LAYER_NAMESPACE = '9c3b8f0e-2b8a-5c7e-9f4d-1a2b3c4d5e6f'; // placeholder-ns; only scopes tile ids
 const BUNAMO_TAG = 'BN';
 
-// Resource-UUID derivation — MUST match the Rust emitter (and macbain layer): the
+// Resource-UUID derivation - MUST match the Rust emitter (and macbain layer): the
 // composed entry id is uuid5(uuid5(ALIZARIN_NS, "resource/{graphId}"), resourceId).
 // A Pagefind hit's `url` is this uuid, so it resolves to the full composed entry.
 const ALIZARIN_NS = '1a79f1c8-9505-4bea-a18e-28a053f725ca';
@@ -155,7 +155,7 @@ if (usingNapi) {
   }
 }
 
-// Batched descriptor pass + enrich=false — same OOM guard as build-tearma-layer:
+// Batched descriptor pass + enrich=false - same OOM guard as build-tearma-layer:
 // a monolithic populateCachesFromJson over the full resource set can exhaust RAM
 // on a loaded machine. bunamo has no cross-graph refs and its Pagefind doesn't use
 // __cache, so per-chunk descriptors are complete.
@@ -235,7 +235,7 @@ execFileSync('cargo', [
   const formsByRid = new Map();
   const parseRow = (line) => {
     // Minimal CSV field split honouring double-quoted fields (forms have no
-    // embedded commas, but gram_features does — we only read id + written_rep).
+    // embedded commas, but gram_features does - we only read id + written_rep).
     const out = []; let cur = ''; let q = false;
     for (let i = 0; i < line.length; i++) {
       const c = line[i];

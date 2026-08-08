@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 //! Byte-range access to the bundled vector basemap (`basemap/goidelic.pmtiles`)
-//! so a pmtiles.js custom Source can random-access it with NO HTTP tile server —
+//! so a pmtiles.js custom Source can random-access it with NO HTTP tile server -
 //! the app stays offline. Desktop reads via `std::fs` seek; Android via the NDK
 //! `AssetManager` (an `AAsset` is seekable). Returns RAW bytes (an ArrayBuffer on
 //! the JS side) because pmtiles issues many small range reads.
@@ -99,7 +99,7 @@ pub fn basemap_range<R: Runtime>(
     Ok(tauri::ipc::Response::new(bytes))
 }
 
-/// Whether the basemap file is actually bundled — the frontend skips the basemap
+/// Whether the basemap file is actually bundled - the frontend skips the basemap
 /// layer (falling back to the hand-drawn outline) when tiles have not been built.
 /// Checks the 127-byte PMTiles header is present.
 #[tauri::command]

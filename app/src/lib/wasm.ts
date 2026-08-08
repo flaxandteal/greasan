@@ -7,7 +7,7 @@ import { diagStart, diagEnd } from './diagnostics';
 // combinedWasmPlugin redirects alizarin's internal WASM import to the combined
 // binary, so alizarin's auto-init loads everything in one go.
 //
-// No separate ros-madair initWasm() call is needed — the combined binary's init
+// No separate ros-madair initWasm() call is needed - the combined binary's init
 // initialises SparqlStore, connect_tile_source, and all alizarin WASM types
 // from a single WebAssembly.instantiate.
 

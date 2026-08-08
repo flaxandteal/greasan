@@ -4,12 +4,12 @@
  * Reads the raw Linked-Logainm name pull (data/raw/logainm-names.jsonl, produced
  * by scripts/pull-logainm-names.mjs) and builds a v2 head where each Irish
  * placename is a resource whose constituent ELEMENTS (cill, baile, dún, …) are
- * linked to the goi dictionary entries via the `cognate_entry_id` node — the
+ * linked to the goi dictionary entries via the `cognate_entry_id` node - the
  * same node the app's reverse-cognate `cited_by` machinery walks. Opening
  * `goi-cill-noun` then yields every placename containing `cill` (Cill Airne, …).
  *
  * Each place is keyed by its Logainm place ID (`lg-<N>-proper-noun`), NOT by its
- * name — hundreds of distinct places share a name and must not merge.
+ * name - hundreds of distinct places share a name and must not merge.
  *
  * Usage: node scripts/build-logainm-layer.mjs
  * Output: data/prebuild-logainm/ (prebuild) and data/logainm-v2/ (v2 head via
@@ -33,7 +33,7 @@ import { fileURLToPath } from 'url';
 import { dirname, resolve } from 'path';
 import { createHash } from 'node:crypto';
 
-// RFC 4122 v5 (SHA-1) — byte-identical to Python uuid.uuid5 / the Rust uuid5 the
+// RFC 4122 v5 (SHA-1) - byte-identical to Python uuid.uuid5 / the Rust uuid5 the
 // pipeline uses. So a place's cognate_entry_id UUIDs equal the goi resource UUIDs
 // (the cross-layer link that composes on the shared lexical_entry graph).
 function uuidv5(name, namespace) {
@@ -50,11 +50,11 @@ const root = resolve(__dirname, '..');
 
 const namespace = 'https://flaxandteal.org/ontology/goidelic#';
 const ALIZARIN_NS = '1a79f1c8-9505-4bea-a18e-28a053f725ca';
-// uuid5(ALIZARIN_NS, "layer/logainm") — layer-internal tile-id namespace.
+// uuid5(ALIZARIN_NS, "layer/logainm") - layer-internal tile-id namespace.
 const LAYER_NAMESPACE = uuidv5('layer/logainm', ALIZARIN_NS);
 const LOGAINM_TAG = 'LG';
 
-// Shared lexical_entry graph — MUST match macbain/wiktionary/core so cross-layer
+// Shared lexical_entry graph - MUST match macbain/wiktionary/core so cross-layer
 // cognate_entry_id links resolve to the same goi resource UUIDs.
 const GRAPH_ID = '449c8695-253e-521b-8994-27701ce22305';
 const RESOURCE_NS = uuidv5(`resource/${GRAPH_ID}`, ALIZARIN_NS);
@@ -71,7 +71,7 @@ function stripDiacritics(text) {
 }
 
 // Identity normalization for goi matching: fold acute/grave to a macron (length
-// preserved), matching docs/goidelic-slug-identity.md — so element matches align
+// preserved), matching docs/goidelic-slug-identity.md - so element matches align
 // with the goi slug identity (dún = dūn).
 const _MACRON = { 'à': 'ā', 'á': 'ā', 'è': 'ē', 'é': 'ē', 'ì': 'ī', 'í': 'ī', 'ò': 'ō', 'ó': 'ō', 'ù': 'ū', 'ú': 'ū' };
 function normalizeHead(text) {
@@ -114,7 +114,7 @@ function parseCsvLine(line) {
 // Irish placename -> element adapter
 // ============================================================================
 
-// Function words that are not lexical elements — skip so every placename doesn't
+// Function words that are not lexical elements - skip so every placename doesn't
 // link to "an"/"na". (Real elements like mór/beag/ard are intentionally kept.)
 const STOPWORDS = new Set([
   'an', 'na', 'a', 'agus', 'ó', 'de', 'do', 'in', 'ar', 'le', 'don', 'den',
@@ -151,7 +151,7 @@ function matchElements(name, formsIndex, elementResolve) {
     if (lower.length < 2) continue;
     // Match against KNOWN Logainm element forms only (not the open dictionary),
     // mutation-stripped first. This is precision-first: a word links only if it
-    // is a real toponymic element, and then to the POS-resolved goi headword —
+    // is a real toponymic element, and then to the POS-resolved goi headword -
     // no more picking [0] among homographs. Incidental dictionary hits (a rare
     // word that happens to be a headword) are correctly NOT treated as elements.
     for (const cand of [stripMutation(lower), lower]) {
@@ -207,7 +207,7 @@ const gdFallback = new Map();     // normalised headword -> gd- ResourceID (MacB
 // Union the goi-emitting layers so a toponymic element absent from Wiktionary can
 // still resolve through Téarma or BuNaMo (all emit the SAME goi-<head>-<pos>
 // slug, so they compose to one resource). MacBain's UNIQUE entries are gd-<head>-
-// etym (Scottish-only) — kept as a last-resort fallback (user's "or macbain, if
+// etym (Scottish-only) - kept as a last-resort fallback (user's "or macbain, if
 // not"). Recovers ~11 of the 29 Wiktionary-missing elements.
 function loadLexicalCsv(relPath) {
   const path = resolve(root, relPath);
@@ -235,7 +235,7 @@ function loadLexicalCsv(relPath) {
         if (!gaFormsLookup.has(key)) gaFormsLookup.set(key, rid);
       }
     } else if (rid.startsWith('gd-') && hw) {
-      // MacBain Scottish-only etymology entry — last-resort element target.
+      // MacBain Scottish-only etymology entry - last-resort element target.
       const key = normalizeHead(hw);
       if (!gdFallback.has(key)) gdFallback.set(key, rid);
     }
@@ -248,7 +248,7 @@ loadLexicalCsv('data/processed/macbain_lexical_entry_data.csv'); // MacBain (gd 
 console.log(`[build-logainm] goi lookup: ${gaLookup.size} headwords, ${gaFormsLookup.size} forms, ${gdFallback.size} gd fallbacks`);
 
 // ============================================================================
-// Logainm element glossary — the authoritative toponymic element vocabulary
+// Logainm element glossary - the authoritative toponymic element vocabulary
 // (baile, cill, mór, …). Decompose placenames against THESE known forms, not the
 // open dictionary, and resolve each element to the right goi headword+POS once.
 // See scripts/pull-logainm-glossary.mjs → data/raw/logainm-glossary.json.
@@ -262,9 +262,9 @@ if (!existsSync(glossaryPath)) {
 const glossary = JSON.parse(readFileSync(glossaryPath, 'utf8'));
 
 // Qualifier ADJECTIVES used in placenames (colour / size / quality). Everything
-// else defaults to the NOUN sense — the toponymic default (a height, a church).
+// else defaults to the NOUN sense - the toponymic default (a height, a church).
 // Logainm carries no POS, so this small curated set (keys normalizeHead-folded)
-// is the disambiguator — but ONLY consulted when the dictionary actually has both
+// is the disambiguator - but ONLY consulted when the dictionary actually has both
 // a noun and an adjective for the spelling; unambiguous elements auto-resolve.
 const ELEMENT_ADJ = new Set([
   'mór', 'beag', 'fada', 'gearr', 'leathan', 'dubh', 'bán', 'rua', 'dearg',

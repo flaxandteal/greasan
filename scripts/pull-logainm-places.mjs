@@ -4,7 +4,7 @@
  *   node scripts/pull-logainm-places.mjs
  *
  * Supersedes pull-logainm-names.mjs (which grabbed ONLY foaf:name). Per place it
- * captures the feature category, the geometry centroid (lat/long — Logainm stores
+ * captures the feature category, the geometry centroid (lat/long - Logainm stores
  * these as decimal wgs84 literals on a linked geometry resource, so NO WKT parse
  * is needed), the logainm.ie page URL, and the containment parents (spatial#P).
  *
@@ -88,7 +88,7 @@ async function bisect(label, countQ, fetchQ, onRows, cap) {
       windows++;
       rows += r.length;
       if (r.length >= 10000) {
-        console.warn(`[pull:${label}] WARNING window [${lo},${hi}) hit 10000 (count=${n}) — possible truncation`);
+        console.warn(`[pull:${label}] WARNING window [${lo},${hi}) hit 10000 (count=${n}) - possible truncation`);
       }
       onRows(r);
       if (windows % 20 === 0) console.log(`[pull:${label}] ${windows} windows, ${rows} rows...`);
@@ -128,12 +128,12 @@ mkdirSync(RAW, { recursive: true });
 }
 
 // ---------------------------------------------------------------------------
-// Pass 1: names (foaf:name ga/en) — reuse existing dump if present
+// Pass 1: names (foaf:name ga/en) - reuse existing dump if present
 // ---------------------------------------------------------------------------
 {
   const out = resolve(RAW, 'logainm-names.jsonl');
   if (existsSync(out) && readFileSync(out, 'utf8').trim().length > 0) {
-    console.log('[pull] Pass 1: names — reusing existing logainm-names.jsonl');
+    console.log('[pull] Pass 1: names - reusing existing logainm-names.jsonl');
   } else {
     console.log('[pull] Pass 1: names (foaf:name)...');
     const lines = [];
@@ -199,7 +199,7 @@ mkdirSync(RAW, { recursive: true });
 }
 
 // ---------------------------------------------------------------------------
-// Pass 3: containment parents (spatial#P) — multi-valued, so smaller windows
+// Pass 3: containment parents (spatial#P) - multi-valued, so smaller windows
 // ---------------------------------------------------------------------------
 {
   console.log('[pull] Pass 3: containment parents (spatial#P)...');

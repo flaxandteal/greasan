@@ -54,7 +54,7 @@ from .slug_identity import goi_slug
 
 @lru_cache(maxsize=1)
 def _bunamo_classes() -> dict[str, str]:
-    """`goi-slug -> grammar_class` from the built BuNaMo layer CSV — the attested
+    """`goi-slug -> grammar_class` from the built BuNaMo layer CSV - the attested
     source. Empty (all gramadan fallback) if the CSV isn't built yet."""
     repo = Path(__file__).resolve().parents[2]
     path = repo / "data" / "processed" / "bunamo_lexical_entry_data.csv"
@@ -71,7 +71,7 @@ def _bunamo_classes() -> dict[str, str]:
 
 
 def enrich_grammar_class(word: str, pos: str, gender) -> tuple[str, str]:
-    """`(grammar_class, grammar_class_confidence)` — the pair consumers embed.
+    """`(grammar_class, grammar_class_confidence)` - the pair consumers embed.
 
     BuNaMo (the attested morphology database) wins when it carries the lemma;
     otherwise the gramadan guess, tagged inferred/uncertain by the method that

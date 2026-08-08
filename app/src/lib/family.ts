@@ -26,7 +26,7 @@ export interface LayerConfig {
  */
 export interface LayerPresentation {
   label: string;
-  /** CSS colour (token reference preferred) — see `--layer-*` in tokens.css. */
+  /** CSS colour (token reference preferred) - see `--layer-*` in tokens.css. */
   swatch: string;
   /**
    * `source_label` values this layer emits, lowercased. Used to colour the
@@ -38,7 +38,7 @@ export interface LayerPresentation {
 
 /**
  * A user-installable layer source shown in the Layer Manager's "Add a layer"
- * list. No longer hardcoded here — the list is derived from the layer CATALOGUE
+ * list. No longer hardcoded here - the list is derived from the layer CATALOGUE
  * (each installable layer carries an `install` block in its `layer-v2` config;
  * see layers-catalogue.ts `LayerInstall`). This interface is just the shape
  * LayerManager maps those catalogue entries into.
@@ -76,7 +76,7 @@ export function layerSwatch(familyId: FamilyId, layerName: string): string {
 export function sourceLabelSwatch(familyId: FamilyId, sourceLabel: string): string {
   const pres = FAMILIES[familyId]?.layerPresentation;
   if (!pres) return '';
-  // A merged chip ("MacBain+Wiktionary") has no single colour — leave it plain.
+  // A merged chip ("MacBain+Wiktionary") has no single colour - leave it plain.
   if (sourceLabel.includes('+')) return '';
   const needle = sourceLabel.trim().toLowerCase();
   for (const p of Object.values(pres)) {
@@ -141,7 +141,7 @@ export const FAMILIES: Record<FamilyId, FamilyConfig> = {
       wiktionary: { label: 'Vicífhoclóir', swatch: 'var(--layer-wk)', sourceLabels: ['wk'] },
       macbain: { label: 'MacBain (1911)', swatch: 'var(--layer-mb)', sourceLabels: ['mb'] },
       tearma: { label: 'Téarma', swatch: 'var(--layer-te)', sourceLabels: ['te'] },
-      // Morphology only — no senses, so no source chips ever carry "BN".
+      // Morphology only - no senses, so no source chips ever carry "BN".
       bunamo: { label: 'BuNaMo', swatch: 'var(--layer-bn)', sourceLabels: ['bn'] },
     },
     defaultLayers: [],

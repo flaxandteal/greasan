@@ -1,2 +1,2 @@
 name,ontology_class,author,description,is_resource
-Layer,https://schema.org/Dataset,,"A catalogued data layer — its licensing + attribution, types, formats, links, description, build statistics, and Gréasán integration config. Shipped by default as the catalogue/source for finding and installing layers, independent of whether the layer's data is loaded.",true
+Layer,https://schema.org/Dataset,,"A catalogued data layer - its licensing + attribution, types, formats, links, description, build statistics, and Gréasán integration config. Shipped by default as the catalogue/source for finding and installing layers, independent of whether the layer's data is loaded.",true

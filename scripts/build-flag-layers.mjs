@@ -4,7 +4,7 @@
  * Builds the two heads behind the "flag" feature:
  *   - person-v2 : a Person graph seeded with ONE resource, "User" (deterministic
  *                 UUID so Note.author links are stable).
- *   - note-v2   : a Note graph (oa:Annotation) — subject (resource-instance-list
+ *   - note-v2   : a Note graph (oa:Annotation) - subject (resource-instance-list
  *                 → any resource), description (string), author (→ the User).
  *                 Seeded here with one sample note (flagging `baile`) so the read
  *                 path (cited_by('subject')) is verifiable before the write path
@@ -35,7 +35,7 @@ const root = resolve(__dirname, '..');
 const namespace = 'https://flaxandteal.org/ontology/goidelic#';
 const ALIZARIN_NS = '1a79f1c8-9505-4bea-a18e-28a053f725ca';
 
-// A known goi lexical_entry UUID to hang the sample flag on (baile) — proves the
+// A known goi lexical_entry UUID to hang the sample flag on (baile) - proves the
 // cross-graph subject link + cited_by('subject') without needing the write path.
 const SAMPLE_SUBJECT_UUID = '6478617d-74c7-5471-aa79-4de8aee53e74'; // baile
 

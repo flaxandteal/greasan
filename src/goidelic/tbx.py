@@ -159,7 +159,7 @@ def extract_gender(raw_pos: str) -> list[str]:
 
 # Declension is STATED in the Téarma gender code: fir1..fir5 / bain2..bain5
 # (noun) and a1..a3 (adjective). The trailing digit is the class. Verb
-# conjugation is NOT stated (only br/v) — inferring it is deferred to the
+# conjugation is NOT stated (only br/v) - inferring it is deferred to the
 # grammar-class-inference session (see the hand-off), so it stays "" here.
 _DECLENSION = {
     "fir1": "1", "a1": "1",
@@ -173,7 +173,7 @@ _DECLENSION = {
 def extract_declension(raw_pos: str) -> str:
     """Noun/adjective declension class from the POS code, or "" if none.
 
-    Mirror of the Rust ``extract_declension`` in ``tbx_parser.rs`` — keep the two
+    Mirror of the Rust ``extract_declension`` in ``tbx_parser.rs`` - keep the two
     in step so the build path and the on-device path emit identical grammar_class.
     """
     return _DECLENSION.get(raw_pos.strip(), "")
@@ -291,7 +291,7 @@ def parse_term_entry(entry: ET.Element) -> list[dict]:
         term_groups.extend(lang_set.findall("tig"))
 
         for tg in term_groups:
-            # Check normative authorization — skip deprecated terms
+            # Check normative authorization - skip deprecated terms
             norm_auth = None
             for note in tg.findall("termNote"):
                 if note.get("type") == "normativeAuthorization":
@@ -325,7 +325,7 @@ def parse_term_entry(entry: ET.Element) -> list[dict]:
             pos = map_pos(raw_pos) if raw_pos else "noun"
             gender = extract_gender(raw_pos) if raw_pos else []
 
-            # Build senses — use en_gloss as primary, ls_definitions as secondary
+            # Build senses - use en_gloss as primary, ls_definitions as secondary
             gloss = en_gloss
             if not gloss and ls_definitions:
                 gloss = ls_definitions[0]
@@ -366,7 +366,7 @@ def parse_term_entry(entry: ET.Element) -> list[dict]:
                 "dialect": "Irish (General)",
                 "pos": pos,
                 "raw_pos": raw_pos,
-                # Inherent lexeme gender (lexinfo:gender), entry-level — distinct from
+                # Inherent lexeme gender (lexinfo:gender), entry-level - distinct from
                 # the form-tile gram_features tag above.
                 "gender": next((g for g in gender if g in ("masculine", "feminine")), ""),
                 "grammar_class": gclass,
@@ -397,7 +397,7 @@ def merge_duplicates(records: list[dict]) -> list[dict]:
             order.append(key)
         else:
             existing = grouped[key]
-            # Merge senses — deduplicate by gloss text
+            # Merge senses - deduplicate by gloss text
             existing_glosses = {s["gloss"] for s in existing["senses"]}
             for sense in rec["senses"]:
                 if sense["gloss"] not in existing_glosses:

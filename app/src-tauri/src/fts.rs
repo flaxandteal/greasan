@@ -2,11 +2,11 @@
 //!
 //! pagefind is the wrong tool for a corpus we build *on the device* (Téarma
 //! can't ship, so it must be): its per-record fragment write is ~40 min and
-//! ~750MB at Téarma scale. FTS5 — already compiled into the bundled SQLite we
-//! link — builds the same headword+gloss search in seconds, a fraction of the
+//! ~750MB at Téarma scale. FTS5 - already compiled into the bundled SQLite we
+//! link - builds the same headword+gloss search in seconds, a fraction of the
 //! size, with bm25 ranking, prefix (as-you-type), and diacritic folding.
 //!
-//! The index lives in a `search.sqlite` sidecar beside `head.sqlite` — Rós
+//! The index lives in a `search.sqlite` sidecar beside `head.sqlite` - Rós
 //! Madair stays ignorant of text (its emit output is untouched); this is a
 //! downstream consumer of the same descriptor fields (headword = name, gloss =
 //! description) the hydration path already exposes. A layer's text engine is a
@@ -28,7 +28,7 @@ const FTS_SCHEMA: &str = "\
         tokenize='unicode61 remove_diacritics 2'\n\
     );";
 
-/// Incremental FTS5 index writer — fed one resource at a time from the build
+/// Incremental FTS5 index writer - fed one resource at a time from the build
 /// loop (where pagefind used to be), so the full resource set is never held.
 #[cfg(feature = "v2-emit")]
 pub struct FtsBuilder {

@@ -3,7 +3,7 @@
 //!  1. Composability: does the full goi stack + the place head open as one
 //!     composed view, or must place be a separate head?
 //!  2. Reverse lookup: cited_by(baile/cill goi UUID, "element_entry") on the
-//!     place head returns the places whose name_elements cite that goi entry —
+//!     place head returns the places whose name_elements cite that goi entry -
 //!     a DIFFERENT node path from the old cognate_entry_id build.
 //!  3. Hydrate a couple of citers and show name / feature_type / the
 //!     name_elements.element_entry pointing back at the goi UUID.

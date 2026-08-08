@@ -1,7 +1,7 @@
 //! Android foreground-service bridge.
 //!
 //! A long on-device build (full Téarma is ~50 min) must survive the user
-//! switching away — a backgrounded process holding >1GB is the first thing the
+//! switching away - a backgrounded process holding >1GB is the first thing the
 //! low-memory killer reaps. An Android *foreground service* with an ongoing
 //! notification both drops the kill priority AND surfaces a progress bar in the
 //! notification shade, so the build is visible without opening the app.
@@ -9,7 +9,7 @@
 //! The Android side (`BuildForegroundService.kt`) owns the channel + notification
 //! and the `startForeground` call; here we just invoke its static
 //! `start`/`update`/`stop` methods over JNI. Every call is best-effort: if the
-//! JNI context or the class isn't available, we log and move on — the build must
+//! JNI context or the class isn't available, we log and move on - the build must
 //! never fail because the notification couldn't be shown.
 
 #[cfg(target_os = "android")]
@@ -41,7 +41,7 @@ mod imp {
 
     /// Load our app class via the Activity's classloader. `FindClass` on a
     /// background (build) thread uses the system loader, which can't see app
-    /// classes — so we resolve through `activity.getClassLoader().loadClass(..)`.
+    /// classes - so we resolve through `activity.getClassLoader().loadClass(..)`.
     fn load_class<'a>(
         env: &mut JNIEnv<'a>,
         activity: &JObject,

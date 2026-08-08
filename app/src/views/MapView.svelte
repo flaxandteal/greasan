@@ -1,18 +1,18 @@
 <script lang="ts">
   // SPDX-License-Identifier: AGPL-3.0-or-later
   //
-  // MapView — the reusable `map(layer, filter, selected)` component.
+  // MapView - the reusable `map(layer, filter, selected)` component.
   //
   // Phase 2 renderer: MapLibre GL JS, with NO basemap tiles. The map draws ONLY
-  // our own GeoJSON — a bundled Ireland/Goidelic outline plus the point cloud
+  // our own GeoJSON - a bundled Ireland/Goidelic outline plus the point cloud
   // returned by the generic `geoPoints(headDir, nodeUri, targetUri)` primitive.
   // Nothing external is ever fetched: the style has empty `sources`, no `glyphs`,
   // no `sprite`, no tile source and no text layers (so no glyph PBFs are needed).
   // The offline + CSP-locked webview stays offline.
   //
-  // The prop interface is unchanged from phase 1 — `layer` (a head that carries
+  // The prop interface is unchanged from phase 1 - `layer` (a head that carries
   // geometry), `filter` (the reverse-link node + target to plot) and `selected`
-  // (a point id to focus) — so a future Protomaps basemap or a monuments graph
+  // (a point id to focus) - so a future Protomaps basemap or a monuments graph
   // slots in behind this same `map(...)` API with no caller change.
   import { onMount } from 'svelte';
   // MapLibre v6 (ESM-only). v6 dropped the CSP build; its default worker loader
@@ -21,7 +21,7 @@
   // error. The supported escape hatch is setWorkerUrl pointed at a worker the
   // bundler has already emitted same-origin: Vite's `?worker&url` follows the
   // worker's internal `./maplibre-gl-shared.mjs` import, inlines it, and returns
-  // a URL to a self-contained (IIFE/classic) worker — so there is nothing left
+  // a URL to a self-contained (IIFE/classic) worker - so there is nothing left
   // for v6's fragile auto-resolution to get wrong.
   import * as maplibregl from 'maplibre-gl';
   import type { Map as MLMap, GeoJSONSource } from 'maplibre-gl';
@@ -44,7 +44,7 @@
 
   // --- Vector basemap: self-rendered OSM PMTiles (ODbL) --------------------
   // Random-access the bundled goidelic.pmtiles through a Tauri byte-range command
-  // — no tile server, fully offline. When the tiles aren't bundled (build ran
+  // - no tile server, fully offline. When the tiles aren't bundled (build ran
   // without scripts/build-basemap.sh), `basemapReady` stays false and the map
   // falls back to the hand-drawn Natural Earth outline. Geometry only for now:
   // labels need a bundled glyph set (a follow-up).
@@ -72,7 +72,7 @@
   // Seed / re-seed the focused point from the prop. Runs only when `selected`
   // changes (not on internal selection), so user taps are never clobbered.
   $effect(() => { selectedId = selected; });
-  /** Bottom-sheet snap state — DEFAULT peek (map dominant, Google/Apple style). */
+  /** Bottom-sheet snap state - DEFAULT peek (map dominant, Google/Apple style). */
   let snap = $state<'peek' | 'half' | 'full'>('peek');
 
   let rootEl = $state<HTMLDivElement>();
@@ -154,7 +154,7 @@
   function baseStyle(pal: Palette): any {
     return {
       version: 8,
-      // Bundled SDF glyphs (public/glyphs/, served same-origin — no external
+      // Bundled SDF glyphs (public/glyphs/, served same-origin - no external
       // fetch) for the basemap labels; no sprite, no tile sources. A single
       // background layer paints the theme paper; layers are added on `load`.
       glyphs: '/glyphs/{fontstack}/{range}.pbf',
@@ -232,7 +232,7 @@
         'text-halo-width': 1.2, 'text-opacity': 0.92,
       } } as any);
 
-    // Road / street names — data is in the tiles (transportation_name, z6-12,
+    // Road / street names - data is in the tiles (transportation_name, z6-12,
     // with name:ga) but had no layer, so nothing rendered below town level.
     // Line-placed, bilingual (name:ga → name), major classes prioritised. path/
     // track/service excluded to keep the placename map uncluttered.
@@ -299,7 +299,7 @@
     });
     // Dot-density: one translucent teal dot per place, drawn at EVERY zoom.
     // Overlapping dots composite up toward solid, so density reads as deepening
-    // teal while individual townlands stay visible — the crisp "vector" look.
+    // teal while individual townlands stay visible - the crisp "vector" look.
     // Radius + opacity grow with zoom so points separate into tappable dots.
     map.addLayer({
       id: 'points-circle', type: 'circle', source: 'points',
@@ -380,7 +380,7 @@
     });
     map.on('load', async () => {
       // Is the basemap actually bundled? (Absent when the build ran without
-      // scripts/build-basemap.sh — then keep the hand-drawn outline.)
+      // scripts/build-basemap.sh - then keep the hand-drawn outline.)
       try { basemapReady = await invoke<boolean>('basemap_available'); }
       catch { basemapReady = false; }
       if (basemapReady) {
@@ -400,7 +400,7 @@
     });
 
     // Tap selection: nearest plotted point within a screen radius. Done manually
-    // (via map.project) so it works over the heatmap too, at any zoom — the
+    // (via map.project) so it works over the heatmap too, at any zoom - the
     // heatmap layer isn't feature-queryable and the circle layer is invisible at
     // low zoom.
     map.on('click', (e) => {
@@ -558,7 +558,7 @@
         }))
         .filter((e) => e.surface);
       // Canonical element label per constituent, from the concept head's spine
-      // (graph-agnostic descriptors — one batched call, no per-concept hydrate).
+      // (graph-agnostic descriptors - one batched call, no per-concept hydrate).
       let conceptLabels: Record<string, string> = {};
       const cHead = conceptHeadDir();
       const cids = cHead ? [...new Set(elemsRaw.map((e) => e.conceptId).filter(Boolean))] : [];
@@ -804,7 +804,7 @@
 
   .ge-map-list { flex: 1 1 auto; overflow-y: auto; padding: 6px 12px 24px; -webkit-overflow-scrolling: touch; }
 
-  /* Fixed detail panel — sits between the head and the scrollable list so the
+  /* Fixed detail panel - sits between the head and the scrollable list so the
      selected place stays visible; scrolls internally if it has many elements. */
   .ge-place-detail-fixed {
     flex: 0 0 auto; padding: 4px 12px 8px; max-height: 42vh; overflow-y: auto;

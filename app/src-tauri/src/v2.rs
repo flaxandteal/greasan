@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-//! v2 static-assets pilot (single layer: macbain) — feature `v2`.
+//! v2 static-assets pilot (single layer: macbain) - feature `v2`.
 //!
 //! The native read path that replaces the v1 SPARQL/page-index stack for
 //! one layer:
 //!
 //! * schema: the Arches resource-model export (`<head_dir>/graph.json`),
-//!   loaded into `alizarin_core_v2::StaticGraph` (the *sandbox* core — see
+//!   loaded into `alizarin_core_v2::StaticGraph` (the *sandbox* core - see
 //!   the type-isolation note below);
 //! * head + body: `ros-madair-read` resolves a UUID through `head.sqlite`,
 //!   recovers its tiles from the content-addressed `chunks/<hash>.msgpack`
@@ -21,18 +21,18 @@
 //! →chunks SQL join, its own msgpack read loop, and a hand-built extension-type
 //! registry. All four are gone. Upstream shipped `ros-madair-read` (the native
 //! read path), `ros-madair-format` (the wire/manifest types, now public and
-//! `Deserialize`) and `ros-madair-handlers` (the single registry definition —
+//! `Deserialize`) and `ros-madair-handlers` (the single registry definition -
 //! plus a manifest that *declares* the handler set it was emitted with).
 //!
 //! The registry one mattered most. A hand-built query-side registry that
 //! disagrees with the emitter's does not fail: it compiles valid SQL against an
 //! index that was never written, and returns **zero rows**. Deriving it from the
-//! manifest closes that — an artifact emitted with a handler this build cannot
+//! manifest closes that - an artifact emitted with a handler this build cannot
 //! provide now errors loudly instead of quietly answering nothing.
 //!
 //! ## Type isolation (still worth keeping)
 //!
-//! Two copies of `alizarin-core` are linked: the real one (2.0.0-alpha.120 —
+//! Two copies of `alizarin-core` are linked: the real one (2.0.0-alpha.120 -
 //! v1, `ros-madair-core`, the rest of the app) and the sandbox one that the v2
 //! stack tracks (2.0.0-alpha.121), aliased `alizarin-core-v2`. The version bump
 //! is what makes that legal; see `Cargo.toml`. This module is JSON-in /
@@ -63,12 +63,12 @@ pub fn load_graph(path: &Path) -> Result<StaticGraph, String> {
     Ok(graph)
 }
 
-/// The datatype-capability registry to plan queries with — rebuilt from the
+/// The datatype-capability registry to plan queries with - rebuilt from the
 /// handler set the artifact's manifest *declares* it was emitted with.
 ///
 /// This is what the manifest's `handlers` block is for. `reference` (the
-/// datatype of the `dialect` node) is head-indexed — present in `concept_tags`,
-/// and therefore filterable at all — only because the emitter had the CLM
+/// datatype of the `dialect` node) is head-indexed - present in `concept_tags`,
+/// and therefore filterable at all - only because the emitter had the CLM
 /// handler registered. A query side that *guesses* its registry can guess wrong
 /// in the dangerous direction: plan against an index that was never written and
 /// return zero rows, silently, forever. So ask the artifact instead of guessing.
@@ -83,12 +83,12 @@ fn registry(head_dir: &Path) -> Result<ExtensionTypeRegistry, String> {
         }
         // No manifest, or one declaring no handlers. The format treats an absent
         // manifest as legal (spine tables are discoverable from sqlite_master),
-        // so a head dir must stay readable without one — and the only registry we
+        // so a head dir must stay readable without one - and the only registry we
         // can offer then is the default, i.e. a guess, deliberately the same guess
         // the emitter's own default makes. Every artifact this app ships is
         // emitted with the default registry AND declares it, so this branch is for
         // hand-assembled heads only. If the guess is ever wrong the symptom is
-        // zero rows — which is precisely why the declaration exists and why we
+        // zero rows - which is precisely why the declaration exists and why we
         // prefer it whenever it is present.
         _ => Ok(ros_madair_handlers::default_registry()),
     }
@@ -98,7 +98,7 @@ fn registry(head_dir: &Path) -> Result<ExtensionTypeRegistry, String> {
 ///
 /// `ros-madair-read` owns the path now (UUID → dict → spine `rid` →
 /// `fragment_dir` → chunks → `resource_tiles_to_tree`). Kept on top of it: the
-/// cross-check `hydrate_resource` does not do by itself — the number of tiles
+/// cross-check `hydrate_resource` does not do by itself - the number of tiles
 /// actually recovered from the chunks must equal what `fragment_dir` says this
 /// resource has. A mismatch means a chunk went missing or a resource id is
 /// duplicated across chunks, i.e. a corrupt artifact. Hard error, rather than a
@@ -121,7 +121,7 @@ pub fn hydrate_resource(
         ));
     }
     // Display tree: fold this head's vocab labels so `reference` fields render as
-    // labels (not raw UUIDs) — the alizarin-managed rendering. The tile-count
+    // labels (not raw UUIDs) - the alizarin-managed rendering. The tile-count
     // cross-check above still runs.
     let conn = ros_madair_read::open_head(head_dir).map_err(|e| e.to_string())?;
     let mut labels = HashMap::new();
@@ -141,7 +141,7 @@ pub fn run_query(head_dir: &Path, ir: &Value, graph: &StaticGraph) -> Result<Val
         serde_json::from_value(ir.clone()).map_err(|e| format!("bad query IR: {e}"))?;
     let registry = registry(head_dir)?;
     let statements = ros_madair_query::compile_with_registry(&query, graph, Some(&registry))
-        // The typed error is the repair contract — hand it to the caller as
+        // The typed error is the repair contract - hand it to the caller as
         // structured JSON, not a flattened string, where we can.
         .map_err(|e| serde_json::to_string(&e).unwrap_or_else(|_| e.to_string()))?;
 
@@ -224,10 +224,10 @@ pub fn v2_query(head_dir: String, ir: Value) -> Result<Value, String> {
 }
 
 // ---------------------------------------------------------------------------
-// Multi-layer composition (R1) — `ros-madair-read`'s `Layers`.
+// Multi-layer composition (R1) - `ros-madair-read`'s `Layers`.
 //
 // The single-head commands above read ONE snapshot. `Layers` reads N ordered
-// snapshots (base first, later overrides earlier) as one composed view — a
+// snapshots (base first, later overrides earlier) as one composed view - a
 // shipped BASE plus overlays Gréasán emits on-device as the user edits. This is
 // the path the eventual `SparqlStore` replacement takes; the commands here prove
 // the R1 API compiles and runs through the dual-core seam. Precedence is
@@ -268,11 +268,11 @@ fn open_layers(head_dirs: &[String]) -> Result<Layers, String> {
     let paths: Vec<PathBuf> = head_dirs.iter().map(PathBuf::from).collect();
     let refs: Vec<&Path> = paths.iter().map(PathBuf::as_path).collect();
     Layers::open(&refs).map_err(|e| {
-        // Surface composition failures — most notably a layer whose base_uri
+        // Surface composition failures - most notably a layer whose base_uri
         // disagrees with the stack, which otherwise breaks hydrate SILENTLY (the
         // typed error only reaches the JS caller, never logcat). Now grep-able.
         let msg = format!(
-            "Layers::open FAILED over {} head(s): {e} — dirs: {head_dirs:?}",
+            "Layers::open FAILED over {} head(s): {e} - dirs: {head_dirs:?}",
             refs.len()
         );
         logcat_error(&msg);
@@ -282,7 +282,7 @@ fn open_layers(head_dirs: &[String]) -> Result<Layers, String> {
 
 /// Compile a `ros-madair-query` IR against the composed view of a layer stack.
 ///
-/// The registry and graph are taken from the first (base) layer — the
+/// The registry and graph are taken from the first (base) layer - the
 /// composability check in `Layers::open` guarantees the rest agree. A
 /// `CountRecords` measure returns a composed count (`Layers::count`); anything
 /// else resolves the matching UUIDs (`Layers::resolve`), since a number cannot be
@@ -319,7 +319,7 @@ pub fn v2_query_layers(head_dirs: Vec<String>, ir: Value) -> Result<Value, Strin
 // Concept label resolution.
 //
 // Hydrated trees leave REFERENCE/concept fields (part_of_speech, dialect,
-// gram_features, …) as RAW concept UUIDs — the head indexes concept ids, not
+// gram_features, …) as RAW concept UUIDs - the head indexes concept ids, not
 // their human labels. Upstream (A2) retired the sidecar `closure.json` and
 // moved the labels INTO the head: the `vocab` table now carries a `label`
 // column keyed by the concept's dict `term_id`, so display resolves as a
@@ -368,9 +368,9 @@ pub fn v2_closure(head_dirs: Vec<String>) -> Result<HashMap<String, String>, Str
 }
 
 /// Resolve resource UUIDs to their `display_name` (descriptor) via the head's spine
-/// tables — a cheap indexed lookup (`dict` → `spine_*`), NO hydration. This is how a
-/// consumer shows a related resource whose descriptor IS the content — e.g. an
-/// external example, whose `display_name` is the sentence — without a per-resource
+/// tables - a cheap indexed lookup (`dict` → `spine_*`), NO hydration. This is how a
+/// consumer shows a related resource whose descriptor IS the content - e.g. an
+/// external example, whose `display_name` is the sentence - without a per-resource
 /// hydrate, and crucially without needing that resource's MODEL graph (the head ships
 /// only the base graph.json). Every `spine_*` table (one per model) is searched across
 /// the layer stack; first hit wins. Batch: one call resolves many uris.
@@ -484,7 +484,7 @@ pub fn v2_search_display(
                 pos: String::new(),
                 dialects: Vec::new(),
             };
-            // rid + node are i64 from the head's own dict — safe to inline (no
+            // rid + node are i64 from the head's own dict - safe to inline (no
             // user text), avoiding a params dependency.
             if let Some(pn) = pos_nid {
                 let sql = format!(
@@ -532,11 +532,11 @@ pub fn v2_hydrate_layers(head_dirs: Vec<String>, resource_id: String, language: 
 }
 
 // ---------------------------------------------------------------------------
-// Reverse-cognate lookup (P12) — `ros-madair-read`'s `Layers::cited_by`.
+// Reverse-cognate lookup (P12) - `ros-madair-read`'s `Layers::cited_by`.
 //
 // The inverse of a forward `HasLink` predicate: opening entry X, find every
 // entry that LINKS TO X through `node_path` in the composed view. This restores
-// v1's continuum behaviour — the Irish "fear" (5b663193…) surfaces the MacBain
+// v1's continuum behaviour - the Irish "fear" (5b663193…) surfaces the MacBain
 // "fear" (e98ed0c3…) which lists it as a cognate via `cognate_entry_id`, so the
 // loader can fold MacBain's etymology into the Irish entry. Registry + graph are
 // the base layer's, exactly as `v2_query_layers`.
@@ -564,7 +564,7 @@ pub fn v2_cited_by(
 }
 
 // ---------------------------------------------------------------------------
-// Geo-point lookup (map(layer, filter) primitive) — a single indexed SQL join
+// Geo-point lookup (map(layer, filter) primitive) - a single indexed SQL join
 // on a head that carries the spine/geo tables, no hydration.
 //
 // For a reverse-link `node` (e.g. the place graph's `name_elements.element_entry`
@@ -572,13 +572,13 @@ pub fn v2_cited_by(
 // resource that cites the target through that node, each with its spine
 // `display_name` and its point geometry from `geo_bbox` (min == max for points).
 // This is the generic backing query for `MapView`: the only place-specific
-// assumption is the `spine_place`/`geo_bbox` table names of the place head — the
+// assumption is the `spine_place`/`geo_bbox` table names of the place head - the
 // node and target are opaque UUIDs the caller has already resolved.
 // ---------------------------------------------------------------------------
 
 /// Resolve the geo-points for a `(node_uri, target_uri)` filter against a single
 /// head. `node_path` and `target_uri` are `dict.term` UUIDs already (the caller
-/// passes the `element_entry` node uuid and the headword resource uuid — no alias
+/// passes the `element_entry` node uuid and the headword resource uuid - no alias
 /// resolution against the graph, so this works even though the node lives in the
 /// place graph rather than the composed stack's base graph). Returns
 /// `[{id, name, lat, lng}]`, one row per citing place with geometry.
@@ -617,7 +617,7 @@ pub fn v2_geo_points(
         .map_err(|e| format!("geo rows: {e}"))
 }
 
-/// Re-emit a v2 head in place from an in-memory business-data JSON — the app's
+/// Re-emit a v2 head in place from an in-memory business-data JSON - the app's
 /// write path (the first one). `head_dir` is the head to (re)generate (e.g. the
 /// note/flag overlay), `graph_id` its resource model, `business_data_json` the
 /// `{"business_data":{"resources":[…]}}` string alizarin builds on the JS side.
@@ -708,12 +708,12 @@ pub fn v2_emit_overlay(
 }
 
 /// DEBUG on-device emit memory measurement (HANDOFF-streaming-build.md). If the
-/// marker file `{app_data}/files/emit-measure/RUN` exists — pushed via adb for a
-/// measurement run — stream-emit the prebuild directory at `emit-measure/prebuild/`
+/// marker file `{app_data}/files/emit-measure/RUN` exists - pushed via adb for a
+/// measurement run - stream-emit the prebuild directory at `emit-measure/prebuild/`
 /// into `emit-measure/out/` on a background thread IN THIS PROCESS, so an external
 /// `dumpsys meminfo` poll captures the real peak RSS of the memory-bounded emit
 /// over a large corpus. Writes `summary.json` (the emit summary, incl. snapshot_id
-/// — cross-check against the desktop build) and a `DONE` marker on completion. The
+/// - cross-check against the desktop build) and a `DONE` marker on completion. The
 /// marker is one-shot (removed on start). Inert in production: the marker never
 /// exists. No-op in a `v2` build without `v2-emit`.
 #[cfg(all(feature = "v2", feature = "v2-emit"))]
@@ -819,7 +819,7 @@ mod tests {
         );
     }
 
-    /// The `dialect` node is datatype `reference` — head-indexed only because
+    /// The `dialect` node is datatype `reference` - head-indexed only because
     /// the emitter registered the CLM handler. This asserts the query side
     /// agrees, via the manifest-derived registry.
     #[test]
@@ -848,12 +848,12 @@ mod tests {
 
     /// The foot-gun, closed.
     ///
-    /// `ros_madair_query::compile()` — no registry — still rejects a concept
+    /// `ros_madair_query::compile()` - no registry - still rejects a concept
     /// predicate on a `reference` field as `not_head_indexed`, BY DESIGN: to a
     /// registry-less compiler an extension datatype is `DetailOnly`, and
     /// pretending otherwise is how you get silent zero-row answers. The previous
     /// version of this test pinned exactly that rejection, and left the caller to
-    /// *remember* to pass a registry — a hand-built one, which could disagree
+    /// *remember* to pass a registry - a hand-built one, which could disagree
     /// with the emitter's and fail silently.
     ///
     /// What is pinned now is that the caller cannot forget and cannot disagree:
@@ -884,7 +884,7 @@ mod tests {
     }
 
     // -----------------------------------------------------------------------
-    // Multi-layer composition (R1) — single-element layer set as the baseline
+    // Multi-layer composition (R1) - single-element layer set as the baseline
     // that proves the `Layers` API links + runs through the dual-core seam.
     // A one-layer stack must compose to exactly the single-head answers.
     // -----------------------------------------------------------------------
@@ -903,7 +903,7 @@ mod tests {
     }
 
     /// `count_records` through `Layers::count` must equal the single-head spine
-    /// count — a one-layer stack has nothing to override.
+    /// count - a one-layer stack has nothing to override.
     #[test]
     fn layers_count_all_records() {
         let ir = json!({ "model": "lexical-entry", "measures": ["count_records"] });
@@ -950,7 +950,7 @@ mod tests {
             ),
             "Layers::resolve count disagrees with direct SQL"
         );
-        // The composed count agrees with the composed resolve — the fast path
+        // The composed count agrees with the composed resolve - the fast path
         // and the reference path on one query.
         let count_ir = json!({
             "model": "lexical-entry",
@@ -968,7 +968,7 @@ mod tests {
     }
 
     // -----------------------------------------------------------------------
-    // Multi-layer composition (R1) — the real thing: TWO layers, wiktionary
+    // Multi-layer composition (R1) - the real thing: TWO layers, wiktionary
     // (base, 185 resources across 2 models) + macbain (overlay, 7860 lexical
     // entries), composed on the 7 UUIDs they share. macbain enriches a
     // wiktionary headword with etymology + cognates under the SAME resource
@@ -1008,11 +1008,11 @@ mod tests {
         let mac = head_dir();
 
         // The graph is the base's (both layers describe lexical-entry
-        // identically — that is what `Layers::open` checks).
+        // identically - that is what `Layers::open` checks).
         let graph = load_graph(&wikt.join("graph.json")).expect("base graph loads");
 
         // base = wiktionary, overlay = macbain. If this refuses, the real layer
-        // data does not honour the composition contract — a key finding, not a
+        // data does not honour the composition contract - a key finding, not a
         // thing to hack around.
         let composed = Layers::open(&[wikt.as_path(), mac.as_path()])
             .expect("wiktionary+macbain compose (base_uri/handlers/spine/field-class agree)");
@@ -1084,7 +1084,7 @@ mod tests {
             merged_keys, union,
             "composed nodegroup set is not the union of the two layers"
         );
-        // And the union is strictly bigger than either layer — enrichment
+        // And the union is strictly bigger than either layer - enrichment
         // actually happened, this is not one layer masking the other.
         assert!(
             merged_keys.len() > wikt_keys.len() && merged_keys.len() > mac_keys.len(),
@@ -1109,7 +1109,7 @@ mod tests {
     }
 
     #[test]
-    #[ignore = "requires data/wiktionary-v2-full/ incl. chunks on disk (not committed — 74MB binary); full-head proof, run explicitly"]
+    #[ignore = "requires data/wiktionary-v2-full/ incl. chunks on disk (not committed - 74MB binary); full-head proof, run explicitly"]
     fn fear_merge_full_head_app_path() {
         // The app passes String paths to v2_hydrate_layers; mirror that exactly.
         let head_dirs: Vec<String> = vec![
@@ -1120,7 +1120,7 @@ mod tests {
         let layers = open_layers(&head_dirs).expect("wiktionary-full + macbain compose");
         assert_eq!(layers.len(), 2, "two layers");
 
-        // fear — has wiktionary headword+senses AND macbain etymology+cognates.
+        // fear - has wiktionary headword+senses AND macbain etymology+cognates.
         const FEAR: &str = "e98ed0c3-34e5-5f5f-8151-fe77547d56d7";
         let merged = layers
             .hydrate_resource(FEAR, &graph, &["en"])
@@ -1252,7 +1252,7 @@ mod tests {
     // -----------------------------------------------------------------------
 
     /// `v2_closure` folds the head's `vocab.label` (via the `dict`/`vocab` join)
-    /// into a `uuid -> label` map. Concept UUIDs resolve DIRECTLY now — the old
+    /// into a `uuid -> label` map. Concept UUIDs resolve DIRECTLY now - the old
     /// value-id indirection is gone with `closure.json`.
     #[test]
     fn closure_resolves_known_uuids() {
@@ -1266,7 +1266,7 @@ mod tests {
             Some("noun"),
             "concept id resolves to its label",
         );
-        // A second concept UUID — pronoun's value-id indirection is retired, so
+        // A second concept UUID - pronoun's value-id indirection is retired, so
         // the concept id itself is what a tile now carries and what resolves.
         assert_eq!(
             map.get("80fe1942-8911-5e10-8f7b-8dc6c78b223d").map(String::as_str),
@@ -1298,7 +1298,7 @@ mod tests {
             map.get("0caceaea-9c8d-5df1-8fd2-4d015708fe3f").map(String::as_str) == Some("noun"),
             "macbain concept still resolves in the merged map",
         );
-        // The dialect concept — carried by both layers — resolves in the merge.
+        // The dialect concept - carried by both layers - resolves in the merge.
         assert_eq!(
             map.get("1052ed22-def2-5e6b-a5a2-ddff79e08e70").map(String::as_str),
             Some("Scottish Gaelic (General)"),
@@ -1308,7 +1308,7 @@ mod tests {
 
     /// SCRATCH (kept): dumps the composed wiktionary+macbain hydrate of the
     /// shared UUID so the TS flattener can be written against real key/value
-    /// shapes — especially how part_of_speech / dialect / senses / source_label
+    /// shapes - especially how part_of_speech / dialect / senses / source_label
     /// appear (raw uuids vs objects, card-1 vs card-n). Run with:
     ///   cargo test --features v2-emit --lib -- dump_shared_tree --nocapture
     #[test]

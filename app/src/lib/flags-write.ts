@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 //
-// The flag/note WRITE path — the app's first on-device write. Mirrors exactly the
+// The flag/note WRITE path - the app's first on-device write. Mirrors exactly the
 // host test (build-flag-layers → note head), minus NAPI: build the note
 // `business_data` via alizarin (WASM in the webview), then hand it to the Rust
 // `v2_emit_overlay` command, which re-emits the note-v2 head in place. It drops
@@ -45,7 +45,7 @@ export interface NoteRec {
   description: string;
   subject: string[];
   author: string;
-  // Denormalized subject context (localStorage only — not emitted to the head),
+  // Denormalized subject context (localStorage only - not emitted to the head),
   // captured at flag-time so the all-flags page can render + navigate without a
   // per-note lookup.
   subjectName?: string;
@@ -110,7 +110,7 @@ function buildBusinessData(notes: NoteRec[]): string {
   return JSON.stringify({ business_data: { resources: enriched } });
 }
 
-/** The full note `business_data` JSON (what the head is emitted from) — for export. */
+/** The full note `business_data` JSON (what the head is emitted from) - for export. */
 export function exportBusinessData(): string {
   return buildBusinessData(loadNotes());
 }

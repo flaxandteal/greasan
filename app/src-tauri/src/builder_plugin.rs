@@ -20,7 +20,7 @@ use crate::BuilderState;
 
 /// Copy a content:// URI to a local file via JNI ContentResolver.
 /// Uses openFileDescriptor to get a raw Unix fd, then copies entirely in Rust.
-/// Only ~5 JNI calls total — no JNI in the I/O loop.
+/// Only ~5 JNI calls total - no JNI in the I/O loop.
 #[cfg(target_os = "android")]
 fn copy_content_uri_to_file(uri_str: &str, dest: &std::path::Path) -> Result<usize, String> {
     use jni::objects::{JObject, JValueGen};
@@ -72,7 +72,7 @@ fn copy_content_uri_to_file(uri_str: &str, dest: &std::path::Path) -> Result<usi
 
     eprintln!("[builder] JNI: got ParcelFileDescriptor");
 
-    // Detach the raw Unix fd — we own it now, Java won't close it
+    // Detach the raw Unix fd - we own it now, Java won't close it
     let fd = env.call_method(&pfd, "detachFd", "()I", &[])
         .map_err(|e| format!("detachFd: {e}"))?
         .i().map_err(|e| format!("detachFd.i: {e}"))?;
@@ -237,7 +237,7 @@ fn extract_tar_gz_verbatim(bytes: &[u8], dest: &Path) -> Result<(), String> {
     Ok(())
 }
 
-/// The graph id whose `business_data/<id>.json` is largest — the corpus graph
+/// The graph id whose `business_data/<id>.json` is largest - the corpus graph
 /// shipped as the head's `graph.json`.
 #[cfg(feature = "v2-emit")]
 fn primary_graph_id(src: &Path) -> Result<String, String> {
@@ -339,7 +339,7 @@ fn write_prebuild_and_emit_v2(
 ///
 /// Instead of materialising every resource at once, this builds resources in
 /// batches of `batch_size`, streams each batch straight to the `business_data`
-/// JSON on disk (and into the pagefind indices), then drops it — so peak memory
+/// JSON on disk (and into the pagefind indices), then drops it - so peak memory
 /// is one batch, not the whole corpus. The existing streaming `emit` then reads
 /// the finished JSON file. Output is byte-identical to the monolithic path:
 /// `append_records_csv` threads the ResourceID dedup across batches, so RIDs
@@ -357,11 +357,11 @@ fn stream_tbx_v2_build(
 ) -> Result<usize, String> {
     use std::io::Write;
     let stamp = |m: String| crate::v2::logcat_error(&format!("[tbx-v2 timing] {m}"));
-    // Number of batches — used to animate the progress bar/notification across
+    // Number of batches - used to animate the progress bar/notification across
     // the long build+pagefind-add phase (the visibly slow part).
     let n_batches = records.len().div_ceil(batch_size).max(1);
 
-    // Prebuild scaffolding (graph, collections, manifest) — no resources yet.
+    // Prebuild scaffolding (graph, collections, manifest) - no resources yet.
     let src = out_dir.join(".prebuild-src");
     let _ = std::fs::remove_dir_all(&src);
     let gid = graph.graphid.clone();
@@ -390,12 +390,12 @@ fn stream_tbx_v2_build(
     .map_err(|e| e.to_string())?;
 
     // Descriptor graph for headword/gloss extraction (name → headword,
-    // description → gloss) — the two fields the FTS index searches.
+    // description → gloss) - the two fields the FTS index searches.
     let mut desc_graph = graph.clone();
     let _ = desc_graph.set_descriptor_template("name", "<Headword>");
     let _ = desc_graph.set_descriptor_template("description", "<Gloss>");
 
-    // FTS5 full-text sidecar (search.sqlite beside head.sqlite) — the on-device
+    // FTS5 full-text sidecar (search.sqlite beside head.sqlite) - the on-device
     // text index that replaces pagefind on this path: seconds, not ~40 min, and
     // a fraction of the size. Fed from the same descriptors pagefind used.
     let mut fts = crate::fts::FtsBuilder::create(out_dir)?;
@@ -418,7 +418,7 @@ fn stream_tbx_v2_build(
         // concept_tags for head-side search display.
         let registry = ros_madair_emit::default_registry();
         // Resolve concept/reference labels through a shared RdmCache built from the
-        // SAME SKOS reference data the head vocab uses — one concept identity on
+        // SAME SKOS reference data the head vocab uses - one concept identity on
         // serialize + deserialize, so on-device Téarma references resolve instead of
         // falling back to raw "source:id". See reference-rdmcache-architecture.
         let mut rdm_cache = RdmCache::new();
@@ -454,7 +454,7 @@ fn stream_tbx_v2_build(
                 first = false;
                 serde_json::to_writer(&mut w, r)
                     .map_err(|e| format!("serialize resource: {e}"))?;
-                // Feed the FTS index — headword + gloss from the descriptors.
+                // Feed the FTS index - headword + gloss from the descriptors.
                 if let Some(tiles) = &r.tiles {
                     let d = desc_graph.build_descriptors(tiles);
                     fts.add(
@@ -465,19 +465,19 @@ fn stream_tbx_v2_build(
                 }
                 total += 1;
             }
-            // The build loop is the visible phase — animate 0.10..0.65.
+            // The build loop is the visible phase - animate 0.10..0.65.
             report("building", 0.10 + 0.55 * (bi + 1) as f64 / n_batches as f64);
         }
         w.write_all(br#"]}}"#).map_err(|e| e.to_string())?;
         w.flush().map_err(|e| e.to_string())?;
         drop(w);
-        // Records are no longer needed — free them before the memory-heavy emit.
+        // Records are no longer needed - free them before the memory-heavy emit.
         drop(records);
         stamp(format!(
             "build_resources (batched, size {batch_size}): {build_ms} ms, {total} resources"
         ));
 
-        // Commit the FTS index (fast — seconds even at Téarma scale).
+        // Commit the FTS index (fast - seconds even at Téarma scale).
         let t = std::time::Instant::now();
         let fts_n = fts.finish()?;
         stamp(format!("fts: {} ms, {fts_n} entries", t.elapsed().as_millis()));
@@ -517,10 +517,10 @@ fn stream_tbx_v2_build(
 /// Parse a prebuild tar.gz archive into graphs, resources, and collections.
 ///
 /// Expected archive structure:
-/// - `graphs/{id}.json` — StaticGraph JSON
-/// - `business_data/{id}.json` — StaticResource JSON (single or array)
-/// - `collections/{id}.json` — SkosCollection JSON
-/// - `manifest.json` (optional) — { base_uri: "..." }
+/// - `graphs/{id}.json` - StaticGraph JSON
+/// - `business_data/{id}.json` - StaticResource JSON (single or array)
+/// - `collections/{id}.json` - SkosCollection JSON
+/// - `manifest.json` (optional) - { base_uri: "..." }
 fn parse_prebuild_archive(
     bytes: &[u8],
 ) -> Result<
@@ -657,7 +657,7 @@ pub async fn build_layer<R: Runtime>(
         "prebuild" | "prebuild-v2" | "built" | "tbx" | "tbx-v2"
     ) {
         return Err(format!(
-            "unsupported format \"{format}\" — only \"prebuild\", \"prebuild-v2\", \"built\", \"tbx\", and \"tbx-v2\" are supported"
+            "unsupported format \"{format}\" - only \"prebuild\", \"prebuild-v2\", \"built\", \"tbx\", and \"tbx-v2\" are supported"
         ));
     }
 
@@ -671,7 +671,7 @@ pub async fn build_layer<R: Runtime>(
     let output_dir_clone = output_dir.clone();
     let format_clone = format.clone();
 
-    // Spawn async task — don't block the command handler
+    // Spawn async task - don't block the command handler
     tauri::async_runtime::spawn(async move {
         // Start the foreground service so the build survives backgrounding and
         // shows a progress notification. Stopped by update_status_complete /
@@ -802,7 +802,7 @@ pub async fn build_layer<R: Runtime>(
                 }
             };
 
-            // 5. Build StaticResources from CSV — concept/reference labels resolve
+            // 5. Build StaticResources from CSV - concept/reference labels resolve
             // through the shared RdmCache (same identity as the head vocab).
             let registry = ros_madair_emit::default_registry();
             let mut rdm_cache = RdmCache::new();
@@ -906,7 +906,7 @@ pub async fn build_layer<R: Runtime>(
             update_status_complete(&app, &id_clone, output_path);
         } else if format_clone == "tbx-v2" {
             // "tbx-v2": Téarma from TBX → a v2 HEAD (installable/loadable as a v2
-            // layer), with gramadan declension enrichment — the on-device
+            // layer), with gramadan declension enrichment - the on-device
             // counterpart of the Python pipeline. Same parse+enrich+build as
             // "tbx", but emits a v2 head instead of v1 flat artifacts.
             #[cfg(not(feature = "v2-emit"))]
@@ -936,7 +936,7 @@ pub async fn build_layer<R: Runtime>(
                     }
                 };
                 stamp!("parse: {} ms, {} records", t.elapsed().as_millis(), records.len());
-                // The raw XML (~160MB for full Téarma) is done with — reclaim it
+                // The raw XML (~160MB for full Téarma) is done with - reclaim it
                 // before the build so it isn't resident alongside the resources.
                 drop(bytes);
 
@@ -944,7 +944,7 @@ pub async fn build_layer<R: Runtime>(
                 tbx_parser::enrich_records(&mut records);
                 stamp!("enrich: {} ms", t.elapsed().as_millis());
 
-                // Graph + collections from the core bundle (asset resolver — keep
+                // Graph + collections from the core bundle (asset resolver - keep
                 // on the async worker, not spawn_blocking).
                 update_status(&app, &id_clone, "building", 0.4);
                 let t = Instant::now();
@@ -966,7 +966,7 @@ pub async fn build_layer<R: Runtime>(
 
                 // Streaming build: batches → business_data JSON on disk →
                 // streaming emit. Peak memory is one batch, not the whole
-                // corpus, so full Téarma (~189k) no longer OOMs. CPU-heavy —
+                // corpus, so full Téarma (~189k) no longer OOMs. CPU-heavy -
                 // off the async worker.
                 let out = output_dir_clone.clone();
                 let app_cb = app.clone();
@@ -1003,7 +1003,7 @@ pub async fn build_layer<R: Runtime>(
         } else if format_clone == "prebuild-v2" {
             // "prebuild-v2": extract the emit-layout prebuild verbatim, then run
             // the streaming emitter to produce a v2 head (head.sqlite + chunks),
-            // which the app loads natively via currentV2HeadDirs — NOT the v1
+            // which the app loads natively via currentV2HeadDirs - NOT the v1
             // flat artifacts build_to_memory writes. Emit is memory-bounded (see
             // HANDOFF-streaming-build.md); requires the v2-emit build.
             #[cfg(not(feature = "v2-emit"))]
@@ -1029,7 +1029,7 @@ pub async fn build_layer<R: Runtime>(
                 // v2_emit_overlay both hardcode it); `Layers::open` REFUSES to
                 // compose heads that disagree on it, which silently breaks
                 // cross-layer hydrate. The prebuild manifest's base_uri is the
-                // ontology namespace (goidelic#), NOT the compose base_uri — do
+                // ontology namespace (goidelic#), NOT the compose base_uri - do
                 // not read it here.
                 let base_uri = "https://example.org/".to_string();
 
@@ -1067,7 +1067,7 @@ pub async fn build_layer<R: Runtime>(
                 }
 
                 update_status(&app, &id_clone, "writing", 0.9);
-                // emit does not write graph.json — the head needs it as its base
+                // emit does not write graph.json - the head needs it as its base
                 // model (mirrors regen-layer-v2 copying it post-emit).
                 let graph_src = src
                     .join("graphs/resource_models")
@@ -1208,7 +1208,7 @@ pub async fn check_local_index<R: Runtime>(
 
 /// Extract a pre-built tar.gz package directly to the output directory.
 ///
-/// This handles the "built" format — artifacts are already compiled and just
+/// This handles the "built" format - artifacts are already compiled and just
 /// need to be written to disk. Runs synchronously (tar iteration is not Send).
 fn extract_built_archive_sync(bytes: &[u8], output_dir: &Path) -> Result<(), String> {
     let decoder = GzDecoder::new(bytes);
@@ -1233,7 +1233,7 @@ fn extract_built_archive_sync(bytes: &[u8], output_dir: &Path) -> Result<(), Str
 
         // Strip leading ./
         let normalised = path_str.trim_start_matches("./");
-        // Keep the path as-is — the tar contains flat files and pagefind subdirectories.
+        // Keep the path as-is - the tar contains flat files and pagefind subdirectories.
         let rel_path = normalised.to_string();
 
         if rel_path.is_empty() {
@@ -1258,7 +1258,7 @@ fn extract_built_archive_sync(bytes: &[u8], output_dir: &Path) -> Result<(), Str
     // On desktop, extract zip archives so the asset protocol can serve individual
     // files (needed because custom URI scheme protocols like rmindex:// don't work
     // when the webview loads from localhost in dev mode). On mobile, tiles/pages/
-    // pagefind are served from zip via rmindex/pfzip — no extraction needed.
+    // pagefind are served from zip via rmindex/pfzip - no extraction needed.
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
     extract_zips_for_desktop(output_dir)?;
 
@@ -1549,7 +1549,7 @@ async fn build_pagefind_indices_inner(
         let dest = output_dir.join(format!("{dir_name}.zip"));
         if src.exists() {
             zip_directory_store(&src, &dest)?;
-            // Remove extracted directory — zip is the canonical format
+            // Remove extracted directory - zip is the canonical format
             let _ = std::fs::remove_dir_all(&src);
         }
     }
@@ -1558,7 +1558,7 @@ async fn build_pagefind_indices_inner(
     Ok(())
 }
 
-/// Create a zip archive from a directory (store mode, no compression — pagefind
+/// Create a zip archive from a directory (store mode, no compression - pagefind
 /// files are already compressed internally).
 fn zip_directory_store(src_dir: &Path, dest: &Path) -> Result<(), String> {
     let file =
@@ -1620,7 +1620,7 @@ fn load_core_graph<R: Runtime>(app: &AppHandle<R>, graph_id: &str) -> Result<Sta
     let asset_path = format!("{CORE_PREFIX}/graphs/{graph_id}.json");
     let bytes = load_core_asset(app, &asset_path)?;
     // The core bundle ships the Arches export wrapper `{"graph":[<graph>]}`; the
-    // prebuild/head path uses a flat StaticGraph. Accept either — flat first,
+    // prebuild/head path uses a flat StaticGraph. Accept either - flat first,
     // then unwrap the wrapper.
     if let Ok(g) = serde_json::from_slice::<StaticGraph>(&bytes) {
         return Ok(g);
@@ -1671,7 +1671,7 @@ fn load_core_collections<R: Runtime>(app: &AppHandle<R>) -> Result<Vec<SkosColle
                             Err(e) => eprintln!("[builder] skip collection {cid}: {e}"),
                         }
                     }
-                    Err(_) => {} // collection file doesn't exist — skip
+                    Err(_) => {} // collection file doesn't exist - skip
                 }
             }
         }
@@ -1681,7 +1681,7 @@ fn load_core_collections<R: Runtime>(app: &AppHandle<R>) -> Result<Vec<SkosColle
     if collections.is_empty() {
         eprintln!("[builder] falling back to brute-force collection scan");
         // Read all files matching collections/*.json from the asset resolver
-        // This is a fallback — try the known IDs from the core bundle
+        // This is a fallback - try the known IDs from the core bundle
         let known_ids = [
             "177b451e-8cf0-503f-bb78-7f52fee2f4d9",
             "1cb5f4c8-b73e-5f87-9e4a-b7b47c56e030",
@@ -1725,7 +1725,7 @@ fn collect_collection_ids(value: &serde_json::Value, ids: &mut std::collections:
             }
         }
         // The concept_hierarchy is a LIST of collection objects whose id is a bare
-        // UUID VALUE (not a key) — e.g. the small "Confidence Levels" collection.
+        // UUID VALUE (not a key) - e.g. the small "Confidence Levels" collection.
         // Collect those too; a non-collection UUID just misses its file and is
         // skipped. Without this the confidence concepts never reach the head and
         // the declension '?' cannot resolve.

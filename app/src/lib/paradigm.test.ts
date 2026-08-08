@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { buildParadigm, type NounParadigm, type VerbParadigm, type AdjParadigm } from './paradigm';
 
-describe('buildParadigm — noun', () => {
+describe('buildParadigm - noun', () => {
   // fear m1: sgNom fear, sgGen fir, sgDat fear, plNom fir, plGen fear (BuNaMo-tagged).
   const fear = [
     { writtenRep: 'fear', tags: ['masculine', 'nominative', 'singular'] },
@@ -42,7 +42,7 @@ describe('buildParadigm — noun', () => {
   });
 });
 
-describe('buildParadigm — verb', () => {
+describe('buildParadigm - verb', () => {
   const mol = [
     { writtenRep: 'moladh', tags: ['verbal-noun'] },
     { writtenRep: 'molta', tags: ['verbal-adjective'] },
@@ -71,7 +71,7 @@ describe('buildParadigm — verb', () => {
   });
 });
 
-describe('buildParadigm — adjective', () => {
+describe('buildParadigm - adjective', () => {
   it('separates graded (comparative/superlative) forms', () => {
     const p = buildParadigm(
       [
@@ -87,7 +87,7 @@ describe('buildParadigm — adjective', () => {
   });
 });
 
-describe('buildParadigm — fallback', () => {
+describe('buildParadigm - fallback', () => {
   it('flat-groups an unhandled POS', () => {
     const p = buildParadigm([{ writtenRep: 'x', tags: ['whatever'] }], 'preposition');
     expect(p.kind).toBe('flat');

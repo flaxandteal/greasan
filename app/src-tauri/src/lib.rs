@@ -3,7 +3,7 @@ mod index_files;
 mod pagefind_zip;
 mod tbx_parser;
 
-/// Vector basemap (PMTiles) byte-range access for the offline map — reads the
+/// Vector basemap (PMTiles) byte-range access for the offline map - reads the
 /// bundled `goidelic.pmtiles`. Independent of the `v2` feature.
 mod basemap;
 
@@ -20,17 +20,17 @@ mod v2;
 #[cfg(feature = "v2")]
 mod offline;
 
-/// Android JNI context bridge — initializes `ndk_context` from tao's live
+/// Android JNI context bridge - initializes `ndk_context` from tao's live
 /// JavaVM + Activity, since Tauri v2's `WryActivity` never does it itself.
 #[cfg(target_os = "android")]
 mod android_ctx;
 
-/// Android foreground-service bridge — keeps a long on-device build alive when
+/// Android foreground-service bridge - keeps a long on-device build alive when
 /// backgrounded and shows a progress notification. No-op off Android.
 mod fg_service;
 
 /// SQLite FTS5 full-text sidecar for on-device-built layers (Téarma). Replaces
-/// pagefind on the tbx-v2 path — seconds, not ~40 min. v2-gated (needs rusqlite).
+/// pagefind on the tbx-v2 path - seconds, not ~40 min. v2-gated (needs rusqlite).
 #[cfg(feature = "v2")]
 mod fts;
 

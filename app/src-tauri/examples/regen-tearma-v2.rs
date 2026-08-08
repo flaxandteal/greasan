@@ -5,7 +5,7 @@
 //!
 //!     cargo run --release --example regen-tearma-v2 --features v2-emit
 //!
-//! Sibling of `regen-macbain-v2.rs` — see that file for why the emitter runs as
+//! Sibling of `regen-macbain-v2.rs` - see that file for why the emitter runs as
 //! an example in this workspace rather than `cargo run -p ros-madair-emit`.
 
 use std::path::Path;
@@ -36,7 +36,7 @@ fn main() {
     std::fs::copy(&graph_src, out_dir.join("graph.json")).expect("copy graph.json");
 
     println!(
-        "v2 head written to {} — snapshot {}, {} resources, {} tiles, {} chunks",
+        "v2 head written to {} - snapshot {}, {} resources, {} tiles, {} chunks",
         out_dir.display(),
         summary.snapshot_id,
         summary.resources,

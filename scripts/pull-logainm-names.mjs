@@ -83,7 +83,7 @@ async function process(lo, hi) {
     const rows = await fetchRange(lo, hi);
     windows++;
     if (rows.length >= 10000) {
-      console.warn(`[pull] WARNING window [${lo},${hi}) hit 10000-row limit (count said ${n}) — possible truncation`);
+      console.warn(`[pull] WARNING window [${lo},${hi}) hit 10000-row limit (count said ${n}) - possible truncation`);
     }
     for (const r of rows) {
       const place = parseInt(r.p.value.replace('http://data.logainm.ie/place/', ''), 10);

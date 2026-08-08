@@ -53,7 +53,7 @@ export async function getPagefind(pagefindBase: string): Promise<PagefindInstanc
 
     const mod = await importPagefind(pagefindBase);
     // createInstance gives a dedicated instance (no shared module state).
-    // noWorker: true — Workers can't fetch from Tauri's asset:// protocol.
+    // noWorker: true - Workers can't fetch from Tauri's asset:// protocol.
     const inst = mod.createInstance({
       basePath: pagefindBase,
       baseUrl: '/',

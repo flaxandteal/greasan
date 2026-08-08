@@ -84,7 +84,7 @@
   );
   let isGaois = $derived((example?.source || '').toLowerCase() === 'gaois');
   // Only Tatoeba carries a real per-sentence permalink. The Gaois source_id is a
-  // positional counter (see the pipeline), so its computed URL cannot resolve —
+  // positional counter (see the pipeline), so its computed URL cannot resolve -
   // never surface it. A real Gaois link needs the re-ingested tuid.
   let showSourceLink = $derived(
     !!example?.sourceUrl && (example?.source || '').toLowerCase() === 'tatoeba',
@@ -135,7 +135,7 @@
 
     <!-- Headwords this sentence illustrates. These come from cited_by (the reverse
          of the entry graph's external_examples link), NOT from string-matching the
-         sentence — so mutations (lenition/eclipsis/inflection) can't break them. -->
+         sentence - so mutations (lenition/eclipsis/inflection) can't break them. -->
     {#if example.headwords && example.headwords.length}
       <div class="ge-block-title">{$t('example.headwords')}</div>
       <div style="padding:0 16px 4px;">
@@ -204,7 +204,7 @@
     padding: 0 1px;
   }
 
-  /* Headword chips — same theme-aware tokens as the placename chips, sized up as
+  /* Headword chips - same theme-aware tokens as the placename chips, sized up as
      primary tap targets. */
   .ge-ex-chips {
     display: flex;

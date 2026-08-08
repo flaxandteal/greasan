@@ -1,14 +1,14 @@
 //! First-run offline setup for the self-contained build.
 //!
 //! The shipped app bundles, as Tauri `bundle.resources`:
-//!   * `heads/<corpus>.zip`  — a v2 head (`head.sqlite` + `manifest.json` +
+//!   * `heads/<corpus>.zip`  - a v2 head (`head.sqlite` + `manifest.json` +
 //!     `graph.json` + `chunks/`), zipped so it is ONE bundled file per corpus
 //!     (no directory-enumeration of the APK asset tree needed on Android).
-//!   * `pagefind/<index>/pagefind-<lang>.zip` — the Pagefind text index, served
+//!   * `pagefind/<index>/pagefind-<lang>.zip` - the Pagefind text index, served
 //!     as-is from the zip by the `pfzip` custom protocol.
 //!
 //! On first launch we unpack the heads into `<app_data>/heads/<corpus>/` (a real
-//! fs path — `rusqlite` cannot open a file inside the bundle) and copy the
+//! fs path - `rusqlite` cannot open a file inside the bundle) and copy the
 //! Pagefind zips into `<app_data>/files/<index>/<lang>.zip` (where the existing
 //! `pfzip` handler already looks). A marker file makes this idempotent.
 //!
@@ -31,7 +31,7 @@ use tauri::{AppHandle, Manager, Runtime};
 const READY_MARKER: &str = ".offline-ready-v4";
 
 struct CorpusSpec {
-    /// Layer name — the `dynamicLayers` registry key and V2 layer name.
+    /// Layer name - the `dynamicLayers` registry key and V2 layer name.
     name: &'static str,
     /// Head basename: matches the emitted `data/<head>` dir and bundled
     /// `heads/<head>.zip`.
@@ -57,7 +57,7 @@ const CORPORA: &[CorpusSpec] = &[
         index: "macbain-index",
         langs: &["en", "ga"],
     },
-    // Téarma is NOT bundled — it cannot be shipped (licensing), so it is built
+    // Téarma is NOT bundled - it cannot be shipped (licensing), so it is built
     // on-device (tbx-v2 → FTS5 `search.sqlite` sidecar) and installed as a
     // layer, not a bundled corpus. See `family.ts`'s `tearma` suggested layer.
     CorpusSpec {
@@ -70,7 +70,7 @@ const CORPORA: &[CorpusSpec] = &[
         langs: &["ga"],
     },
     CorpusSpec {
-        // Logainm placenames — its OWN graph (schema.org/Place), NOT the shared
+        // Logainm placenames - its OWN graph (schema.org/Place), NOT the shared
         // lexical_entry model, so it composes as a separate model in the stack.
         // name_elements.element_entry links each name to the goi dictionary entry
         // its elements come from (reverse lookup via `cited_by`). Pagefind is
@@ -81,7 +81,7 @@ const CORPORA: &[CorpusSpec] = &[
         langs: &["ga"],
     },
     CorpusSpec {
-        // Logainm toponymic CONCEPTS (ontolex:LexicalConcept) — the meaning a
+        // Logainm toponymic CONCEPTS (ontolex:LexicalConcept) - the meaning a
         // placename evokes. OWN graph (Lexical Concept), its own head so it is
         // full-hydratable (a placename's concept_entry is hydrated against it).
         // Reached only via placename/entry links, so no pagefind.
@@ -91,7 +91,7 @@ const CORPORA: &[CorpusSpec] = &[
         langs: &[],
     },
     CorpusSpec {
-        // Corpus examples — own graph; head bundled for hydrate + cited_by. Two
+        // Corpus examples - own graph; head bundled for hydrate + cited_by. Two
         // heads keep the licences distinct (Tatoeba CC BY 2.0 / Gaois CC BY 4.0).
         // sampla pagefind (example-granular) carried for the sample search.
         name: "example-tatoeba",
@@ -106,21 +106,21 @@ const CORPORA: &[CorpusSpec] = &[
         langs: &["sampla"],
     },
     CorpusSpec {
-        // Person graph — seeded "User" that authors notes. No pagefind.
+        // Person graph - seeded "User" that authors notes. No pagefind.
         name: "person",
         head: "person-v2",
         index: "person-v2",
         langs: &[],
     },
     CorpusSpec {
-        // Note/flag graph — the MUTABLE layer, re-emitted on each flag. No pagefind.
+        // Note/flag graph - the MUTABLE layer, re-emitted on each flag. No pagefind.
         name: "note",
         head: "note-v2",
         index: "note-v2",
         langs: &[],
     },
     CorpusSpec {
-        // Layer catalogue — metadata describing each data layer. Queried on its
+        // Layer catalogue - metadata describing each data layer. Queried on its
         // own for the layer UI; not composed into the lexical stack. No pagefind.
         name: "layer",
         head: "layer-v2",
@@ -136,7 +136,7 @@ pub struct OfflineLayer {
     pub name: String,
     /// Absolute path to the unpacked head dir (fed to the `v2_*` commands).
     pub head_dir: String,
-    /// Pagefind index name — the frontend builds `http://pfzip.localhost/<index>/`.
+    /// Pagefind index name - the frontend builds `http://pfzip.localhost/<index>/`.
     pub pagefind_index: String,
 }
 

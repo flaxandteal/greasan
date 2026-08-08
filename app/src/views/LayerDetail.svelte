@@ -1,7 +1,7 @@
 <script lang="ts">
   // SPDX-License-Identifier: AGPL-3.0-or-later
   //
-  // Layer description page — the full human-readable card for one Layer resource
+  // Layer description page - the full human-readable card for one Layer resource
   // from the catalogue. Styled like the example / headword pages (teal hero +
   // ge-block-title sections).
   import { currentLayer, layers, removeLayer } from '../lib/store';
@@ -13,7 +13,7 @@
 
   function goBack() { currentLayer.set(null); }
 
-  // The installed layer this catalogue entry corresponds to (if any) — enables
+  // The installed layer this catalogue entry corresponds to (if any) - enables
   // the Remove action. Installed names map to slug / integrationSlug (± the
   // `-v2` head suffix); device-built layers use their name as the slug.
   let installedName = $derived(

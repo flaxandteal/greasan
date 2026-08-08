@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 /**
- * v2 static-assets pilot — thin wrappers over the Tauri `v2` feature commands.
+ * v2 static-assets pilot - thin wrappers over the Tauri `v2` feature commands.
  *
  * This is the pilot read path that replaces `SparqlStore` for a *single*
  * layer (macbain): instead of shipping a WASM SPARQL engine + page index to
@@ -84,7 +84,7 @@ export async function queryV2(headDir: string, ir: V2Query): Promise<V2Result[]>
 }
 
 // ---------------------------------------------------------------------------
-// Multi-layer composition (R1) — the path for the eventual SparqlStore
+// Multi-layer composition (R1) - the path for the eventual SparqlStore
 // replacement.
 //
 // `queryV2`/`hydrateV2` above read ONE head. These read an ORDERED STACK of
@@ -122,7 +122,7 @@ export async function hydrateLayers(headDirs: string[], resourceId: string): Pro
 
 /**
  * Resolve resource UUIDs → their descriptor (spine `display_name`) across the layer
- * stack — a cheap indexed lookup, no hydration, and no need for the resource's model
+ * stack - a cheap indexed lookup, no hydration, and no need for the resource's model
  * graph. Used e.g. for external example sentences (whose descriptor IS the sentence).
  * Batch: one call resolves many uris.
  */
@@ -133,7 +133,7 @@ export async function descriptors(headDirs: string[], uris: string[]): Promise<R
 export interface SearchDisplay { headword: string; pos: string; dialects: string[] }
 
 /** Canonical search display (headword + POS + dialect labels) resolved from the
- * COMPOSED head stack — so a result's badges come from the richest layer, not
+ * COMPOSED head stack - so a result's badges come from the richest layer, not
  * whichever Pagefind record survived the per-layer cap. The POS/dialect node
  * UUIDs are stable properties of the lexical_entry model. */
 const POS_NODE = 'a956278b-6815-5cc5-b674-e933e9c84aad';
@@ -150,7 +150,7 @@ export interface FtsHit { uri: string; headword: string; gloss: string; snippet:
  * Full-text search over the FTS5 `search.sqlite` sidecars of the given layer
  * dirs (on-device-built layers like Téarma, where pagefind is impractical).
  * The command probes each dir for `search.sqlite` and skips those without one,
- * so `headDirs` can be the whole active stack — pagefind and FTS layers coexist.
+ * so `headDirs` can be the whole active stack - pagefind and FTS layers coexist.
  * `field` is 'headword' (Ceannfhocail) or 'gloss' (Gluais).
  */
 export async function searchFts(
@@ -166,7 +166,7 @@ export async function searchFts(
  * Reverse-cognate lookup: the resources that LINK TO `uri` through `nodePath`
  * (a link-datatype node alias, e.g. `cognate_entry_id`) in the composed view.
  *
- * The inverse of a forward `has_link` predicate — opening an entry, find the
+ * The inverse of a forward `has_link` predicate - opening an entry, find the
  * entries that cite it. Restores v1's continuum behaviour: the Irish "fear"
  * surfaces the MacBain "fear" that lists it as a cognate, so the loader can fold
  * MacBain's etymology/cognates into the Irish entry. Base layer (`headDirs[0]`)
@@ -193,7 +193,7 @@ export interface GeoPoint {
  * that cites `targetUri` through the reverse-link node `nodePath`, with its
  * display name and point geometry. `nodePath`/`targetUri` are `dict.term` UUIDs
  * already (no alias resolution against a graph), so this works against a head
- * whose spine/geo tables belong to a DIFFERENT graph than the app's base stack —
+ * whose spine/geo tables belong to a DIFFERENT graph than the app's base stack -
  * e.g. the Logainm place head, whose `element_entry` node cites lexical entries.
  *
  * Backed by one indexed SQL join (reverse_links → spine_place → geo_bbox), no

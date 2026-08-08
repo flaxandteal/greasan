@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 //
-// Layer catalogue loader — reads the `layer-v2` META head (one Layer resource
+// Layer catalogue loader - reads the `layer-v2` META head (one Layer resource
 // per data layer in the stack) for the layer UI. Queried standalone via
 // layerCatalogueHeadDir(); never composed into the lexical/place stack.
 import { queryV2, hydrateV2 } from './v2';
@@ -9,7 +9,7 @@ import { layerCatalogueHeadDir } from './dictionary';
 export interface LayerLink { title: string; url: string; type: string }
 export interface LayerDownload { format: string; url: string; notes: string }
 /** Where + how to install this layer, when it is user-installable. The catalogue
- *  is the single source for the "Add a layer" list — an entry with an `install`
+ *  is the single source for the "Add a layer" list - an entry with an `install`
  *  block is offered; one without is bundled/internal. `url:''` means "choose a
  *  file" (e.g. a Téarma TBX the user downloaded). Mirrors the old
  *  family.ts SuggestedLayer, now data rather than hardcoded config. */
@@ -54,7 +54,7 @@ function str(v: unknown): string {
 
 /** A single reference (ex-concept) label. ros-madair now renders references to
  * labels during hydrate (alizarin datatype handlers + the head's vocab), so the
- * value arrives as a plain label string — no frontend closure needed. */
+ * value arrives as a plain label string - no frontend closure needed. */
 function refLabel(v: unknown): string {
   return str(v);
 }
@@ -134,7 +134,7 @@ export async function loadLayerCatalogue(): Promise<LayerEntry[]> {
   return entries.filter((e): e is LayerEntry => !!e).sort((a, b) => a.name.localeCompare(b.name));
 }
 
-/** One Layer by its slug (or by its layer-registry name — they match). */
+/** One Layer by its slug (or by its layer-registry name - they match). */
 export async function loadLayerBySlug(slug: string): Promise<LayerEntry | null> {
   const all = await loadLayerCatalogue();
   return all.find((l) => l.slug === slug || l.integrationSlug === slug || l.integrationSlug === `${slug}-v2`) || null;

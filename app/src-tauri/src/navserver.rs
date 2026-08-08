@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-//! Debug-only navigation channel for DETERMINISTIC driving (tests, screencasts) —
+//! Debug-only navigation channel for DETERMINISTIC driving (tests, screencasts) -
 //! a stand-in for real deep links, which are blocked on Android by an upstream
 //! tao panic on typeless VIEW intents (tao ndk_glue handle_intent). Reach it from
 //! the host via an adb port forward:
@@ -29,7 +29,7 @@ pub fn start<R: Runtime>(app: AppHandle<R>) {
                 return;
             }
         };
-        eprintln!("[navserver] listening on 127.0.0.1:{PORT} — adb forward tcp:{PORT} tcp:{PORT}");
+        eprintln!("[navserver] listening on 127.0.0.1:{PORT} - adb forward tcp:{PORT} tcp:{PORT}");
         for stream in listener.incoming() {
             let Ok(mut stream) = stream else { continue };
             let mut buf = [0u8; 2048];

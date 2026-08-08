@@ -3,7 +3,7 @@
 // Build a NapiRdmCache from a collections array (the SKOS reference data), to pass
 // into buildResourcesFromBusinessCsv. Serialization then resolves concept/reference
 // labels through the SAME identity the read side (v2_closure / hydrate vocab)
-// resolves back — one concept identity, no parallel minting. See the
+// resolves back - one concept identity, no parallel minting. See the
 // reference-rdmcache-architecture note.
 import { createRequire } from 'node:module';
 import { resolve } from 'node:path';

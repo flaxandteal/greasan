@@ -1,21 +1,21 @@
 #!/usr/bin/env node
 /**
- * Pull the Logainm element glossary — the ~212 recurring toponymic elements
+ * Pull the Logainm element glossary - the ~212 recurring toponymic elements
  * (baile, cill, mór, cnoc, …) with their forms, meanings and place-frequencies.
  *
  * This is the AUTHORITATIVE element vocabulary: build-logainm-layer.mjs decomposes
  * placenames by matching against these known forms, instead of open-vocabulary
  * string-splitting against the whole dictionary (which mis-linked homographs).
  *
- * Auth: `X-Api-Key` header. Key read from LOGAINM_API_KEY (env, or .env.build) —
+ * Auth: `X-Api-Key` header. Key read from LOGAINM_API_KEY (env, or .env.build) -
  * never hard-code or commit it. Register at https://www.logainm.ie/en/api.
  *
  * Usage:  node scripts/pull-logainm-glossary.mjs
  * Output: data/raw/logainm-glossary.json  [{id, headword, translation, forms[], count}]
  *
- * Licensing: element headword/forms/id are placename data (CC BY 4.0 — usable
+ * Licensing: element headword/forms/id are placename data (CC BY 4.0 - usable
  * with attribution). `translation` is a researcher explanatory note (© Government
- * of Ireland) — use it to disambiguate/map, do NOT reproduce it in the app UI.
+ * of Ireland) - use it to disambiguate/map, do NOT reproduce it in the app UI.
  */
 import { readFileSync, writeFileSync, existsSync } from 'fs';
 import { fileURLToPath } from 'url';

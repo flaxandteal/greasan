@@ -7,7 +7,7 @@
 //!
 //! Optional third arg: the resource-model graphid to ship as `<out>/graph.json`
 //! (the schema the head carries none of). Defaults to Lexical Entry
-//! (`449c8695-…`) — the model shared across the wiktionary/macbain/core layers,
+//! (`449c8695-…`) - the model shared across the wiktionary/macbain/core layers,
 //! and the one the cross-layer merge composes on. A prebuild that carries more
 //! than one model still emits ALL of them into one head; only the graph SHIPPED
 //! beside the head is selected here, because the read path hydrates one model at
@@ -38,7 +38,7 @@ fn main() {
 
     if !graph_src.is_file() {
         panic!(
-            "graph {} not found in {} — pass the right graph_id as arg 3",
+            "graph {} not found in {} - pass the right graph_id as arg 3",
             graph_src.display(),
             data_dir.join("graphs/resource_models").display(),
         );
@@ -61,7 +61,7 @@ fn main() {
     std::fs::copy(&graph_src, out_dir.join("graph.json")).expect("copy graph.json");
 
     println!(
-        "v2 head written to {} — snapshot {}, {} models, {} resources, {} tiles, {} chunks, \
+        "v2 head written to {} - snapshot {}, {} models, {} resources, {} tiles, {} chunks, \
          head.sqlite {} bytes; graph.json = {}",
         out_dir.display(),
         summary.snapshot_id,

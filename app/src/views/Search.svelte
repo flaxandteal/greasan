@@ -12,7 +12,7 @@
   }
 
   /** Does this entry overlap Irish (GA)? True for the GA-family (GA, GA.CON,
-   *  GA.ULS, GA.MUN) AND for "G" — the multi-branch marker set when a slug spans
+   *  GA.ULS, GA.MUN) AND for "G" - the multi-branch marker set when a slug spans
    *  more than one Goidelic branch (GA+GD), which therefore INCLUDES GA. Only
    *  purely non-GA entries (e.g. GD Scottish Gaelic) render de-emphasised/greyer. */
   function isIrish(dialect?: string): boolean {

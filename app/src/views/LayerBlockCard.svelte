@@ -1,7 +1,7 @@
 <script lang="ts">
   // SPDX-License-Identifier: AGPL-3.0-or-later
   //
-  // Block card for a Layer — the richer, multi-line presentation used where a
+  // Block card for a Layer - the richer, multi-line presentation used where a
   // layer is browsed / installed (Settings), between the single-line toggle row
   // (LayerSheet) and the full description page (LayerDetail). Tapping it opens
   // the description page; an optional trailing action (e.g. remove) is separate.
@@ -12,7 +12,7 @@
     layer: LayerEntry;
     /** Icon-button (X) action, e.g. remove. */
     actionLabel?: string;
-    /** Labelled action instead of the X — e.g. "Install" / "Build". */
+    /** Labelled action instead of the X - e.g. "Install" / "Build". */
     actionText?: string;
     onAction?: () => void;
     /** Render a visibility toggle (installed layers) instead of an action. */

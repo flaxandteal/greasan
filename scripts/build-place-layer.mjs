@@ -46,7 +46,7 @@ const namespace = 'https://flaxandteal.org/ontology/goidelic#';
 const ALIZARIN_NS = '1a79f1c8-9505-4bea-a18e-28a053f725ca';
 const PLACE_TAG = 'LG';
 
-// Shared lexical_entry graph — element_entry must resolve to the SAME goi resource
+// Shared lexical_entry graph - element_entry must resolve to the SAME goi resource
 // UUIDs the wiktionary/macbain/tearma/bunamo heads carry, so the cross-graph link
 // points at the real dictionary entry.
 const LEX_GRAPH_ID = '449c8695-253e-521b-8994-27701ce22305';
@@ -119,7 +119,7 @@ function stripMutation(word) {
 
 /** Decompose an Irish placename into its Logainm elements. Matches against the
  *  KNOWN 211-element glossary (formsIndex) → element id (the CONCEPT identity),
- *  and — where the element resolved to a POS-picked goi headword — the goi
+ *  and - where the element resolved to a POS-picked goi headword - the goi
  *  ResourceID too (elementResolve), so homographs no longer resolve to an
  *  arbitrary [0]. Keyed by element id so headword-less elements (concepts with
  *  no dictionary entry) still match. Returns Map<elId, { surface, rid|null }>. */
@@ -298,7 +298,7 @@ if (!existsSync(glossaryPath)) {
 }
 const glossary = JSON.parse(readFileSync(glossaryPath, 'utf8'));
 
-// Qualifier ADJECTIVES in placenames (colour/size/quality). Else default NOUN —
+// Qualifier ADJECTIVES in placenames (colour/size/quality). Else default NOUN -
 // the toponymic default. Logainm carries no POS; consulted only when the dictionary
 // has both a noun and an adjective for the spelling. Keys normalizeHead-folded.
 const ELEMENT_ADJ = new Set([
@@ -569,7 +569,7 @@ console.log(`[build-place] Prebuild written to ${prebuildDir}`);
 // `cargo run --example` triggers tauri's build.rs, which validates EVERY path in
 // tauri.conf.json `resources`. Two of those are produced later than this cargo
 // run: a brand-new head's bundle zip (build-apk) and a head's pagefind zips
-// (STAGE G) — and regen-layer-v2's remove_dir_all wipes the latter before STAGE G
+// (STAGE G) - and regen-layer-v2's remove_dir_all wipes the latter before STAGE G
 // recreates them. Seed empty-but-valid zips so build.rs passes; the real content
 // overwrites them. Must run before EVERY cargo emit (place emit deletes the place
 // pagefind stub again, so the concept emit needs it re-seeded).

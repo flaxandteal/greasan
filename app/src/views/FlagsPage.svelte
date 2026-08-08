@@ -35,7 +35,7 @@
         if (ex) { overlayView.set(null); currentExample.set(ex); }
       } finally { loading.set(false); }
     }
-    // 'place' has no standalone detail page — no navigation.
+    // 'place' has no standalone detail page - no navigation.
   }
 
   function startEdit(n: NoteRec) { editingRid = n.rid; editText = n.description; }
@@ -92,7 +92,7 @@
         <div class="ge-flag-card" class:busy>
           <button class="ge-flag-card-main" onclick={() => openSubject(n)} disabled={busy || editingRid === n.rid}>
             <div class="ge-flag-card-head">
-              <span class="ge-flag-card-name">{n.subjectName || '—'}</span>
+              <span class="ge-flag-card-name">{n.subjectName || '-'}</span>
               {#if n.subjectKind}<span class="ge-flag-card-graph">{$t(`flag.subject.${n.subjectKind}`)}</span>{:else if n.subjectGraph}<span class="ge-flag-card-graph">{n.subjectGraph}</span>{/if}
             </div>
             {#if editingRid === n.rid}

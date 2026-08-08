@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 /**
- * v2 entry loader — produces the SAME `EntryDetail` the UI consumes, but from
+ * v2 entry loader - produces the SAME `EntryDetail` the UI consumes, but from
  * the v2 cross-layer hydrate (`v2_hydrate_layers`) + closure label resolution,
  * instead of the v1 SparqlStore → populate → alizarin-proxy path.
  *
@@ -10,10 +10,10 @@
  *
  *  1. Every text value is a *localized string* object, not a bare string:
  *       { "en": { "value": "fear", "direction": "ltr" } }
- *     — so `localStr()` unwraps `.<lang>.value` (preferring `en`).
+ *     - so `localStr()` unwraps `.<lang>.value` (preferring `en`).
  *  2. Only part_of_speech, dialect and forms[].gram_features are RAW concept
  *     UUIDs needing closure resolution. source_label / etymology_source are
- *     PLAIN localized strings ("WK" / "MB"), NOT uuids — matching v1, which read
+ *     PLAIN localized strings ("WK" / "MB"), NOT uuids - matching v1, which read
  *     them with `String(...)` rather than `getDisplay()`.
  *
  * This is the entry-detail path. Requires src-tauri built with `--features v2`
@@ -61,7 +61,7 @@ function localStr(v: unknown): string {
   return '';
 }
 
-// Acute + grave + macron fold to a single length marker — "graphically identical
+// Acute + grave + macron fold to a single length marker - "graphically identical
 // up to acute↔grave". Length is PRESERVED (fear ≠ fēar), only the accent
 // CONVENTION is neutralised (Irish á = Scottish à = macron ā). Mirrors the
 // macbain builder's `normalizeHead` and the pipeline `goi_slug` identity.
@@ -154,7 +154,7 @@ function mergeCognates(target: EntryDetail['cognates'], incoming: EntryDetail['c
  * the entry it came from. Dialect is an entry-level property (all senses in one
  * resource share it), so it is resolved once at the call site (`label(tree.dialect)`)
  * and passed in. This is what lets a lexeme card show senses from multiple dialects
- * each tagged with its own — the main entry's, plus each cognate citer's.
+ * each tagged with its own - the main entry's, plus each cognate citer's.
  */
 function extractSenses(tree: Record<string, any>, label: (v: unknown) => string): EntryDetail['senses'] {
   const out: EntryDetail['senses'] = [];
@@ -164,7 +164,7 @@ function extractSenses(tree: Record<string, any>, label: (v: unknown) => string)
     const sourceLabel = localStr(s?.source_label);
     // Per-tile dialect: the `sense_dialect` concept node (goi dialect-on-tiles),
     // resolved via the closure map. On a merged goi resource each sense carries the
-    // dialect of the entry it came from — so one card shows Irish + Scottish senses.
+    // dialect of the entry it came from - so one card shows Irish + Scottish senses.
     // Strip the "(General)" qualifier so Téarma's "Irish (General)" folds onto "Irish".
     const dialect = label(s?.sense_dialect).replace(/\s*\(General\)$/, '');
     if (gloss) {
@@ -182,7 +182,7 @@ function extractSenses(tree: Record<string, any>, label: (v: unknown) => string)
 /**
  * Fold `incoming` senses into `target`, dedup by gloss+examples+DIALECT (combining
  * source labels with '+'). Dialect is part of the key ON PURPOSE: the same gloss in
- * two dialects (Irish "man" / Scottish "man") stays two tagged senses, not one — that
+ * two dialects (Irish "man" / Scottish "man") stays two tagged senses, not one - that
  * is the point of the per-dialect tag. Same gloss+dialect from two publishers still
  * collapses, merging their labels.
  */
@@ -219,10 +219,10 @@ export async function loadEntryV2(uri: string, headDirs: string[]): Promise<Entr
     const pos = label(tree.part_of_speech);
     const dialect = label(tree.dialect);
     // Grammatical class (BuNaMo): noun declension / verb conjugation / adjective
-    // declension — a plain localized string on the composed tree ('1'..'5', 'irr', '').
+    // declension - a plain localized string on the composed tree ('1'..'5', 'irr', '').
     // grammar_class + its confidence live NESTED under the `grammar_class_group`
     // semantic nodegroup (the model promoted grammar_class to a nodegroup with a
-    // confidence reference — commit 9d6e23d). Top-level `tree.grammar_class` no
+    // confidence reference - commit 9d6e23d). Top-level `tree.grammar_class` no
     // longer exists, so the declension stopped rendering; read from the group.
     const gcgRaw = tree.grammar_class_group;
     const gcg = (Array.isArray(gcgRaw) ? gcgRaw[0] : gcgRaw) as Record<string, unknown> | undefined;
@@ -231,19 +231,19 @@ export async function loadEntryV2(uri: string, headDirs: string[]): Promise<Entr
     // beside the declension in the UI.
     const grammarClassConfidence = localStr(gcg?.grammar_class_confidence) || undefined;
 
-    // Pronunciation — cardinality n.
+    // Pronunciation - cardinality n.
     const ipa: string[] = [];
     for (const p of asArray(tree.pronunciation)) {
       const val = localStr(p?.ipa_value);
       if (val) ipa.push(val);
     }
 
-    // Senses — cardinality n, deduplicated across layers (merge identical
+    // Senses - cardinality n, deduplicated across layers (merge identical
     // gloss+examples, combine source labels with '+').
     const senses: EntryDetail['senses'] = [];
     mergeSenses(senses, extractSenses(tree, label));
 
-    // Forms — cardinality n. gram_features are raw concept uuids → closure.
+    // Forms - cardinality n. gram_features are raw concept uuids → closure.
     const forms: EntryDetail['forms'] = [];
     for (const f of asArray(tree.forms)) {
       const writtenRep = localStr(f?.written_rep);
@@ -255,7 +255,7 @@ export async function loadEntryV2(uri: string, headDirs: string[]): Promise<Entr
       if (writtenRep) forms.push({ writtenRep, tags });
     }
 
-    // Gender (lexinfo:gender) is an inherent entry-level property — a concept
+    // Gender (lexinfo:gender) is an inherent entry-level property - a concept
     // reference resolved to its label via the closure, exactly like part_of_speech.
     // Fall back to scanning BuNaMo form tiles for a masculine/feminine tag when the
     // entry node is empty (older heads predating the gender node).
@@ -267,17 +267,17 @@ export async function loadEntryV2(uri: string, headDirs: string[]): Promise<Entr
       }
     }
 
-    // Etymology — cardinality n, deduplicated by text, merge source labels.
+    // Etymology - cardinality n, deduplicated by text, merge source labels.
     // NOTE: the v2 alias is `etymology` (singular).
     const etymologies: EntryDetail['etymologies'] = [];
     mergeEtymologies(etymologies, extractEtymologies(tree));
 
-    // Cognates — cardinality n. cognate_entry_id hydrates as [{resourceId}].
+    // Cognates - cardinality n. cognate_entry_id hydrates as [{resourceId}].
     const cognates: EntryDetail['cognates'] = [];
     mergeCognates(cognates, extractCognates(tree));
 
     // Reverse-cognate continuum (v1 parity): the entries that CITE this one via
-    // their `cognate_entry_id` link — e.g. the MacBain "fear" lists the Irish
+    // their `cognate_entry_id` link - e.g. the MacBain "fear" lists the Irish
     // "fear" as a cognate, so opening the Irish entry must surface MacBain's
     // etymology/cognates. `citedBy` returns those citer UUIDs across the layer
     // stack; hydrate each and FOLD its etymology + cognates in (dedup as above).
@@ -295,7 +295,7 @@ export async function loadEntryV2(uri: string, headDirs: string[]): Promise<Entr
         const citer = ct as Record<string, any>;
         // SAME-LEXEME gate: only fold a citer whose headword is graphically
         // identical to this entry (up to acute↔grave). `cited_by` returns every
-        // entry that lists this word as a `cognate_entry_id` — but a cognate is a
+        // entry that lists this word as a `cognate_entry_id` - but a cognate is a
         // related, differently-spelled word (MacBain "bàs" citing Irish "bás" IS
         // the same lexeme and folds; MacBain "X" citing Irish "Y" is not and must
         // not). Without this, unrelated MacBain etymologies leak onto Irish entries.
@@ -308,12 +308,12 @@ export async function loadEntryV2(uri: string, headDirs: string[]): Promise<Entr
     }
 
     // External example sentences. `external_examples` hydrates as a list-of-LISTS of
-    // refs into the ExternalExample model — whose graph is NOT shipped with this head,
+    // refs into the ExternalExample model - whose graph is NOT shipped with this head,
     // so those resources cannot be hydrated (they come back empty). But their
     // descriptor (spine `display_name`) IS the sentence, so resolve them cheaply via
-    // `descriptors` — ONE indexed batch, no hydration, no N+1. Full detail
+    // `descriptors` - ONE indexed batch, no hydration, no N+1. Full detail
     // (translation/source/highlights) is deferred to on-interaction. Best-effort.
-    // Examples illustrating this headword — the reverse of the example layers'
+    // Examples illustrating this headword - the reverse of the example layers'
     // `illustrates.headword_entry` link (mirror of placenames). Two heads, so we
     // query each and tag its source. `headword_entry` is an example-graph node, so
     // run it example-authoritative (per head), like place's `element_entry`.
@@ -334,7 +334,7 @@ export async function loadEntryV2(uri: string, headDirs: string[]): Promise<Entr
     }
 
     // Placenames: resources in the `place` layer whose name is constituted by this
-    // word — the reverse of `name_elements.element_entry`. A DIFFERENT node path
+    // word - the reverse of `name_elements.element_entry`. A DIFFERENT node path
     // from `cognate_entry_id`, so placenames stay cleanly separate from etymological
     // cognates. `citedBy` returns only UUIDs (indexed reverse_links, no hydration);
     // we keep the full count and resolve display names for a small sample via
@@ -342,7 +342,7 @@ export async function loadEntryV2(uri: string, headDirs: string[]): Promise<Entr
     let placenames: EntryDetail['placenames'];
     try {
       // `element_entry` is a node in the PLACE graph, not the lexical_entry graph
-      // that heads the composed stack — so `cited_by` (which resolves the node
+      // that heads the composed stack - so `cited_by` (which resolves the node
       // alias against the authoritative graph = headDirs[0] = wiktionary) throws
       // "unknown alias 'element_entry'" if run over the full stack. Run it
       // place-authoritative instead: against the place head alone (the stack

@@ -21,7 +21,7 @@ function persisted<T>(key: string, initial: T): Writable<T> {
     try {
       const raw = localStorage.getItem(key);
       if (raw !== null) value = JSON.parse(raw);
-    } catch { /* corrupt — use default */ }
+    } catch { /* corrupt - use default */ }
   }
   const store = writable<T>(value);
   store.subscribe(v => {
@@ -62,7 +62,7 @@ function migrateLegacyPreference(): LocalePreference {
  */
 export const localePreference = persisted<LocalePreference>('ge:localePref', migrateLegacyPreference());
 
-/** The effective locale that {@link t} renders in. Read-only — set the
+/** The effective locale that {@link t} renders in. Read-only - set the
  *  preference, not this. */
 export const locale: Readable<Locale> = derived(localePreference, ($pref) =>
   $pref === 'system' ? detectSystemLocale() : $pref,

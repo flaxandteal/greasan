@@ -14,7 +14,7 @@
     /** Icon colour when there are NO flags (matches the surrounding bar). */
     tone?: string;
     /** Subject context, denormalized onto new notes for the all-flags page.
-     *  Only the KIND is stored as data — the display label is derived from it at
+     *  Only the KIND is stored as data - the display label is derived from it at
      *  render time (`flag.subject.*`), so notes re-localise instead of freezing
      *  whatever language was active when they were flagged. */
     subjectName?: string;
@@ -111,7 +111,7 @@
 {/if}
 
 <style>
-  /* White disc behind the flag when the resource is flagged — reads as a badge. */
+  /* White disc behind the flag when the resource is flagged - reads as a badge. */
   .ge-flag-btn { position: relative; }
   .ge-flag-btn.flagged::before {
     content: '';

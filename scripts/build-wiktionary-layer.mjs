@@ -12,7 +12,7 @@
  *   4. Pagefind indices for headword + gloss + example search
  *   5. tar.gz the result
  *
- * Metadata (graphs, collections, _all.json) is NOT written here —
+ * Metadata (graphs, collections, _all.json) is NOT written here -
  * that's build-core.mjs's job. This script only produces data artifacts.
  */
 
@@ -37,7 +37,7 @@ function stripDiacritics(text) {
   return text.normalize('NFD').replace(/[\u0300-\u036f]/g, '').normalize('NFC');
 }
 
-// Try NAPI first (native Rust — handles all operations).
+// Try NAPI first (native Rust - handles all operations).
 // Fall back to WASM if NAPI unavailable.
 let usingNapi = false;
 try {
@@ -80,7 +80,7 @@ const models = [
       description: '<Gloss>',
       // `slug` carries the part_of_speech REFERENCE (concept UUID) so the Pagefind
       // builder can resolve it to a POS label via the controlled-list collection
-      // (the CLM vocab) — mediated by the reference system, not the raw CSV string.
+      // (the CLM vocab) - mediated by the reference system, not the raw CSV string.
       // Nothing reads a lexical entry's slug (only layer slugs are consumed), so
       // this is a safe, search-only repurpose.
       slug: '<Part of Speech>',
@@ -96,7 +96,7 @@ const allResources = {};     // graphId -> resources array
 
 // Build a NapiRdmCache from a collections array (the SKOS reference data). Passed
 // into buildResourcesFromBusinessCsv so concept/reference labels resolve through
-// the SAME identity the read side (v2_closure) resolves back — no parallel minting.
+// the SAME identity the read side (v2_closure) resolves back - no parallel minting.
 function makeRdmCache(cols) {
   if (!usingNapi) return null;
   const napi = createRequire(resolve(root, 'app/package.json'))('@alizarin/napi');
@@ -390,7 +390,7 @@ if (lexicalGraphId) {
     return codes ? [...codes] : ['GA'];
   }
 
-  // POS label per resource — resolved from the part_of_speech REFERENCE (carried on
+  // POS label per resource - resolved from the part_of_speech REFERENCE (carried on
   // descriptors.slug) through the controlled-list collection vocab (the CLM data),
   // so search can distinguish e.g. baile-noun from baile-adjective.
   const conceptToLabel = {};
@@ -426,7 +426,7 @@ if (lexicalGraphId) {
     const dialectCodes = getDialectCodes(resource);
     const dialectDisplay = dialectCodes.reduce((a, b) => a.length >= b.length ? a : b, '');
 
-    // Ceannfhocail (ga) — headword search
+    // Ceannfhocail (ga) - headword search
     const headwordNorm = stripDiacritics(headword);
     await gaIndex.addCustomRecord({
       url: uuid,
@@ -441,7 +441,7 @@ if (lexicalGraphId) {
       process.stderr.write(`\r[build-wiktionary] Pagefind: ${gaCount}/${total} entries...`);
     }
 
-    // Gluais (en) — gloss search
+    // Gluais (en) - gloss search
     if (gloss) {
       await enIndex.addCustomRecord({
         url: uuid,
@@ -453,7 +453,7 @@ if (lexicalGraphId) {
       enCount++;
     }
 
-    // Samplai — collect example sentences from __cache
+    // Samplai - collect example sentences from __cache
     const examples = [];
     const cache = resource.__cache;
     if (cache && exampleGraphId) {

@@ -5,7 +5,7 @@
 //
 // The output (head.sqlite + chunks/ + closure.json + manifest.json, plus the
 // resource-model graph.json copied alongside) is what app/src-tauri's `v2`
-// feature reads — including its tests. The artefacts are committed, so this
+// feature reads - including its tests. The artefacts are committed, so this
 // script is documentation-of-provenance first, regeneration second.
 //
 //   node scripts/build-macbain-v2.mjs

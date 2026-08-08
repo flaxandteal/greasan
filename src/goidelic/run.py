@@ -176,7 +176,7 @@ def run_pipeline(config_path: Path, fixture: bool = False) -> None:
             cache_dir=config_path.parent / "data" / "raw" / "examples",
         )
     else:
-        print("[pipeline] Stage 5/5: examples (skipped — no graph ID or path)", file=sys.stderr)
+        print("[pipeline] Stage 5/5: examples (skipped - no graph ID or path)", file=sys.stderr)
 
     elapsed = time.time() - start
     print(f"[pipeline] Done in {elapsed:.1f}s. Output: {paths['business_data']}", file=sys.stderr)

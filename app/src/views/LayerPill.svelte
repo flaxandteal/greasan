@@ -2,7 +2,7 @@
   // SPDX-License-Identifier: AGPL-3.0-or-later
   //
   // Trigger for the layer sheet: swatch dots plus an active count. Renders
-  // nothing when there is one layer or none — with a single source there is no
+  // nothing when there is one layer or none - with a single source there is no
   // stack to reason about, and an always-present control would be clutter for
   // the majority case.
   import { layerStack, layerSheetOpen } from '../lib/store';
@@ -50,7 +50,7 @@
     gap: 2px;
   }
 
-  /* Stacked bars, not bullets — reads as strata rather than a status light. */
+  /* Stacked bars, not bullets - reads as strata rather than a status light. */
   .dot {
     width: 3px;
     height: 12px;

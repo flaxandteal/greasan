@@ -1,12 +1,12 @@
 <script lang="ts">
   // SPDX-License-Identifier: AGPL-3.0-or-later
   //
-  // Layer Manager — the dedicated home for the data behind the dictionary,
+  // Layer Manager - the dedicated home for the data behind the dictionary,
   // replacing the layer controls that used to live in Settings. Reuses the
   // existing layer components (LayerDetail via currentLayer, the layerStack /
   // toggleLayerVisibility visibility model) and adds the two pieces the old
   // Settings form lacked: a per-layer STATE (active / hidden / building /
-  // failed) and a SOURCE-FIRST "Add a layer" flow — the user picks what data
+  // failed) and a SOURCE-FIRST "Add a layer" flow - the user picks what data
   // they want (a catalogue entry, a downloaded file, a URL) and the ingest
   // format is inferred, never chosen from a row of build-pipeline buttons.
   import {
@@ -40,7 +40,7 @@
   function entryFor(l: { name: string; label: string; swatch: string }): LayerEntry {
     return catEntry(l.name) ?? stubEntry(l.name, l.label, l.swatch);
   }
-  // Uninstall (delete from device). Confirm first — a device-built layer (e.g.
+  // Uninstall (delete from device). Confirm first - a device-built layer (e.g.
   // Téarma) has to be rebuilt from its TBX to come back.
   async function confirmRemove(l: { name: string; label: string }) {
     const ok = typeof window === 'undefined' || window.confirm($t('layers.removeConfirm', { name: l.label }));
@@ -53,7 +53,7 @@
   let active = $derived($layerStack.filter(l => l.visible));
   let hidden = $derived($layerStack.filter(l => !l.visible));
 
-  // The layer currently building isn't in `layers` yet — surface it as its own
+  // The layer currently building isn't in `layers` yet - surface it as its own
   // card driven by buildProgress. On 'failed' it stays until dismissed/retried.
   let buildingName = $derived($buildingLayerName);
   let building = $derived(
@@ -80,7 +80,7 @@
 
   // Suggested sources not yet installed, derived from the CATALOGUE (the single
   // source): any layer whose definition carries an `install` block is offered,
-  // minus the ones already installed. These are SOURCES, not formats — each
+  // minus the ones already installed. These are SOURCES, not formats - each
   // carries the ingest format so the user never picks one.
   let suggestions = $derived<SuggestedLayer[]>(
     catalogue
@@ -100,7 +100,7 @@
   let addError = $state('');
   let showAdvanced = $state(false);
 
-  /** Infer the ingest format from the source — the user never selects it. */
+  /** Infer the ingest format from the source - the user never selects it. */
   function detectFormat(filenameOrUrl: string): 'tbx-v2' | 'built' | 'prebuild-v2' {
     const s = filenameOrUrl.toLowerCase();
     if (/\.tbx($|\?)/.test(s)) return 'tbx-v2';          // terminology → FTS build
@@ -115,7 +115,7 @@
     addError = '';
     // The picker's own title carries the real name; show that, not the SAF id.
     pickedFile = decodeURIComponent(picked.split('/').pop() || 'file');
-    addUrl = picked;                    // content:// URI — build_layer handles it
+    addUrl = picked;                    // content:// URI - build_layer handles it
     if (!addName.trim()) addName = pickedFile.replace(/\.(tbx|tar\.gz|tgz|zip)$/i, '');
   }
 

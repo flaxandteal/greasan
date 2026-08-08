@@ -91,7 +91,7 @@ const typedGraph = parseStaticGraph(JSON.stringify({ graph: [graph] }));
 typedGraph.setDescriptorTemplate('name', '<Headword>');
 typedGraph.setDescriptorTemplate('description', '<Gloss>');
 // `slug` carries the part_of_speech REFERENCE so Pagefind can resolve it to a POS
-// label via the controlled-list collection vocab (CLM) — see build-wiktionary-layer.
+// label via the controlled-list collection vocab (CLM) - see build-wiktionary-layer.
 typedGraph.setDescriptorTemplate('slug', '<Part of Speech>');
 
 // Build resources
@@ -140,7 +140,7 @@ if (usingNapi) {
 }
 
 // Descriptor computation, BATCHED. A single populateCachesFromJson over all 193k
-// resources OOMs on a loaded machine — the V8 JSON string, the NAPI parse and the
+// resources OOMs on a loaded machine - the V8 JSON string, the NAPI parse and the
 // output all live at once. enrich=false (the cross-ref __cache is unused by the
 // tearma Pagefind and the tile-built head), so per-resource descriptors don't need
 // the full set and chunks are independent. Peak memory becomes ~one chunk instead
@@ -268,7 +268,7 @@ function getDialectCodes(resource) {
   return codes ? [...codes] : ['GA'];
 }
 
-// POS label per resource — part_of_speech REFERENCE (on descriptors.slug) resolved
+// POS label per resource - part_of_speech REFERENCE (on descriptors.slug) resolved
 // through the controlled-list collection vocab (CLM). See build-wiktionary-layer.
 const conceptToLabel = {};
 for (const c of collections) {

@@ -10,17 +10,17 @@
 //!
 //! The emitter is a path dependency, so building it from *this* workspace puts
 //! its artifacts in *this* `target/` and leaves the RosMadair sandbox's `target/`
-//! lock and `Cargo.lock` alone — which matters, because that tree is worked on
+//! lock and `Cargo.lock` alone - which matters, because that tree is worked on
 //! independently and `--manifest-path <sandbox>` would take both.
 //!
 //! # Why the artifact had to be re-emitted at all
 //!
 //! The committed head was emitted at `manifest_version` 3, which predates the
-//! manifest's `handlers` block — the declaration `src/v2.rs` now rebuilds its
+//! manifest's `handlers` block - the declaration `src/v2.rs` now rebuilds its
 //! query registry from. `handlers` is a required field of the current
 //! `ros_madair_format::Manifest`, so a v3 manifest does not merely lack the
 //! declaration: it does not parse, and `ros-madair-read` refuses the snapshot
-//! outright (loudly, which is the intended behaviour — see that crate's P17
+//! outright (loudly, which is the intended behaviour - see that crate's P17
 //! note). Re-emitting is the only move; there is deliberately no compat path.
 
 use std::path::Path;
@@ -54,7 +54,7 @@ fn main() {
     std::fs::copy(&graph_src, out_dir.join("graph.json")).expect("copy graph.json");
 
     println!(
-        "v2 head written to {} — snapshot {}, {} resources, {} tiles, {} chunks",
+        "v2 head written to {} - snapshot {}, {} resources, {} tiles, {} chunks",
         out_dir.display(),
         summary.snapshot_id,
         summary.resources,
