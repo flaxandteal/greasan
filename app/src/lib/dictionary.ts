@@ -248,6 +248,13 @@ async function getAvailableDialects(pf: PagefindInstance, base: string): Promise
  */
 const NON_SEARCH_LAYERS: ReadonlySet<string> = new Set(['place', 'concept', 'example-tatoeba', 'example-gaois', 'person', 'note', 'layer']);
 
+// Form-of index layers. Their Pagefind records key on inflected surface forms
+// (e.g. "tháinig") and resolve, via the shared entry uuid, to entries RENDERED
+// by other layers - they inject no display content of their own. So they stay
+// searchable even when hidden from the layer stack: hiding BuNaMo (morphology)
+// shouldn't stop "tháinig" from finding "tar".
+const FORM_INDEX_LAYERS: ReadonlySet<string> = new Set(['bunamo']);
+
 function allPagefindBasesForLang(lang: SearchLang): string[] {
   const bases: string[] = [];
   const dir = lang === 'en' ? 'pagefind-en' : lang === 'sampla' ? 'pagefind-sampla' : `pagefind-${lang}`;
@@ -257,7 +264,10 @@ function allPagefindBasesForLang(lang: SearchLang): string[] {
   // layers (which are NON_SEARCH for ga/en); for ga/en we skip those layers.
   const sampla = lang === 'sampla';
   for (const layer of dynamicLayers) {
-    if (hiddenLayers.has(layer.name)) continue;
+    // Hidden layers drop out of search, EXCEPT form-of indexes (see above):
+    // their hits point at entries other layers render, so hiding them from the
+    // stack shouldn't remove inflected-form lookup.
+    if (hiddenLayers.has(layer.name) && !FORM_INDEX_LAYERS.has(layer.name)) continue;
     const isExample = layer.name.startsWith('example-');
     if (sampla ? !isExample : NON_SEARCH_LAYERS.has(layer.name)) continue;
     if (!layer.pagefindBase) continue;
@@ -339,6 +349,27 @@ function dialectsToCode(labels: string[]): string {
   return branches.size > 1 ? 'G' : ([...branches][0] || '');
 }
 
+/**
+ * Reverse an Irish initial mutation on the (first) word of a query: lenition,
+ * eclipsis, and t-/h- prefixes. Mirrors the logainm layer builder's stripMutation.
+ * Morphology layers index the bare stem ("táinig"), but a user types the lenited
+ * surface form ("tháinig") - stripping lets the two meet. Returns the word
+ * unchanged when it carries no recognisable mutation.
+ */
+export function stripInitialMutation(word: string): string {
+  let w = word.trim();
+  // t-prefix (an t-uisce), t before s (an tSráid), h-prefix (na hÉireann)
+  if (/^t-/i.test(w)) w = w.slice(2);
+  else if (/^ts[^h]/i.test(w)) w = w.slice(1);
+  else if (/^h[aeiouáéíóúàèìòù]/i.test(w)) w = w.slice(1);
+  // eclipsis: bhf->f, then mb->b gc->c nd->d ng->g bp->p dt->t
+  if (/^bhf/i.test(w)) w = w.slice(2);
+  else if (/^(mb|gc|nd|ng|bp|dt)/i.test(w)) w = w.slice(1);
+  // lenition: C + h + (vowel|l|r|n) -> C + rest
+  else if (/^[bcdfgmpst]h[aeiouáéíóúàèìòùlrn]/i.test(w)) w = w[0] + w.slice(2);
+  return w;
+}
+
 export async function search(query: string, lang: SearchLang = 'ga', dialects?: string[]): Promise<EntrySummary[]> {
   if (!query.trim()) return [];
 
@@ -359,19 +390,33 @@ export async function search(query: string, lang: SearchLang = 'ga', dialects?: 
     // Normalize query: strip diacritics so "focal" matches "fócal"
     const normQuery = stripDiacritics(query);
 
+    // Initial-mutation-aware search: a user types the lenited/eclipsed surface
+    // form ("tháinig", "dtáinig") but morphology layers (BuNaMo) index the bare
+    // stem ("táinig"). Search the mutation-stripped variant too, so an inflected
+    // surface form still lands on its lemma. ga only; only when stripping the
+    // mutation actually changes the word (so "tar" isn't double-searched).
+    const queryStrs = [normQuery];
+    if (lang === 'ga') {
+      const demut = stripDiacritics(stripInitialMutation(query));
+      if (demut && demut !== normQuery) queryStrs.push(demut);
+    }
+
     // 1-2 char queries: prefix/substring matching floods with hits (and is slow),
     // so do an EXACT-WORD search instead (pagefind double-quote syntax) - short
     // lemmas like "bó" / "cú" / "ó" stay findable without the noise.
-    const pfQuery = query.trim().length < 3 ? `"${normQuery}"` : normQuery;
+    const mkPfQuery = (q: string) => { const t = q.trim(); return t.length < 3 ? `"${t}"` : t; };
 
-    // Query all Pagefind instances + the FTS sidecars in parallel.
+    // Query all Pagefind instances (once per query variant) + the FTS sidecars
+    // in parallel. Same-uri hits from the variants dedupe in the merge below.
     const [pfSets, ftsHits] = await Promise.all([
       Promise.all(
-        bases.map(base =>
-          searchOneInstance(base, pfQuery, lang, dialects).catch(err => {
-            console.warn(`[dictionary] Search failed for ${base}:`, err);
-            return [] as EntrySummary[];
-          })
+        bases.flatMap(base =>
+          queryStrs.map(q =>
+            searchOneInstance(base, mkPfQuery(q), lang, dialects).catch(err => {
+              console.warn(`[dictionary] Search failed for ${base}:`, err);
+              return [] as EntrySummary[];
+            })
+          )
         )
       ),
       ftsField && ftsDirs.length
