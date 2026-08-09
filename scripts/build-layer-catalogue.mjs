@@ -64,16 +64,19 @@ const LAYERS = [
     types: ['Glosses', 'Senses', 'Etymology', 'Pronunciation', 'Cognates'], formats: ['Arches JSON', 'RM'],
     swatch: 'var(--layer-wk)', default_on: 'true', descType: 'Overview',
     desc: 'Crowd-sourced Irish and Scottish Gaelic dictionary content extracted from Wiktionary - glosses, senses, etymologies, pronunciations and cognates.',
-    config: { searchable: true, langs: ['ga', 'en'],
-      install: { name: 'wiktionary-goidelic', url: 'http://localhost:8080/wiktionary-layer.tar.gz', format: 'built' } },
+    // No `install`: this layer ships bundled in the APK and is auto-installed on
+    // first run (v2_prepare_offline), like bunamo/place. Offering a catalogue
+    // "Install" here only surfaced a dev-only http://localhost:8080 URL that fails
+    // on-device. Re-add a real (GitHub-release) URL if OTA updates are wanted.
+    config: { searchable: true, langs: ['ga', 'en'] },
     links: [{ t: 'Wiktionary', u: 'https://www.wiktionary.org/', ty: 'Homepage' }, { t: 'Data dumps', u: 'https://dumps.wikimedia.org/', ty: 'Source' }], downloads: [] },
   { slug: 'macbain', head: 'macbain-v2', name: 'MacBain (1911)',
     licence: 'Public Domain', attribution: "MacBain's Etymological Dictionary of the Gaelic Language (1911) - public domain",
     types: ['Etymology', 'Cognates', 'Glosses'], formats: ['Arches JSON', 'RM'],
     swatch: 'var(--layer-mb)', default_on: 'true', descType: 'Overview',
     desc: "Alexander MacBain's 1911 etymological dictionary of Scottish Gaelic - etymologies and cognates. Out of copyright.",
-    config: { searchable: true, langs: ['ga', 'en'],
-      install: { name: 'macbain', url: 'http://localhost:8080/macbain-layer.tar.gz', format: 'built' } },
+    // No `install`: bundled + auto-installed on first run (see wiktionary note).
+    config: { searchable: true, langs: ['ga', 'en'] },
     links: [{ t: 'Archive.org', u: 'https://archive.org/details/etymologicaldict00macbuoft', ty: 'Source' }], downloads: [] },
   { slug: 'tearma', head: 'tearma-v2', name: 'Téarma',
     licence: 'No open reuse licence', attribution: 'Téarma.ie - terminology data (c) Foras na Gaeilge; implementation (c) Gaois, Fiontar & Scoil na Gaeilge, DCU. Not redistributed; loaded on-device from your own downloaded TBX.',

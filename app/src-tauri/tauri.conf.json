@@ -2,7 +2,7 @@
   "$schema": "https://raw.githubusercontent.com/nicegui-org/nicegui/tauri-v2/nicegui/static/tauri/tauri.conf.json",
   "identifier": "org.flaxandteal.greasan",
   "productName": "Gréasán",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "build": {
     "devUrl": "http://localhost:5173",
     "frontendDist": "../dist",
