@@ -407,15 +407,20 @@ export async function search(query: string, lang: SearchLang = 'ga', dialects?: 
     const mkPfQuery = (q: string) => { const t = q.trim(); return t.length < 3 ? `"${t}"` : t; };
 
     // Query all Pagefind instances (once per query variant) + the FTS sidecars
-    // in parallel. Same-uri hits from the variants dedupe in the merge below.
-    const [pfSets, ftsHits] = await Promise.all([
+    // in parallel. Tag each result set with the query index that produced it, so
+    // hits found ONLY via the demutated query (exact matches of an inflected form
+    // the user typed) can be ranked as strong hits below. Same-uri hits dedupe.
+    const demutIdx = queryStrs.length > 1 ? queryStrs.length - 1 : -1;
+    const [pfTagged, ftsHits] = await Promise.all([
       Promise.all(
         bases.flatMap(base =>
-          queryStrs.map(q =>
-            searchOneInstance(base, mkPfQuery(q), lang, dialects).catch(err => {
-              console.warn(`[dictionary] Search failed for ${base}:`, err);
-              return [] as EntrySummary[];
-            })
+          queryStrs.map((q, qi) =>
+            searchOneInstance(base, mkPfQuery(q), lang, dialects)
+              .then(rs => ({ qi, rs }))
+              .catch(err => {
+                console.warn(`[dictionary] Search failed for ${base}:`, err);
+                return { qi, rs: [] as EntrySummary[] };
+              })
           )
         )
       ),
@@ -426,6 +431,14 @@ export async function search(query: string, lang: SearchLang = 'ga', dialects?: 
           })
         : Promise.resolve([]),
     ]);
+    // URIs surfaced by the mutation-stripped query - the lemma owns the inflected
+    // surface form the user actually typed, so it deserves a strong rank tier.
+    const demutMatchUris = new Set<string>();
+    const pfSets: EntrySummary[][] = [];
+    for (const { qi, rs } of pfTagged) {
+      pfSets.push(rs);
+      if (qi === demutIdx) for (const r of rs) demutMatchUris.add(r.uri);
+    }
     const resultSets: EntrySummary[][] = [...pfSets];
     if (ftsHits.length) {
       // The FTS index carries no dialect column, but every FTS-built layer is
@@ -486,6 +499,16 @@ export async function search(query: string, lang: SearchLang = 'ga', dialects?: 
       console.warn('[dictionary] searchDisplay failed:', err);
     }
 
+    // Normalise any residual raw language label to its branch code. Form-index
+    // (BuNaMo) hits carry a plain "Irish" in their Pagefind meta; if searchDisplay
+    // didn't canonicalise it, without this it would be dimmed as non-GA and badged
+    // "Irish" rather than shown as a Gaeilge (GA) result.
+    for (const r of merged) {
+      if (r.dialect && !/^G/.test(r.dialect)) {
+        r.dialect = dialectsToCode([r.dialect]) || r.dialect;
+      }
+    }
+
     // Collapse residual dialect-split duplicates. A lexeme that still carries a
     // legacy `ga-`/`gd-` slug in one head (e.g. an un-migrated MacBain entry keyed
     // to a pre-`goi-` Wiktionary id) surfaces as a second row beside the neutral
@@ -513,25 +536,26 @@ export async function search(query: string, lang: SearchLang = 'ga', dialects?: 
     const esc = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
     const wordReQ = new RegExp(`(^|[\\s-])${esc(q)}($|[\\s-])`);
     const wordReNorm = new RegExp(`(^|[\\s-])${esc(qNorm)}($|[\\s-])`);
-    merged.sort((a, b) => {
-      const aText = (lang === 'en' ? a.gloss || '' : a.headword).toLowerCase();
-      const bText = (lang === 'en' ? b.gloss || '' : b.headword).toLowerCase();
-      // Tier order: exact-with-accent > exact-up-to-accent > prefix/compound-with-accent
-      // > prefix-up-to-accent > whole-word-in-headword > everything else (substring,
-      // gloss, inflected). exact-up-to-accent sits ABOVE the prefix tiers so a whole
-      // headword ("bó" searched as "bo") outranks a compound/prefix ("bo-…"); the new
-      // whole-word tier lifts "cnoc mór" (mór a full word) above substring/gloss noise.
-      const wholeWord = (t: string): boolean =>
-        wordReQ.test(t) || wordReNorm.test(stripDiacritics(t));
-      const rank = (t: string): number =>
-        t === q ? 0
-          : stripDiacritics(t) === qNorm ? 1
-            : t.startsWith(q) ? 2
-              : stripDiacritics(t).startsWith(qNorm) ? 3
-                : wholeWord(t) ? 4
-                  : 5;
-      return rank(aText) - rank(bText);
-    });
+    // Tier order: exact-with-accent > exact-up-to-accent > mutation-exact >
+    // prefix/compound-with-accent > prefix-up-to-accent > whole-word-in-headword >
+    // everything else (substring, gloss, inflected). exact-up-to-accent sits ABOVE
+    // the prefix tiers so a whole headword ("bó" searched as "bo") outranks a
+    // compound/prefix ("bo-…"). mutation-exact sits just below exact: if the user
+    // typed an inflected/mutated surface form ("tháinig") the lemma that owns it
+    // ("tar") is what they want, so lift it above prefix/substring/gloss noise.
+    const wholeWord = (t: string): boolean =>
+      wordReQ.test(t) || wordReNorm.test(stripDiacritics(t));
+    const rank = (r: EntrySummary): number => {
+      const t = (lang === 'en' ? r.gloss || '' : r.headword).toLowerCase();
+      if (t === q) return 0;
+      if (stripDiacritics(t) === qNorm) return 1;
+      if (demutMatchUris.has(r.uri)) return 2;
+      if (t.startsWith(q)) return 3;
+      if (stripDiacritics(t).startsWith(qNorm)) return 4;
+      if (wholeWord(t)) return 5;
+      return 6;
+    };
+    merged.sort((a, b) => rank(a) - rank(b));
 
     return merged.slice(0, 50);
   } catch (err) {
