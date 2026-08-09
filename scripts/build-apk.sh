@@ -9,6 +9,7 @@
 #   scripts/build-apk.sh --install --launch # ... + launch the app
 #   scripts/build-apk.sh --device SERIAL    # target a specific adb device
 #   scripts/build-apk.sh --debug            # debug APK (auto-signed, all ABIs)
+#   scripts/build-apk.sh --release          # PUBLIC release: no nav-server, alpha-signed
 #   scripts/build-apk.sh --no-rezip         # skip the bundle-head refresh
 #
 # It ALWAYS bakes in `--features v2` (forgetting it ships a v2-less APK where
@@ -29,12 +30,13 @@ PKG="org.flaxandteal.greasan"
 # (licensing), so it is built on-device (tbx-v2 → FTS5 sidecar) instead.
 HEADS=(wiktionary-v2-full macbain-v2 bunamo-v2 place-v2 concept-v2 example-tatoeba-v2 example-gaois-v2 person-v2 note-v2 layer-v2)
 
-INSTALL=0; LAUNCH=0; DEBUG=0; REZIP=1; DEVICE=""
+INSTALL=0; LAUNCH=0; DEBUG=0; REZIP=1; RELEASE=0; DEVICE=""
 while [ $# -gt 0 ]; do
   case "$1" in
     --install)  INSTALL=1 ;;
     --launch)   LAUNCH=1 ;;
     --debug)    DEBUG=1 ;;
+    --release)  RELEASE=1 ;;
     --no-rezip) REZIP=0 ;;
     --device)   DEVICE="${2:?--device needs a serial}"; shift ;;
     -h|--help)  sed -n '2,25p' "$0"; exit 0 ;;
@@ -72,7 +74,12 @@ else
 fi
 
 # --- 2. Build the APK (beforeBuildCommand runs the vite frontend build) ---
-BUILD_ARGS=(--apk --features v2-emit,nav-server --target aarch64)
+# nav-server is a debug-only unauthenticated localhost control port (127.0.0.1:8787)
+# - NEVER ship it in a public release. --release omits it; local/dev builds keep it
+# for the tour probe. See Cargo.toml.
+FEATURES="v2-emit,nav-server"
+[ $RELEASE -eq 1 ] && FEATURES="v2-emit"
+BUILD_ARGS=(--apk --features "$FEATURES" --target aarch64)
 [ $DEBUG -eq 1 ] && BUILD_ARGS+=(--debug)
 echo "[apk] tauri android build ${BUILD_ARGS[*]}"
 ( cd "$ROOT/app" && npx tauri android build "${BUILD_ARGS[@]}" )
@@ -87,9 +94,17 @@ else
   SIGNED="$ROOT/data/bundle/greasan-signed.apk"
   ALIGNED="$(mktemp -u).apk"
   "${BT}zipalign" -f -p 4 "$UNSIGNED" "$ALIGNED"
-  "${BT}apksigner" sign --ks "$HOME/.android/debug.keystore" \
-    --ks-pass pass:android --ks-key-alias androiddebugkey --key-pass pass:android \
-    --out "$SIGNED" "$ALIGNED"
+  if [ $RELEASE -eq 1 ]; then
+    # Alpha signing identity - MUST stay stable across updates (else testers must
+    # uninstall). Self-signed ALPHA key only; regenerate before any Play upload.
+    "${BT}apksigner" sign --ks "$HOME/.android/greasan-alpha.jks" \
+      --ks-pass pass:greasan-alpha-2026 --ks-key-alias greasan --key-pass pass:greasan-alpha-2026 \
+      --out "$SIGNED" "$ALIGNED"
+  else
+    "${BT}apksigner" sign --ks "$HOME/.android/debug.keystore" \
+      --ks-pass pass:android --ks-key-alias androiddebugkey --key-pass pass:android \
+      --out "$SIGNED" "$ALIGNED"
+  fi
   rm -f "$ALIGNED"
   "${BT}apksigner" verify "$SIGNED" >/dev/null && echo "[sign] verified"
 fi
