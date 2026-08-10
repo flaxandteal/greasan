@@ -118,43 +118,15 @@
     if ('bcdfgmpst'.includes(c)) return w[0] + 'h' + w.slice(1);
     return w; // vowels, l, n, r, h unchanged
   }
-  // Which INDEPENDENT forms take séimhiú (or d'/d'fh). BuNaMo/Gramadán store the
-  // radical ("táinig", "geobhaidh"), so the mutation is applied here:
-  //  - past: lenites for (almost) all; autonomous never mutates (óladh, moladh);
-  //  - conditional: lenites for ALL persons, incl. autonomous (d'ólfaí, mholfaí);
-  //  - future: never lenites — EXCEPT faigh (gheobhaidh, gheofar);
-  //  - present/imperative: unmutated.
-  // Two lexical irregulars break the past rule: faigh (fuair) and abair (dúirt)
-  // do NOT lenite. abair's future/conditional (déarfaidh/déarfadh) are also left
-  // unlenited here — UNCONFIRMED, flagged for review.
-  function shouldLenite(tense: string, person: string): boolean {
-    const lemma = (entry?.headword ?? '').trim().toLowerCase();
-    if (lemma === 'abair') return false; // dúirt / déarfaidh / déarfadh
-    if (tense === 'past') return lemma !== 'faigh' && person !== 'autonomous';
-    if (tense === 'conditional') return true;
-    if (tense === 'future') return lemma === 'faigh'; // gheobhaidh, gheofar
-    return false;
-  }
-  /** Independent past/conditional surface form of a bare stem: séimhiú on a
-   * lenitable consonant, d' before a vowel, d'fh before f. l/n/r and the s-cluster
-   * exceptions are unchanged. The autonomous/saor form is handled by the caller. */
-  function independentLenite(w: string): string {
-    if (!w) return w;
-    const c = w[0].toLowerCase();
-    if ('aeiouáéíóú'.includes(c)) return "d'" + w; // ól -> d'ól
-    if (c === 'f') return "d'fh" + w.slice(1); // fág -> d'fhág
-    if (c === 's') return 'cmpt'.includes((w[1] ?? '').toLowerCase()) ? w : 'sh' + w.slice(1);
-    if ('bcdgmpt'.includes(c)) return w[0] + 'h' + w.slice(1); // t->th, m->mh
-    return w; // l, n, r, h
-  }
-  /** A verb cell's grey particle + its (mutated) forms. Dependent: the particle's
-   * mutation. Independent: séimhiú on past/conditional, except the autonomous
-   * form (moladh, tángthas), which never lenites. */
-  function depCell(tense: string, person: string, forms: { text: string }[]): { particle: string; text: string } {
+  /** A verb cell's grey particle + its forms. INDEPENDENT forms arrive already
+   * realised - séimhiú/d' is baked in by the Gramadan engine (build-bunamo-data.py
+   * for the attested tab, gramadan-wasm for the generated tab), so no mutation is
+   * applied here. DEPENDENT forms are the stored dependent stem; the toggle adds
+   * the particle (go/gur) and its eclipsis/lenition. */
+  function depCell(tense: string, forms: { text: string }[]): { particle: string; text: string } {
     const p = depParticle(tense);
     if (p) return { particle: p, text: forms.map((f) => mutateForParticle(p, f.text)).join(', ') };
-    const lenite = shouldLenite(tense, person);
-    return { particle: '', text: forms.map((f) => (lenite ? independentLenite(f.text) : f.text)).join(', ') };
+    return { particle: '', text: forms.map((f) => f.text).join(', ') };
   }
 
   let attestedParadigm = $derived.by(() => {
@@ -481,7 +453,7 @@
                 </button>
                 <div class="ge-acc-body">
                   {#each tsec.rows as r}
-                    {@const dc = depCell(tsec.tense, r.person, r.forms)}
+                    {@const dc = depCell(tsec.tense, r.forms)}
                     <div class="ge-form-line">
                       <span class="ge-para-person">{personLabel(r.person)}</span>
                       <span class="gf-word">{#if dc.particle}<span class="dep-particle">{dc.particle}</span> {/if}{dc.text}</span>
