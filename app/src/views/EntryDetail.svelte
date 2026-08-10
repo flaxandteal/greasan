@@ -118,10 +118,23 @@
     if ('bcdfgmpst'.includes(c)) return w[0] + 'h' + w.slice(1);
     return w; // vowels, l, n, r, h unchanged
   }
-  // Tenses whose INDEPENDENT affirmative takes séimhiú on the bare stem: past and
-  // conditional (BuNaMo/Gramadán store the radical "táinig", not "tháinig").
-  // Present/future/imperative are unmutated.
-  const LENITE_TENSES = new Set(['past', 'conditional']);
+  // Which INDEPENDENT forms take séimhiú (or d'/d'fh). BuNaMo/Gramadán store the
+  // radical ("táinig", "geobhaidh"), so the mutation is applied here:
+  //  - past: lenites for (almost) all; autonomous never mutates (óladh, moladh);
+  //  - conditional: lenites for ALL persons, incl. autonomous (d'ólfaí, mholfaí);
+  //  - future: never lenites — EXCEPT faigh (gheobhaidh, gheofar);
+  //  - present/imperative: unmutated.
+  // Two lexical irregulars break the past rule: faigh (fuair) and abair (dúirt)
+  // do NOT lenite. abair's future/conditional (déarfaidh/déarfadh) are also left
+  // unlenited here — UNCONFIRMED, flagged for review.
+  function shouldLenite(tense: string, person: string): boolean {
+    const lemma = (entry?.headword ?? '').trim().toLowerCase();
+    if (lemma === 'abair') return false; // dúirt / déarfaidh / déarfadh
+    if (tense === 'past') return lemma !== 'faigh' && person !== 'autonomous';
+    if (tense === 'conditional') return true;
+    if (tense === 'future') return lemma === 'faigh'; // gheobhaidh, gheofar
+    return false;
+  }
   /** Independent past/conditional surface form of a bare stem: séimhiú on a
    * lenitable consonant, d' before a vowel, d'fh before f. l/n/r and the s-cluster
    * exceptions are unchanged. The autonomous/saor form is handled by the caller. */
@@ -140,7 +153,7 @@
   function depCell(tense: string, person: string, forms: { text: string }[]): { particle: string; text: string } {
     const p = depParticle(tense);
     if (p) return { particle: p, text: forms.map((f) => mutateForParticle(p, f.text)).join(', ') };
-    const lenite = LENITE_TENSES.has(tense) && person !== 'autonomous';
+    const lenite = shouldLenite(tense, person);
     return { particle: '', text: forms.map((f) => (lenite ? independentLenite(f.text) : f.text)).join(', ') };
   }
 
