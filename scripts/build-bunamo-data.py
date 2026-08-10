@@ -39,6 +39,8 @@ from goidelic.slug_identity import goi_slug  # noqa: E402
 from gramadan.v2.database import Database  # noqa: E402
 from gramadan import verb as v1verb  # noqa: E402
 from gramadan.v2.verb import VerbConjugationClass  # noqa: E402
+from gramadan.features import Mutation  # noqa: E402
+from gramadan.opers import Opers  # noqa: E402
 
 BUNAMO_DIR = REPO / "data" / "bunamo-src"
 BASE_CSV = REPO / "data" / "processed" / "lexical_entry_data.csv"
@@ -130,6 +132,33 @@ def adj_forms(word):
             yield f.value, list(feats)
 
 
+# Map a stored VerbPerson to the VP-level person the tense rules are keyed by.
+_VP_PERSON = {
+    "Base": v1verb.VPPerson.NoSubject,
+    "Sg1": v1verb.VPPerson.Sg1, "Sg2": v1verb.VPPerson.Sg2, "Sg3": v1verb.VPPerson.Sg3Masc,
+    "Pl1": v1verb.VPPerson.Pl1, "Pl2": v1verb.VPPerson.Pl2, "Pl3": v1verb.VPPerson.Pl3,
+    "Auto": v1verb.VPPerson.Auto,
+}
+
+
+def independent_mutation(word, tense, person) -> Mutation:
+    """Blessed independent-declarative-positive mutation for a stored verb form,
+    read from Gramadan v2's tense-rule table. This is what turns the radical
+    "táinig"/"geobhaidh"/"mol"/"ól" into "tháinig"/"gheobhaidh"/"mhol"/"d'ól",
+    and correctly LEAVES faigh past "fuair", abair "dúirt"/"déarfadh" unmutated -
+    the per-verb exceptions live in the rule table, not here."""
+    try:
+        vpt = v1verb.VPTense[tense.name]
+        vpp = _VP_PERSON[person.name]
+        rules = word.tenseRules[vpt][vpp][v1verb.VPShapeType.Declar][v1verb.VPPolarity.Pos]
+    except (KeyError, AttributeError):
+        return Mutation.Nil
+    for r in rules:
+        if r.verbDependency == v1verb.VD.Indep:
+            return r.mutation
+    return Mutation.Nil
+
+
 def verb_forms(word):
     for f in word.verbalNoun:
         if f.value:
@@ -153,7 +182,14 @@ def verb_forms(word):
                 pfeats = PERSON_MAP.get(person.name, [])
                 for f in forms:
                     if f.value:
-                        yield f.value, tfeats + pfeats + ["indicative"] + dfeats
+                        # Bake the séimhiú/d' onto INDEPENDENT forms via the blessed
+                        # rules (tháinig, gheobhaidh, d'ól, fuair unchanged). Dependent
+                        # forms stay radical: the frontend toggle adds the particle +
+                        # its eclipsis/lenition to the stored dependent stem.
+                        val = f.value
+                        if dep.name == "Indep":
+                            val = str(Opers.Mutate(independent_mutation(word, tense, person), val))
+                        yield val, tfeats + pfeats + ["indicative"] + dfeats
     # Imperative / subjunctive moods.
     for mood, persons in word.moods.items():
         mfeats = MOOD_MAP.get(mood.name)
