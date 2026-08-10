@@ -275,9 +275,7 @@ pub fn v2_prepare_offline<R: Runtime>(app: AppHandle<R>) -> Result<Vec<OfflineLa
     fs::create_dir_all(&app_data).map_err(|e| format!("mkdir {}: {e}", app_data.display()))?;
 
     let marker = app_data.join(READY_MARKER);
-    if marker.exists() {
-        return Ok(resolved_layers(&app_data));
-    }
+    let first_run = !marker.exists();
 
     let heads_root = app_data.join("heads");
     let files_root = app_data.join("files");
@@ -285,6 +283,13 @@ pub fn v2_prepare_offline<R: Runtime>(app: AppHandle<R>) -> Result<Vec<OfflineLa
     for c in CORPORA {
         // Head: heads/<head>.zip -> <app_data>/heads/<head>/
         let head_dest = heads_root.join(c.head);
+        // Extract on first run, OR when this layer's head is missing - a layer
+        // bundled by an app UPDATE that the existing READY_MARKER predates. This
+        // keeps adding a bundled layer incremental (unpack just the new one)
+        // instead of forcing a full re-provision of every corpus.
+        if !first_run && head_dest.exists() {
+            continue;
+        }
         // Remove any partial prior extraction, then unpack fresh.
         let _ = fs::remove_dir_all(&head_dest);
         fs::create_dir_all(&head_dest)
