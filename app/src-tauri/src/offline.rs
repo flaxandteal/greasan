@@ -32,7 +32,7 @@ use tauri::{AppHandle, Manager, Runtime};
 // time re-extract of every corpus so updated heads (baked bunamo, filtered gaois,
 // udt) reach existing installs. Adding a layer is handled incrementally below
 // without a bump; a per-layer version would avoid the full re-provision (TODO).
-const READY_MARKER: &str = ".offline-ready-v5";
+const READY_MARKER: &str = ".offline-ready-v6";
 
 struct CorpusSpec {
     /// Layer name - the `dynamicLayers` registry key and V2 layer name.
