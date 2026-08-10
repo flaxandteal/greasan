@@ -118,10 +118,30 @@
     if ('bcdfgmpst'.includes(c)) return w[0] + 'h' + w.slice(1);
     return w; // vowels, l, n, r, h unchanged
   }
-  /** A verb cell's grey particle + its (mutated) forms, for the dependent view. */
-  function depCell(tense: string, forms: { text: string }[]): { particle: string; text: string } {
+  // Tenses whose INDEPENDENT affirmative takes séimhiú on the bare stem: past and
+  // conditional (BuNaMo/Gramadán store the radical "táinig", not "tháinig").
+  // Present/future/imperative are unmutated.
+  const LENITE_TENSES = new Set(['past', 'conditional']);
+  /** Independent past/conditional surface form of a bare stem: séimhiú on a
+   * lenitable consonant, d' before a vowel, d'fh before f. l/n/r and the s-cluster
+   * exceptions are unchanged. The autonomous/saor form is handled by the caller. */
+  function independentLenite(w: string): string {
+    if (!w) return w;
+    const c = w[0].toLowerCase();
+    if ('aeiouáéíóú'.includes(c)) return "d'" + w; // ól -> d'ól
+    if (c === 'f') return "d'fh" + w.slice(1); // fág -> d'fhág
+    if (c === 's') return 'cmpt'.includes((w[1] ?? '').toLowerCase()) ? w : 'sh' + w.slice(1);
+    if ('bcdgmpt'.includes(c)) return w[0] + 'h' + w.slice(1); // t->th, m->mh
+    return w; // l, n, r, h
+  }
+  /** A verb cell's grey particle + its (mutated) forms. Dependent: the particle's
+   * mutation. Independent: séimhiú on past/conditional, except the autonomous
+   * form (moladh, tángthas), which never lenites. */
+  function depCell(tense: string, person: string, forms: { text: string }[]): { particle: string; text: string } {
     const p = depParticle(tense);
-    return { particle: p, text: forms.map((f) => (p ? mutateForParticle(p, f.text) : f.text)).join(', ') };
+    if (p) return { particle: p, text: forms.map((f) => mutateForParticle(p, f.text)).join(', ') };
+    const lenite = LENITE_TENSES.has(tense) && person !== 'autonomous';
+    return { particle: '', text: forms.map((f) => (lenite ? independentLenite(f.text) : f.text)).join(', ') };
   }
 
   let attestedParadigm = $derived.by(() => {
@@ -448,7 +468,7 @@
                 </button>
                 <div class="ge-acc-body">
                   {#each tsec.rows as r}
-                    {@const dc = depCell(tsec.tense, r.forms)}
+                    {@const dc = depCell(tsec.tense, r.person, r.forms)}
                     <div class="ge-form-line">
                       <span class="ge-para-person">{personLabel(r.person)}</span>
                       <span class="gf-word">{#if dc.particle}<span class="dep-particle">{dc.particle}</span> {/if}{dc.text}</span>
