@@ -126,7 +126,8 @@ def build_inverted_index(headwords: list[str]) -> dict[str, str]:
 
 
 def match_sentences(
-    sentences: list[tuple[str, str, str, str]],  # (ga_text, en_text, source, id)
+    # (ga_text, en_text, source, id, collection, citation)
+    sentences: list[tuple[str, str, str, str, str, str]],
     inverted: dict[str, str],
     headword_forms: dict[str, set[str]],
 ) -> dict[str, list[dict]]:
@@ -136,7 +137,7 @@ def match_sentences(
     """
     results: dict[str, list[dict]] = {}
 
-    for ga_text, en_text, source, sent_id in sentences:
+    for ga_text, en_text, source, sent_id, collection, citation in sentences:
         matched_headwords: set[str] = set()
         for m in _TOKEN_RE.finditer(ga_text):
             token = m.group()
@@ -161,6 +162,8 @@ def match_sentences(
                 "src": source,
                 "id": sent_id,
                 "hl": hl,
+                "collection": collection,
+                "citation": citation,
             })
 
     return results
@@ -169,7 +172,7 @@ def match_sentences(
 # --- Tatoeba fetch + parse ---
 
 
-def fetch_tatoeba(cache_dir: Path) -> list[tuple[str, str, str, str]]:
+def fetch_tatoeba(cache_dir: Path) -> list[tuple[str, str, str, str, str, str]]:
     """Download and parse Tatoeba sentences + links for Goidelic languages.
 
     Includes Irish (gle) and Scottish Gaelic (gla).
@@ -243,7 +246,7 @@ def fetch_tatoeba(cache_dir: Path) -> list[tuple[str, str, str, str]]:
     for src_id, eng_id in goidelic_to_english.items():
         goidelic_text = goidelic_sentences[src_id]
         en_text = english_sentences[eng_id]
-        results.append((goidelic_text, en_text, "tatoeba", src_id))
+        results.append((goidelic_text, en_text, "tatoeba", src_id, "", ""))
 
     print(f"[examples] Tatoeba: {len(results)} Goidelic-English pairs", file=sys.stderr)
     return results
@@ -252,7 +255,7 @@ def fetch_tatoeba(cache_dir: Path) -> list[tuple[str, str, str, str]]:
 # --- Gaois TMX fetch + parse ---
 
 
-def fetch_gaois(cache_dir: Path) -> list[tuple[str, str, str, str]]:
+def fetch_gaois(cache_dir: Path) -> list[tuple[str, str, str, str, str, str]]:
     """Download and parse Gaois legislation TMX files.
 
     Returns list of (ga_text, en_text, 'gaois', segment_id).
@@ -286,10 +289,13 @@ def fetch_gaois(cache_dir: Path) -> list[tuple[str, str, str, str]]:
 
 def _parse_tmx(
     fileobj: io.BufferedIOBase, source_name: str
-) -> list[tuple[str, str, str, str]]:
-    """Parse a TMX file, extracting ga/en segment pairs.
+) -> list[tuple[str, str, str, str, str, str]]:
+    """Parse a TMX file, extracting ga/en segment pairs with provenance.
 
     Filters to 4-10 word Irish segments, skipping all-caps and UI cruft.
+    Returns (ga, en, 'gaois', tuid, collection, citation) tuples — the tuid is the
+    stable per-unit id, the collection is the sub-corpus (e.g. "Irish Court Rules")
+    and the citation is the legal instrument reference (e.g. "I.R. Uimh. 93 de 1997").
     """
     results = []
     seg_counter = 0
@@ -323,6 +329,13 @@ def _parse_tmx(
         if not ga_text or not en_text:
             continue
 
+        # Skip untranslated units: some legislation TUs leave the Irish segment as
+        # the English source, so ga_text is really English. Tokenising it links
+        # English words to same-spelled Irish headwords (e.g. "each" -> each/horse).
+        # An identical pair is never a real Irish example, so drop it.
+        if ga_text == en_text:
+            continue
+
         # Filter: 4-10 words in the Irish segment
         word_count = len(ga_text.split())
         if word_count < 4 or word_count > 10:
@@ -336,9 +349,24 @@ def _parse_tmx(
         if ga_text.startswith("http") or ga_text.isdigit():
             continue
 
+        # Provenance from the TMX translation unit: the stable tuid + the
+        # collection (sub-corpus) + the legal citation (both carried as <prop>s).
+        collection = ""
+        citation = ""
+        for prop in tu.findall("prop"):
+            ptype = (prop.get("type") or "").lower()
+            val = (prop.text or "").strip()
+            if ptype == "collection" and val:
+                collection = val
+            elif ptype == "source" and val:
+                citation = val
+
         seg_counter += 1
-        seg_id = f"{source_name.replace('.tmx.zip', '')}-{seg_counter}"
-        results.append((ga_text, en_text, "gaois", seg_id))
+        # Prefer the stable TMX tuid as the id (a real reference); fall back to a
+        # positional counter only if the unit has none.
+        tuid = tu.get("tuid")
+        seg_id = tuid or f"{source_name.replace('.tmx.zip', '')}-{seg_counter}"
+        results.append((ga_text, en_text, "gaois", seg_id, collection, citation))
 
     return results
 
@@ -466,6 +494,100 @@ def augment_entry_csv(
     return augmented
 
 
+# --- v2 layer emit (example resources + illustrates links) ---
+
+EXAMPLE_LAYER_COLUMNS = [
+    "ResourceID", "sentence", "sentence_en", "source", "source_id",
+    "highlights", "collection", "citation",
+    "headword_entry", "surface", "span",
+]
+
+
+def load_headword_rids(entry_csv_path: Path) -> dict[str, list[str]]:
+    """Map each headword string to the lexical_entry ResourceID(s) carrying it."""
+    mapping: dict[str, list[str]] = {}
+    with open(entry_csv_path, "r", encoding="utf-8") as f:
+        for row in csv.DictReader(f):
+            hw = row.get("headword", "")
+            rid = row.get("ResourceID", "")
+            if hw and rid:
+                bucket = mapping.setdefault(hw, [])
+                if rid not in bucket:
+                    bucket.append(rid)
+    return mapping
+
+
+def write_example_layer_csv(
+    examples: dict[str, list[dict]],
+    headword_rids: dict[str, list[str]],
+    output_path: Path,
+) -> int:
+    """Emit the v2 example-layer business CSV: one example resource per sentence,
+    with an `illustrates` row per (headword entry, occurrence).
+
+    `headword_entry` holds the goi lexical_entry ResourceID; the layer builder
+    resolves it to the cross-graph resource UUID (like place's element_entry).
+    Returns the number of distinct example resources.
+    """
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+
+    # Invert {headword: [ex]} -> {resource_id: {fields, illustrates}}.
+    per_ex: dict[str, dict] = {}
+    for hw, ex_list in examples.items():
+        rids = headword_rids.get(hw, [])
+        if not rids:
+            continue  # headword not in the emitted dictionary — nothing to link
+        for ex in ex_list:
+            rid = example_resource_id(ex["src"], ex["id"])
+            entry = per_ex.get(rid)
+            if entry is None:
+                entry = {
+                    "sentence": ex["ga"],
+                    "sentence_en": ex["en"],
+                    "source": "Tatoeba" if ex["src"] == "tatoeba" else "Gaois",
+                    "source_id": ex["id"],
+                    "collection": ex.get("collection", ""),
+                    "citation": ex.get("citation", ""),
+                    "spans": set(),
+                    "illustrates": [],  # (goi_rid, surface, span)
+                }
+                per_ex[rid] = entry
+            hl = ex.get("hl") or []
+            span = ";".join(f"{s},{e}" for s, e in hl)
+            surface = ex["ga"][hl[0][0]:hl[0][1]] if hl else hw
+            for pair in hl:
+                entry["spans"].add(tuple(pair))
+            for goi_rid in rids:
+                entry["illustrates"].append((goi_rid, surface, span))
+
+    with open(output_path, "w", newline="", encoding="utf-8") as f:
+        writer = csv.DictWriter(
+            f, fieldnames=EXAMPLE_LAYER_COLUMNS, extrasaction="ignore"
+        )
+        writer.writeheader()
+        for rid, entry in per_ex.items():
+            highlights = ";".join(f"{s},{e}" for s, e in sorted(entry["spans"]))
+            illus = entry["illustrates"] or [("", "", "")]
+            for i, (goi_rid, surface, span) in enumerate(illus):
+                row = {"ResourceID": rid}
+                if i == 0:
+                    row.update({
+                        "sentence": entry["sentence"],
+                        "sentence_en": entry["sentence_en"],
+                        "source": entry["source"],
+                        "source_id": entry["source_id"],
+                        "highlights": highlights,
+                        "collection": entry["collection"],
+                        "citation": entry["citation"],
+                    })
+                row["headword_entry"] = goi_rid
+                row["surface"] = surface
+                row["span"] = span
+                writer.writerow(row)
+
+    return len(per_ex)
+
+
 # --- Main orchestrator ---
 
 
@@ -519,7 +641,7 @@ def run(
     print(f"[examples] {len(inverted)} surface forms indexed", file=sys.stderr)
 
     # Fetch corpora
-    all_sentences: list[tuple[str, str, str, str]] = []
+    all_sentences: list[tuple[str, str, str, str, str, str]] = []
 
     tatoeba = fetch_tatoeba(cache_dir)
     all_sentences.extend(tatoeba)
@@ -543,6 +665,15 @@ def run(
     # Write example business data CSV
     count = write_example_csv(examples, example_csv_path)
     print(f"[examples] Wrote {count} examples to {example_csv_path}", file=sys.stderr)
+
+    # Write the v2 example-layer business CSV (example resources + illustrates links)
+    headword_rids = load_headword_rids(entry_csv_path)
+    layer_csv_path = example_csv_path.parent / "example_layer_data.csv"
+    layer_count = write_example_layer_csv(examples, headword_rids, layer_csv_path)
+    print(
+        f"[examples] Wrote {layer_count} example resources (illustrates) to {layer_csv_path}",
+        file=sys.stderr,
+    )
 
     # Augment entry CSV with external_examples column (writes in-place)
     augmented_path = entry_csv_path
