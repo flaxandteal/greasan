@@ -16,6 +16,7 @@ import httpx
 import orjson
 
 from goidelic.normalise import normalise_for_search
+from goidelic.slug_identity import goi_slug
 
 # Alizarin UUID namespace — must match alizarin-core's NAMESPACE constant
 ALIZARIN_NS = uuid.UUID("1a79f1c8-9505-4bea-a18e-28a053f725ca")
@@ -494,6 +495,119 @@ def augment_entry_csv(
     return augmented
 
 
+# --- UD Irish treebank (gold-tagged examples) ---
+
+UDT_CONLLU_URLS = {
+    "train": "https://raw.githubusercontent.com/UniversalDependencies/UD_Irish-IDT/master/ga_idt-ud-train.conllu",
+    "dev": "https://raw.githubusercontent.com/UniversalDependencies/UD_Irish-IDT/master/ga_idt-ud-dev.conllu",
+    "test": "https://raw.githubusercontent.com/UniversalDependencies/UD_Irish-IDT/master/ga_idt-ud-test.conllu",
+}
+# UD UPOS -> our POS slug segment. Only content POS map to dictionary entries;
+# function words and PROPN are skipped.
+UDT_UPOS = {"NOUN": "noun", "VERB": "verb", "ADJ": "adjective"}
+
+
+def parse_conllu(data: str):
+    """Yield (sent_id, text, [(form, lemma, upos)]) per sentence in a CoNLL-U string.
+
+    Multiword-token ranges ("1-2") and empty nodes ("1.1") are skipped - only real
+    token rows carry a lemma+UPOS.
+    """
+    sent_id = text = None
+    toks: list[tuple[str, str, str]] = []
+    for line in data.splitlines():
+        if line.startswith("# sent_id"):
+            sent_id = line.split("=", 1)[1].strip()
+        elif line.startswith("# text ="):
+            text = line.split("=", 1)[1].strip()
+        elif line and not line.startswith("#"):
+            c = line.split("\t")
+            if len(c) >= 4 and c[0].isdigit():
+                toks.append((c[1], c[2], c[3]))
+        elif not line.strip():
+            if sent_id and text and toks:
+                yield sent_id, text, toks
+            sent_id = text = None
+            toks = []
+    if sent_id and text and toks:
+        yield sent_id, text, toks
+
+
+def fetch_udt(cache_dir: Path) -> list[tuple[str, str, list]]:
+    """Download (or read cached) the UD Irish-IDT treebank and parse it.
+
+    Returns (sent_id, text, [(form, lemma, upos)]). Because the lemma+UPOS are gold
+    annotations, downstream linking is EXACT - a token maps straight to its
+    goi-<lemma>-<pos> entry, with no surface matching and no homograph ambiguity.
+    """
+    client = httpx.Client(follow_redirects=True, timeout=120.0)
+    sentences: list[tuple[str, str, list]] = []
+    for split, url in UDT_CONLLU_URLS.items():
+        cache = cache_dir / f"ga_idt-ud-{split}.conllu"
+        if cache.exists():
+            data = cache.read_text(encoding="utf-8")
+        else:
+            try:
+                data = client.get(url).text
+                cache.write_text(data, encoding="utf-8")
+            except Exception as e:  # noqa: BLE001
+                print(f"[examples] UDT {split} fetch failed: {e}", file=sys.stderr)
+                continue
+        sentences.extend(parse_conllu(data))
+    print(f"[examples] UDT: {len(sentences)} gold-tagged sentences", file=sys.stderr)
+    return sentences
+
+
+def udt_per_ex(sentences, entry_rids: set[str]) -> dict[str, dict]:
+    """Build example-layer entries for UDT sentences via GOLD lemma+POS links.
+
+    Each content token (NOUN/VERB/ADJ) links to its exact goi-<lemma>-<pos> entry -
+    the annotators already resolved mutation, suppletion and POS, so `rachaidh`
+    lands on téigh-verb and `ghrian` on grian-noun with zero ambiguity. Bounded by
+    MAX_EXAMPLES_PER_SOURCE per entry so a common word can't flood one entry.
+    """
+    per_ex: dict[str, dict] = {}
+    per_entry_count: dict[str, int] = {}
+    for sent_id, text, toks in sentences:
+        wc = len(text.split())
+        if wc < 4 or wc > MAX_SENTENCE_WORDS:
+            continue
+        illus: list[tuple[str, str, str, list]] = []
+        seen_rid: set[str] = set()
+        for form, lemma, upos in toks:
+            pos = UDT_UPOS.get(upos)
+            if not pos:
+                continue
+            rid = goi_slug(lemma, pos)
+            if rid not in entry_rids or rid in seen_rid:
+                continue
+            if per_entry_count.get(rid, 0) >= MAX_EXAMPLES_PER_SOURCE:
+                continue
+            hl = find_highlights(text, {form})
+            if not hl:
+                continue
+            seen_rid.add(rid)
+            per_entry_count[rid] = per_entry_count.get(rid, 0) + 1
+            illus.append((rid, form, format_highlights(hl), hl))
+        if not illus:
+            continue
+        spans: set = set()
+        for _, _, _, hl in illus:
+            for pair in hl:
+                spans.add(tuple(pair))
+        per_ex[example_resource_id("udt", sent_id)] = {
+            "sentence": text,
+            "sentence_en": "",
+            "source": "UDT",
+            "source_id": sent_id,
+            "collection": "UD Irish IDT",
+            "citation": "",
+            "spans": spans,
+            "illustrates": [(rid, surface, span) for rid, surface, span, _ in illus],
+        }
+    return per_ex
+
+
 # --- v2 layer emit (example resources + illustrates links) ---
 
 EXAMPLE_LAYER_COLUMNS = [
@@ -521,6 +635,7 @@ def write_example_layer_csv(
     examples: dict[str, list[dict]],
     headword_rids: dict[str, list[str]],
     output_path: Path,
+    extra_per_ex: dict | None = None,
 ) -> int:
     """Emit the v2 example-layer business CSV: one example resource per sentence,
     with an `illustrates` row per (headword entry, occurrence).
@@ -559,6 +674,11 @@ def write_example_layer_csv(
                 entry["spans"].add(tuple(pair))
             for goi_rid in rids:
                 entry["illustrates"].append((goi_rid, surface, span))
+
+    # Gold-linked sources (UDT) arrive pre-resolved to their exact entries; merge
+    # them straight in rather than through the surface headword_rids fan-out.
+    if extra_per_ex:
+        per_ex.update(extra_per_ex)
 
     with open(output_path, "w", newline="", encoding="utf-8") as f:
         writer = csv.DictWriter(
@@ -668,8 +788,15 @@ def run(
 
     # Write the v2 example-layer business CSV (example resources + illustrates links)
     headword_rids = load_headword_rids(entry_csv_path)
+    # UD Irish treebank: gold-tagged sentences link straight to the exact
+    # goi-<lemma>-<pos> entry (no surface matching), so they bypass headword_rids.
+    entry_rids = {rid for rids in headword_rids.values() for rid in rids}
+    udt_pe = udt_per_ex(fetch_udt(cache_dir), entry_rids)
+    print(f"[examples] UDT: {len(udt_pe)} gold example resources", file=sys.stderr)
     layer_csv_path = example_csv_path.parent / "example_layer_data.csv"
-    layer_count = write_example_layer_csv(examples, headword_rids, layer_csv_path)
+    layer_count = write_example_layer_csv(
+        examples, headword_rids, layer_csv_path, extra_per_ex=udt_pe
+    )
     print(
         f"[examples] Wrote {layer_count} example resources (illustrates) to {layer_csv_path}",
         file=sys.stderr,
