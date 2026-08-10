@@ -24,6 +24,12 @@ dev = [
     "pytest>=8.0",
     "pytest-snapshot>=0.9",
 ]
+# POS tagger for disambiguating example homograph matches (see
+# scripts/train-udpipe-model.py). Optional: the matcher degrades to the fan-out
+# without it.
+nlp = [
+    "ufal.udpipe>=1.4",
+]
 
 [tool.uv.sources]
 gramadan-rs = { path = "../Gramadan/gramadan-rs" }

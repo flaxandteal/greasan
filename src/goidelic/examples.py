@@ -614,6 +614,72 @@ def udt_per_ex(sentences, entry_rids: set[str]) -> dict[str, dict]:
     return per_ex
 
 
+# --- POS tagger (UDPipe) for disambiguating surface homograph matches ---
+# Trained from the UD Irish treebank into data/models/irish.udpipe. A surface match
+# "fear" fans out to every goi-fear-<pos> entry; the tagger picks the POS the token
+# actually has in context, so a Gaois/Tatoeba sentence links to fear-noun OR
+# fear-verb, not both. Degrades gracefully (keeps the fan-out) when the model or
+# ufal.udpipe is absent.
+_UDPIPE_MODEL = Path("data/models/irish.udpipe")
+# The Model and ProcessingError MUST outlive the Pipeline (which holds raw pointers
+# to them) - keep them module-global, or udpipe segfaults after they're GC'd.
+_UDPIPE_MODEL_OBJ = None
+_UDPIPE_PIPELINE = None  # None=untried, False=unavailable, else a Pipeline
+_UDPIPE_ERR = None
+_TAG_CACHE: dict[str, dict[str, str]] = {}
+
+
+def _udpipe_pipeline():
+    global _UDPIPE_MODEL_OBJ, _UDPIPE_PIPELINE, _UDPIPE_ERR
+    if _UDPIPE_PIPELINE is None:
+        _UDPIPE_PIPELINE = False
+        if _UDPIPE_MODEL.exists():
+            try:
+                from ufal.udpipe import Model, Pipeline, ProcessingError
+                _UDPIPE_MODEL_OBJ = Model.load(str(_UDPIPE_MODEL))
+                if not _UDPIPE_MODEL_OBJ:
+                    raise RuntimeError("Model.load returned null")
+                _UDPIPE_ERR = ProcessingError()
+                _UDPIPE_PIPELINE = Pipeline(
+                    _UDPIPE_MODEL_OBJ, "tokenizer", Pipeline.DEFAULT, Pipeline.NONE, "conllu"
+                )
+                print("[examples] UDPipe tagger loaded (homograph disambiguation)", file=sys.stderr)
+            except Exception as e:  # noqa: BLE001
+                print(f"[examples] UDPipe unavailable ({e}); homographs stay fanned out", file=sys.stderr)
+    return _UDPIPE_PIPELINE or None
+
+
+def tag_pos(text: str) -> dict[str, str]:
+    """Map each content token's lowercased form -> our POS (noun/verb/adjective) via
+    UDPipe, cached per sentence. Empty when no tagger is available."""
+    cached = _TAG_CACHE.get(text)
+    if cached is not None:
+        return cached
+    pipe = _udpipe_pipeline()
+    out: dict[str, str] = {}
+    if pipe:
+        conllu = pipe.process(text, _UDPIPE_ERR)
+        for _sid, _t, toks in parse_conllu(conllu):
+            for form, _lemma, upos in toks:
+                pos = UDT_UPOS.get(upos)
+                if pos:
+                    out.setdefault(form.lower(), pos)
+    _TAG_CACHE[text] = out
+    return out
+
+
+def disambiguate_rids(rids, sentence, surface):
+    """Keep only the candidate entry whose POS matches how the tagger reads this
+    token in context. Falls back to all rids on no homograph / no tag / no match."""
+    if len(rids) < 2:
+        return rids
+    tok_pos = tag_pos(sentence).get((surface or "").lower())
+    if not tok_pos:
+        return rids
+    matched = [r for r in rids if r.rsplit("-", 1)[-1] == tok_pos]
+    return matched or rids
+
+
 # --- v2 layer emit (example resources + illustrates links) ---
 
 EXAMPLE_LAYER_COLUMNS = [
@@ -678,7 +744,9 @@ def write_example_layer_csv(
             surface = ex["ga"][hl[0][0]:hl[0][1]] if hl else hw
             for pair in hl:
                 entry["spans"].add(tuple(pair))
-            for goi_rid in rids:
+            # POS-disambiguate a homograph spelling to the entry the token actually
+            # is in context (fear-noun vs fear-verb) instead of linking to both.
+            for goi_rid in disambiguate_rids(rids, ex["ga"], surface):
                 entry["illustrates"].append((goi_rid, surface, span))
 
     # Gold-linked sources (UDT) arrive pre-resolved to their exact entries; merge
