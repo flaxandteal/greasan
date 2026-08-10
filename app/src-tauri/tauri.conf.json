@@ -33,6 +33,7 @@
     "active": true,
     "targets": ["deb"],
     "resources": {
+      "../../data/bundle/heads-versions.json": "heads-versions.json",
       "../../data/bundle/heads/wiktionary-v2-full.zip": "heads/wiktionary-v2-full.zip",
       "../../data/bundle/heads/macbain-v2.zip": "heads/macbain-v2.zip",
       "../../data/bundle/heads/bunamo-v2.zip": "heads/bunamo-v2.zip",

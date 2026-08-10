@@ -28,11 +28,10 @@ use tauri::{AppHandle, Manager, Runtime};
 /// re-extract instead of reusing a stale layout. v3: lexical-entry graph gained
 /// the `gender` node + all concepts re-emitted through the shared RdmCache, so the
 /// old unpacked heads must be replaced (they lack gender / have stale concept ids).
-// Bump when bundled layer DATA changes (not just adding a layer): forces a one-
-// time re-extract of every corpus so updated heads (baked bunamo, filtered gaois,
-// udt) reach existing installs. Adding a layer is handled incrementally below
-// without a bump; a per-layer version would avoid the full re-provision (TODO).
-const READY_MARKER: &str = ".offline-ready-v6";
+// Version-agnostic sentinel: prep has run at least once. It no longer gates
+// extraction (per-layer snapshot_id comparison does), so it never needs bumping -
+// a changed layer re-extracts on its own hash, an unchanged one is left alone.
+const READY_MARKER: &str = ".offline-ready";
 
 struct CorpusSpec {
     /// Layer name - the `dynamicLayers` registry key and V2 layer name.
@@ -267,9 +266,37 @@ fn resolved_layers(app_data: &std::path::Path) -> Vec<OfflineLayer> {
         .collect()
 }
 
+/// The `snapshot_id` a head carries in its manifest.json - a content hash stamped
+/// by whatever produced the layer. None if the manifest is absent/unreadable.
+fn head_snapshot(manifest: &std::path::Path) -> Option<String> {
+    let bytes = fs::read(manifest).ok()?;
+    let v: serde_json::Value = serde_json::from_slice(&bytes).ok()?;
+    v.get("snapshot_id")?.as_str().map(str::to_string)
+}
+
+/// The bundled `{head -> snapshot_id}` index (heads-versions.json, generated at
+/// build time from the shipped heads' manifests). Empty when the resource is
+/// absent (a build predating this scheme), in which case callers keep the older
+/// "head present = current" behaviour rather than re-extracting every launch.
+fn bundled_head_versions<R: Runtime>(app: &AppHandle<R>) -> std::collections::HashMap<String, String> {
+    let mut out = std::collections::HashMap::new();
+    if let Ok(bytes) = read_resource_bytes(app, "heads-versions.json") {
+        if let Ok(serde_json::Value::Object(map)) = serde_json::from_slice::<serde_json::Value>(&bytes) {
+            for (k, v) in map {
+                if let Some(s) = v.as_str() {
+                    out.insert(k, s.to_string());
+                }
+            }
+        }
+    }
+    out
+}
+
 /// First-run offline preparation. Unpacks bundled heads + Pagefind zips into the
-/// app-data dir on first launch (idempotent via a marker), and always returns the
-/// resolved layer set. Safe to call on every startup.
+/// app-data dir, and always returns the resolved layer set. Safe to call on every
+/// startup: a layer is (re-)extracted only when it is MISSING or its extracted
+/// snapshot_id differs from the bundled one - so an app update re-provisions just
+/// the layers whose data actually changed, not all ~400MB.
 #[tauri::command]
 pub fn v2_prepare_offline<R: Runtime>(app: AppHandle<R>) -> Result<Vec<OfflineLayer>, String> {
     let app_data: PathBuf = app
@@ -279,20 +306,30 @@ pub fn v2_prepare_offline<R: Runtime>(app: AppHandle<R>) -> Result<Vec<OfflineLa
     fs::create_dir_all(&app_data).map_err(|e| format!("mkdir {}: {e}", app_data.display()))?;
 
     let marker = app_data.join(READY_MARKER);
-    let first_run = !marker.exists();
-
     let heads_root = app_data.join("heads");
     let files_root = app_data.join("files");
+    let bundled_versions = bundled_head_versions(&app);
 
     for c in CORPORA {
         // Head: heads/<head>.zip -> <app_data>/heads/<head>/
         let head_dest = heads_root.join(c.head);
-        // Extract on first run, OR when this layer's head is missing - a layer
-        // bundled by an app UPDATE that the existing READY_MARKER predates. This
-        // keeps adding a bundled layer incremental (unpack just the new one)
-        // instead of forcing a full re-provision of every corpus.
-        if !first_run && head_dest.exists() {
-            continue;
+        // Keep the extracted layer iff it's present AND its snapshot matches the
+        // bundled one. When either version is unknown (no versions index, or a head
+        // stamped before this scheme) fall back to "present = keep", so we never
+        // re-extract needlessly. Missing head, or a changed snapshot, drops through
+        // to a fresh unpack.
+        if head_dest.exists() {
+            let bundled = bundled_versions.get(c.head);
+            let extracted = head_snapshot(&head_dest.join("manifest.json"));
+            let changed = matches!((bundled, &extracted), (Some(b), Some(e)) if b != e);
+            if changed {
+                eprintln!(
+                    "[offline] {} snapshot {:?} -> {:?}; re-extracting",
+                    c.head, extracted, bundled
+                );
+            } else {
+                continue;
+            }
         }
         // Remove any partial prior extraction, then unpack fresh.
         let _ = fs::remove_dir_all(&head_dest);

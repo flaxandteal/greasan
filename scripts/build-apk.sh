@@ -61,6 +61,21 @@ if [ $REZIP -eq 1 ]; then
   done
 fi
 
+# --- 1a. Per-layer versions index: {head -> snapshot_id} from each head's
+# manifest, so the app (offline.rs) re-extracts only the layers whose data changed
+# on an update, not all ~400MB. Regenerated every build (also under --no-rezip). ---
+python3 - "$ROOT" "${HEADS[@]}" <<'PY'
+import json, pathlib, sys
+root = pathlib.Path(sys.argv[1]); heads = sys.argv[2:]
+vers = {}
+for h in heads:
+    mf = root / "data" / h / "manifest.json"
+    if mf.exists():
+        vers[h] = json.loads(mf.read_text()).get("snapshot_id", "")
+(root / "data" / "bundle" / "heads-versions.json").write_text(json.dumps(vers))
+print(f"[bundle] heads-versions.json: {len(vers)} layers")
+PY
+
 # --- 1b. Basemap: guarantee the bundled file exists so tauri resource bundling
 # succeeds. Real tiles come from scripts/build-basemap.sh; without them a 0-byte
 # placeholder keeps the build green - basemap_available() reports false and the
