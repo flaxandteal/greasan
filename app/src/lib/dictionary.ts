@@ -29,7 +29,7 @@ export interface ExternalExample {
   resourceId: string;
   ga: string;
   en: string;
-  src: 'tatoeba' | 'gaois';
+  src: 'tatoeba' | 'gaois' | 'udt';
   id?: string;
   hl: [number, number][];
 }
@@ -246,7 +246,7 @@ async function getAvailableDialects(pf: PagefindInstance, base: string): Promise
  * discovered via the reverse-lookup on a word entry, not by searching for them.
  * (Flip this - remove `place` - when we add dedicated place search.)
  */
-const NON_SEARCH_LAYERS: ReadonlySet<string> = new Set(['place', 'concept', 'example-tatoeba', 'example-gaois', 'person', 'note', 'layer']);
+const NON_SEARCH_LAYERS: ReadonlySet<string> = new Set(['place', 'concept', 'example-tatoeba', 'example-gaois', 'example-udt', 'person', 'note', 'layer']);
 
 // Form-of index layers. Their Pagefind records key on inflected surface forms
 // (e.g. "tháinig") and resolve, via the shared entry uuid, to entries RENDERED

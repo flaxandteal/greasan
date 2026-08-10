@@ -48,9 +48,10 @@ const SOURCE = (process.argv[2] || '').toLowerCase();
 const SOURCES = {
   tatoeba: { name: 'Tatoeba Example', tag: 'TA', license: 'CC-BY-2.0 (Tatoeba)' },
   gaois: { name: 'Gaois Example', tag: 'GA', license: 'CC-BY-4.0 (Gaois - Fiontar & Scoil na Gaeilge, DCU; legislation © Government of Ireland)' },
+  udt: { name: 'UD Irish Example', tag: 'UD', license: 'CC BY-SA 4.0 (Universal Dependencies, UD_Irish-IDT)' },
 };
 if (!SOURCES[SOURCE]) {
-  console.error('[build-example] Usage: node scripts/build-external-example-layer.mjs <tatoeba|gaois>');
+  console.error('[build-example] Usage: node scripts/build-external-example-layer.mjs <tatoeba|gaois|udt>');
   process.exit(1);
 }
 const SRC = SOURCES[SOURCE];

@@ -319,7 +319,8 @@ export async function loadEntryV2(uri: string, headDirs: string[]): Promise<Entr
     // run it example-authoritative (per head), like place's `element_entry`.
     const externalExamples: EntryDetail['externalExamples'] = [];
     for (const head of headDirs.filter((d) => d.includes('/example-'))) {
-      const src: 'tatoeba' | 'gaois' = head.includes('tatoeba') ? 'tatoeba' : 'gaois';
+      const src: 'tatoeba' | 'gaois' | 'udt' =
+        head.includes('tatoeba') ? 'tatoeba' : head.includes('udt') ? 'udt' : 'gaois';
       try {
         const ids = await citedBy([head], uri, 'headword_entry');
         if (!ids.length) continue;

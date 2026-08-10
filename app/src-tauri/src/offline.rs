@@ -106,6 +106,13 @@ const CORPORA: &[CorpusSpec] = &[
         langs: &["sampla"],
     },
     CorpusSpec {
+        // UD Irish treebank - gold-tagged, exact goi-<lemma>-<pos> links (CC BY-SA 4.0).
+        name: "example-udt",
+        head: "example-udt-v2",
+        index: "example-udt-v2",
+        langs: &["sampla"],
+    },
+    CorpusSpec {
         // Person graph - seeded "User" that authors notes. No pagefind.
         name: "person",
         head: "person-v2",

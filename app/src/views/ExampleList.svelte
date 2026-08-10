@@ -51,11 +51,13 @@
   }
 
   function sourceLabel(src: string): string {
-    return src === 'tatoeba' ? 'T' : 'G';
+    return src === 'tatoeba' ? 'T' : src === 'udt' ? 'U' : 'G';
   }
 
   function sourceTitle(src: string): string {
-    return src === 'tatoeba' ? 'Tatoeba' : 'Gaois (legislation)';
+    return src === 'tatoeba' ? 'Tatoeba'
+      : src === 'udt' ? 'UD Irish treebank'
+        : 'Gaois (legislation)';
   }
 </script>
 
@@ -71,6 +73,7 @@
         class="ge-srcbadge"
         class:tatoeba={ex.src === 'tatoeba'}
         class:gaois={ex.src === 'gaois'}
+        class:udt={ex.src === 'udt'}
         title={sourceTitle(ex.src)}
       >
         {sourceLabel(ex.src)}

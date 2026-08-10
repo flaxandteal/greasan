@@ -152,6 +152,7 @@ export const FAMILIES: Record<FamilyId, FamilyConfig> = {
       concept: { label: 'Concepts', swatch: 'var(--layer-concept)' },
       'example-tatoeba': { label: 'Tatoeba', swatch: 'var(--layer-tatoeba)' },
       'example-gaois': { label: 'Gaois', swatch: 'var(--layer-gaois)' },
+      'example-udt': { label: 'UD Irish', swatch: 'var(--layer-udt)' },
       person: { label: 'Users', swatch: 'var(--layer-person)' },
       note: { label: 'Notes', swatch: 'var(--layer-note)' },
     },
