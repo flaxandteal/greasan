@@ -572,6 +572,8 @@ def udt_per_ex(sentences, entry_rids: set[str]) -> dict[str, dict]:
         wc = len(text.split())
         if wc < 4 or wc > MAX_SENTENCE_WORDS:
             continue
+        # Link EVERY content token that has a dictionary entry, so a displayed
+        # sentence highlights all its words (don't drop tokens mid-sentence).
         illus: list[tuple[str, str, str, list]] = []
         seen_rid: set[str] = set()
         for form, lemma, upos in toks:
@@ -581,16 +583,20 @@ def udt_per_ex(sentences, entry_rids: set[str]) -> dict[str, dict]:
             rid = goi_slug(lemma, pos)
             if rid not in entry_rids or rid in seen_rid:
                 continue
-            if per_entry_count.get(rid, 0) >= MAX_EXAMPLES_PER_SOURCE:
-                continue
             hl = find_highlights(text, {form})
             if not hl:
                 continue
             seen_rid.add(rid)
-            per_entry_count[rid] = per_entry_count.get(rid, 0) + 1
             illus.append((rid, form, format_highlights(hl), hl))
         if not illus:
             continue
+        # Cap the example COUNT per entry, not the links per sentence: keep this
+        # sentence only while at least one of its entries still wants more, then
+        # count all of them (a common word may piggy-back a few over the cap - fine).
+        if not any(per_entry_count.get(rid, 0) < MAX_EXAMPLES_PER_SOURCE for rid, *_ in illus):
+            continue
+        for rid, *_ in illus:
+            per_entry_count[rid] = per_entry_count.get(rid, 0) + 1
         spans: set = set()
         for _, _, _, hl in illus:
             for pair in hl:

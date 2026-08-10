@@ -937,7 +937,7 @@ export async function loadExample(resourceId: string): Promise<ExampleDetail | n
       if (!sentence) continue; // resource lives in the other head
       const translation = exLocalStr(tree.sentence_en);
       const prov = tree.provenance || {};
-      const source = head.includes('tatoeba') ? 'Tatoeba' : 'Gaois';
+      const source = head.includes('tatoeba') ? 'Tatoeba' : head.includes('udt') ? 'UDT' : 'Gaois';
       const sourceId = exLocalStr(prov.source_id);
       const highlights = exLocalStr(prov.highlights);
       // Gaois collection is bilingual "ga|en" - keep the Irish side.

@@ -33,6 +33,7 @@
 
   function sourceLabel(src: string): string {
     if (!src) return '';
+    if (src.toLowerCase() === 'udt') return 'UD Irish';
     return src.charAt(0).toUpperCase() + src.slice(1);
   }
 
@@ -83,6 +84,7 @@
       : [],
   );
   let isGaois = $derived((example?.source || '').toLowerCase() === 'gaois');
+  let isUdt = $derived((example?.source || '').toLowerCase() === 'udt');
   // Only Tatoeba carries a real per-sentence permalink. The Gaois source_id is a
   // positional counter (see the pipeline), so its computed URL cannot resolve -
   // never surface it. A real Gaois link needs the re-ingested tuid.
@@ -90,7 +92,7 @@
     !!example?.sourceUrl && (example?.source || '').toLowerCase() === 'tatoeba',
   );
   let licenceLine = $derived(
-    isGaois ? $t('example.licenceGaois') : $t('example.licenceTatoeba'),
+    isGaois ? $t('example.licenceGaois') : isUdt ? $t('example.licenceUdt') : $t('example.licenceTatoeba'),
   );
 </script>
 
