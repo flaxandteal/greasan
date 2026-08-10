@@ -28,7 +28,11 @@ use tauri::{AppHandle, Manager, Runtime};
 /// re-extract instead of reusing a stale layout. v3: lexical-entry graph gained
 /// the `gender` node + all concepts re-emitted through the shared RdmCache, so the
 /// old unpacked heads must be replaced (they lack gender / have stale concept ids).
-const READY_MARKER: &str = ".offline-ready-v4";
+// Bump when bundled layer DATA changes (not just adding a layer): forces a one-
+// time re-extract of every corpus so updated heads (baked bunamo, filtered gaois,
+// udt) reach existing installs. Adding a layer is handled incrementally below
+// without a bump; a per-layer version would avoid the full re-provision (TODO).
+const READY_MARKER: &str = ".offline-ready-v5";
 
 struct CorpusSpec {
     /// Layer name - the `dynamicLayers` registry key and V2 layer name.
