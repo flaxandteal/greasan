@@ -227,6 +227,16 @@ def _detect_dialect(entry: dict, default_dialect: str) -> str:
     return default_dialect
 
 
+# Known gender errors in the source. Wiktionary occasionally tags a lemma against
+# An Caighdeán Oifigiuil; we lift its `g` arg faithfully, so a wrong source yields a
+# wrong entry. These are explicit, cited manual corrections (NOT a heuristic - the
+# extractor stays a faithful mirror of the source). Keyed (word, lang_code).
+GENDER_OVERRIDES: dict[tuple[str, str], str] = {
+    # WK tags euro feminine; CO/teanglann.ie has it masculine (an t-euro, gsg euro).
+    ("euro", "ga"): "masculine",
+}
+
+
 def extract_gender(entry: dict) -> str:
     """Lemma gender from Wiktionary head templates (args ``g``/``g2``/``g3``, e.g.
     ``'m'``/``'f'``). Inherent LexicalEntry property (lexinfo:gender). Goidelic is
@@ -302,7 +312,7 @@ def normalise_entry(entry: dict, default_dialect: str = "Irish (General)") -> di
                 examples.append(example_str)
         senses.append({"gloss": gloss, "examples": examples})
 
-    gender = extract_gender(entry)
+    gender = GENDER_OVERRIDES.get((word, lang_code)) or extract_gender(entry)
     # Embed the declension/conjugation class at bundle time: BuNaMo db lookup wins
     # (attested), else the gramadan guess tagged inferred/uncertain. Only for the
     # POS gramadan classes; empty otherwise. Attested source data still overrides
