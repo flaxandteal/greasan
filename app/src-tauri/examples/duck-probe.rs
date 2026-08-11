@@ -52,5 +52,10 @@ fn main() {
     for id in &sample {
         eprintln!("[duck]   {id} => {:?}", descs.get(id));
     }
-    eprintln!("[duck] OK - DuckReader read tiles + descriptors from Parquet in-app");
+    // count_records (the CountRecords measure port): same compile path, COUNT(*).
+    let n = duck.count_records(&query, &graph, &registry).expect("count_records");
+    eprintln!("[duck] count_records -> {n}");
+    assert_eq!(n, ids.len(), "count_records must match resolve_ids count");
+
+    eprintln!("[duck] OK - DuckReader read tiles + descriptors + count from Parquet in-app");
 }

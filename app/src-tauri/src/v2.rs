@@ -130,12 +130,64 @@ pub fn hydrate_resource(
         .map_err(|e| e.to_string())
 }
 
+/// Parquet path (v2-duck): compile the IR to DuckDB SQL over the dir's
+/// `tiles_*.parquet` via DuckReader, per measure. Same `{results: [{measure,
+/// coarse, columns, rows}]}` shape; `coarse` is always false (DuckDB's HasLink is
+/// exact per-tile, unlike the sqlite head's chunk-granularity summary). No spatial
+/// (SpatialSource::None) - run_query's callers are lexical/catalogue, not geo.
+#[cfg(feature = "v2-duck")]
+pub fn run_query(head_dir: &Path, ir: &Value, graph: &StaticGraph) -> Result<Value, String> {
+    use ros_madair_duck::{DuckReader, SpatialSource};
+    let query: ros_madair_query::Query =
+        serde_json::from_value(ir.clone()).map_err(|e| format!("bad query IR: {e}"))?;
+    let registry = registry(head_dir)?;
+    let glob = format!("{}/tiles_*.parquet", head_dir.display());
+    let mut duck = DuckReader::open_with(&glob, SpatialSource::None).map_err(|e| e.to_string())?;
+    // Attach the concept catalog when present - enables DescendantOrSelfOf facets.
+    let catalog = head_dir.join("concept_catalog.parquet");
+    if catalog.is_file() {
+        duck = duck
+            .with_catalog(&catalog.to_string_lossy())
+            .map_err(|e| e.to_string())?;
+    }
+    let limit = query.limit.map(|l| l as usize);
+    let mut results = Vec::new();
+    for measure in &query.measures {
+        match measure {
+            ros_madair_query::Measure::SelectIds => {
+                let mut ids = duck.resolve_ids(&query, graph, &registry).map_err(|e| e.to_string())?;
+                // resolve_ids does not apply query.limit; match the sqlite path.
+                if let Some(l) = limit {
+                    ids.truncate(l);
+                }
+                let rows: Vec<Value> = ids
+                    .into_iter()
+                    .map(|id| Value::Array(vec![Value::from(id)]))
+                    .collect();
+                results.push(serde_json::json!({
+                    "measure": "select_ids", "coarse": false,
+                    "columns": ["resource_id"], "rows": rows,
+                }));
+            }
+            ros_madair_query::Measure::CountRecords => {
+                let n = duck.count_records(&query, graph, &registry).map_err(|e| e.to_string())?;
+                results.push(serde_json::json!({
+                    "measure": "count_records", "coarse": false,
+                    "columns": ["count"], "rows": [[n]],
+                }));
+            }
+        }
+    }
+    Ok(serde_json::json!({ "results": results }))
+}
+
 /// Compile a `ros-madair-query` IR against the graph and execute each
 /// compiled statement against the head.
 ///
 /// Returns `{"results": [{"measure", "coarse", "columns", "rows"}, ...]}`.
 /// `coarse: true` marks a chunk-granularity (link) over-approximation whose
 /// rows must be re-verified against hydrated tiles.
+#[cfg(not(feature = "v2-duck"))]
 pub fn run_query(head_dir: &Path, ir: &Value, graph: &StaticGraph) -> Result<Value, String> {
     let query: ros_madair_query::Query =
         serde_json::from_value(ir.clone()).map_err(|e| format!("bad query IR: {e}"))?;
