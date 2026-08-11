@@ -16,6 +16,15 @@ function stripDiacritics(text: string): string {
   return text.normalize('NFD').replace(/[\u0300-\u036f]/g, '').normalize('NFC');
 }
 
+/** `token` present as a whole word in `text`, accent- and case-insensitive.
+ * Used to spot a hit whose match is an inflected FORM (BuNaMo indexes the whole
+ * forms bag as its record content) rather than the headword. */
+function tokenInText(token: string, text: string): boolean {
+  const tok = stripDiacritics(token).trim().toLowerCase();
+  if (!tok) return false;
+  return stripDiacritics(text).toLowerCase().split(/[^\p{L}\p{N}]+/u).includes(tok);
+}
+
 export interface EntrySummary {
   uri: string;
   headword: string;
@@ -23,6 +32,9 @@ export interface EntrySummary {
   gloss?: string;
   excerpt?: string;
   dialect?: string;
+  /** Internal ranking hint: the query matched an inflected form of this entry
+   * (not its headword), e.g. "tiocfaidh" -> tar. Set in searchOneInstance. */
+  _formHit?: boolean;
 }
 
 export interface ExternalExample {
@@ -282,6 +294,7 @@ async function searchOneInstance(
   query: string,
   lang: SearchLang,
   dialects?: string[],
+  rawToken?: string,
 ): Promise<EntrySummary[]> {
   const pf = await getPagefind(pagefindBase);
 
@@ -321,9 +334,21 @@ async function searchOneInstance(
         dialect,
       };
     }
+    const headword = d.meta.title;
+    // Form-hit: the query is a whole word in this record's content but NOT its
+    // headword. BuNaMo's record content is the entry's forms bag, so this catches
+    // an inflected surface form the user typed ("tiocfaidh" -> tar) and lets the
+    // ranker lift its lemma. Only meaningful for headword (ga) search; the
+    // wiktionary index's content is just the headword, so it never false-fires.
+    const formHit =
+      lang !== 'en' &&
+      lang !== 'sampla' &&
+      !!rawToken &&
+      stripDiacritics(headword).toLowerCase() !== stripDiacritics(rawToken).toLowerCase() &&
+      tokenInText(rawToken, d.content || '');
     return {
       uri,
-      headword: d.meta.title,
+      headword,
       pos: d.meta.pos || '',
       // Samplaí: the sentence is the title (headword); the translation is the
       // subtitle (gloss). Don't surface pagefind's raw excerpt - its `content`
@@ -331,6 +356,7 @@ async function searchOneInstance(
       // which reads as the same line three times.
       gloss: lang === 'sampla' ? (d.meta.sentence_en || undefined) : (d.meta.gloss || undefined),
       dialect,
+      _formHit: formHit,
     };
   });
 }
@@ -415,7 +441,7 @@ export async function search(query: string, lang: SearchLang = 'ga', dialects?: 
       Promise.all(
         bases.flatMap(base =>
           queryStrs.map((q, qi) =>
-            searchOneInstance(base, mkPfQuery(q), lang, dialects)
+            searchOneInstance(base, mkPfQuery(q), lang, dialects, q)
               .then(rs => ({ qi, rs }))
               .catch(err => {
                 console.warn(`[dictionary] Search failed for ${base}:`, err);
@@ -434,10 +460,14 @@ export async function search(query: string, lang: SearchLang = 'ga', dialects?: 
     // URIs surfaced by the mutation-stripped query - the lemma owns the inflected
     // surface form the user actually typed, so it deserves a strong rank tier.
     const demutMatchUris = new Set<string>();
+    // URIs whose match was an inflected FORM (not the headword) - "tiocfaidh"
+    // finds tar via its forms bag. OR'd across every layer and query variant.
+    const formMatchUris = new Set<string>();
     const pfSets: EntrySummary[][] = [];
     for (const { qi, rs } of pfTagged) {
       pfSets.push(rs);
       if (qi === demutIdx) for (const r of rs) demutMatchUris.add(r.uri);
+      for (const r of rs) if (r._formHit) formMatchUris.add(r.uri);
     }
     const resultSets: EntrySummary[][] = [...pfSets];
     if (ftsHits.length) {
@@ -545,16 +575,29 @@ export async function search(query: string, lang: SearchLang = 'ga', dialects?: 
     // ("tar") is what they want, so lift it above prefix/substring/gloss noise.
     const wholeWord = (t: string): boolean =>
       wordReQ.test(t) || wordReNorm.test(stripDiacritics(t));
-    const rank = (r: EntrySummary): number => {
+    const textTier = (r: EntrySummary): number => {
       const t = (lang === 'en' ? r.gloss || '' : r.headword).toLowerCase();
       if (t === q) return 0;
       if (stripDiacritics(t) === qNorm) return 1;
-      if (demutMatchUris.has(r.uri)) return 2;
+      // Exact surface form the user typed - a stripped initial mutation
+      // ("tháinig") or an inflected form ("tiocfaidh") - resolves to its lemma.
+      // Lift it above prefix/substring/gloss noise.
+      if (demutMatchUris.has(r.uri) || formMatchUris.has(r.uri)) return 2;
       if (t.startsWith(q)) return 3;
       if (stripDiacritics(t).startsWith(qNorm)) return 4;
       if (wholeWord(t)) return 5;
       return 6;
     };
+    // Branch demotion: this is a Gaeilge-first dictionary, so within any text tier
+    // Scottish Gaelic / Manx-only entries sink below Irish. GA* (incl. GA.MUN /
+    // GA.ULS) and G (a slug spanning both branches, so Irish-carrying) stay up;
+    // GD / GV / uncoded drop. Keeps a Gaidhlig-only "fear" pronoun from topping
+    // the Irish noun. Subordinate to the text tier (a better match still wins).
+    const branchPenalty = (r: EntrySummary): number => {
+      const branch = (r.dialect || '').split('.')[0].toUpperCase();
+      return branch === 'GA' || branch === 'G' ? 0 : 1;
+    };
+    const rank = (r: EntrySummary): number => textTier(r) * 2 + branchPenalty(r);
     merged.sort((a, b) => rank(a) - rank(b));
 
     return merged.slice(0, 50);
