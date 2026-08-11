@@ -102,6 +102,10 @@ name = "regen-parquet-v2"
 required-features = ["v2-emit"]
 
 [[example]]
+name = "duck-probe"
+required-features = ["v2-duck"]
+
+[[example]]
 name = "verify-bunamo-compose"
 required-features = ["v2"]
 
