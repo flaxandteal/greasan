@@ -24,6 +24,15 @@ const ga: Record<string, string> = {
   'search.noLayers': 'Suiteáil sraith foclóra i Socruithe chun tosú.',
   'search.goToSettings': 'Oscail Socruithe',
 
+  // HUMAN SLOT - filter drawer + part-of-speech labels. Deliberately NOT filled
+  // (no machine translation): these keys fall back to the English strings in
+  // en.ts until a person adds the Irish. Keys awaiting translation:
+  //   filter.title, filter.showPhrases, filter.showPhrasesHint,
+  //   filter.partOfSpeech, filter.clear, filter.noneForExamples,
+  //   pos.noun, pos.verb, pos.adjective, pos.adverb, pos.propernoun,
+  //   pos.pronoun, pos.preposition, pos.numeral, pos.conjunction,
+  //   pos.interjection, pos.particle, pos.phrase
+
   // Entry detail
   'entry.title': 'Iontráil',
   'entry.senses': 'Bríonna',
@@ -162,6 +171,10 @@ const ga: Record<string, string> = {
   'faq.licensingBody': 'Tá sonraí ceadúnaithe ábhair i Socruithe → Ceadúnas. Go hachomair: Wiktionary CC BY-SA, Tatoeba CC BY 2.0, Gaois CC BY 4.0. Is féidir an fógra ag am tosaithe a mhúchadh i Socruithe.',
   'faq.openSource': 'Foinse oscailte',
   'faq.openSourceBody': 'Tógtha le Svelte, Tauri, alizarin-wasm, ros-madair, Pagefind, agus Oxigraph.',
+
+  // Help + first-run tour (settings.help, settings.showTour, tour.*): awaiting a
+  // human Irish translation. Left out deliberately so they fall back to English
+  // rather than shipping machine-translated Irish.
 };
 
 export default ga;

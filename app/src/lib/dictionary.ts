@@ -345,7 +345,7 @@ async function searchOneInstance(
       lang !== 'sampla' &&
       !!rawToken &&
       stripDiacritics(headword).toLowerCase() !== stripDiacritics(rawToken).toLowerCase() &&
-      tokenInText(rawToken, d.content || '');
+      tokenInText(rawToken, (d as { content?: string }).content || '');
     return {
       uri,
       headword,
@@ -396,7 +396,19 @@ export function stripInitialMutation(word: string): string {
   return w;
 }
 
-export async function search(query: string, lang: SearchLang = 'ga', dialects?: string[]): Promise<EntrySummary[]> {
+export interface SearchFilters {
+  /** Include multi-word phrase entries in headword (ga) results. Default false. */
+  showPhrases?: boolean;
+  /** Restrict to these raw POS values (e.g. ["noun","verb"]). Empty/undefined = all. */
+  pos?: string[];
+}
+
+export async function search(
+  query: string,
+  lang: SearchLang = 'ga',
+  dialects?: string[],
+  filters?: SearchFilters,
+): Promise<EntrySummary[]> {
   if (!query.trim()) return [];
 
   try {
@@ -499,6 +511,12 @@ export async function search(query: string, lang: SearchLang = 'ga', dialects?: 
         if (!byUri.has(r.uri)) {
           byUri.set(r.uri, r);
           branchesByUri.set(r.uri, new Set<string>());
+        } else {
+          // Gloss union: the forms-only BuNaMo record (no gloss) can win first-seen
+          // for a lemma that ALSO comes back glossed from Wiktionary - "tar" would
+          // then show glossless. Fill a missing gloss from any layer that has one.
+          const kept = byUri.get(r.uri)!;
+          if (!kept.gloss && r.gloss) kept.gloss = r.gloss;
         }
         const branch = (r.dialect || '').split('.')[0];
         if (branch) branchesByUri.get(r.uri)!.add(branch);
@@ -598,6 +616,20 @@ export async function search(query: string, lang: SearchLang = 'ga', dialects?: 
       return branch === 'GA' || branch === 'G' ? 0 : 1;
     };
     const rank = (r: EntrySummary): number => textTier(r) * 2 + branchPenalty(r);
+
+    // Facet filters (drawer), applied BEFORE the 50-cap so hidden rows don't eat
+    // slots. Phrase-hide is headword-search only (the user browses phrases via
+    // Samplaí); POS applies to entry results (ga/en), never example sentences.
+    // ...unless the user explicitly selected the "phrase" POS, which IS multi-word
+    // (hiding it would leave that filter permanently empty).
+    if (lang === 'ga' && !filters?.showPhrases && !filters?.pos?.includes('phrase')) {
+      merged = merged.filter((r) => !/\s/.test(r.headword.trim()));
+    }
+    if (lang !== 'sampla' && filters?.pos?.length) {
+      const want = new Set(filters.pos.map((p) => p.toLowerCase()));
+      merged = merged.filter((r) => want.has((r.pos || '').toLowerCase()));
+    }
+
     merged.sort((a, b) => rank(a) - rank(b));
 
     return merged.slice(0, 50);

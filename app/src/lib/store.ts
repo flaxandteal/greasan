@@ -3,7 +3,7 @@ import { ready } from './wasm';
 import { FAMILIES, DEFAULT_FAMILY, layerSwatch, type FamilyId } from './family';
 import { switchFamily, addDynamicLayer, addV2Layer, removeV2Layer, getDynamicLayers, registerV2Layers, initOfflineLayers, setHiddenLayers, search, loadEntryFlagged, type DynamicLayerInfo, type ExampleDetail } from './dictionary';
 import { buildLayer, waitForBuild, listLayers, listV2Layers, assetUrl, removeLayerFiles, type BuildLayerStatus } from './tauri-builder';
-import type { SearchLang } from './dictionary';
+import type { SearchLang, EntrySummary } from './dictionary';
 
 export type { DynamicLayerInfo } from './dictionary';
 
@@ -27,7 +27,21 @@ function persisted<T>(key: string, initial: T): Writable<T> {
 
 export const searchQuery = writable('');
 export const searchLang = persisted<SearchLang>('ge:searchLang', 'ga');
-export const searchResults = writable<Array<{ uri: string; headword: string; pos: string; gloss?: string }>>([]);
+export const searchResults = writable<EntrySummary[]>([]);
+
+// --- Search filter drawer -------------------------------------------------
+/** Filter drawer open/closed. */
+export const filterOpen = writable(false);
+/** Include multi-word phrase entries in Ceannfhocail (headword) results. Off by
+ * default: single-word headwords only, phrases behind the toggle. */
+export const showPhrases = persisted<boolean>('ge:showPhrases', false);
+/** Selected part-of-speech filter (raw POS values, e.g. "noun"). Empty = all. */
+export const posFilter = persisted<string[]>('ge:posFilter', []);
+/** Count of active (non-default) filters, for the drawer button badge. */
+export const activeFilterCount = derived(
+  [showPhrases, posFilter],
+  ([$showPhrases, $posFilter]) => ($showPhrases ? 1 : 0) + ($posFilter.length > 0 ? 1 : 0),
+);
 export const currentEntry = writable<any | null>(null);
 export const currentExample = writable<ExampleDetail | null>(null);
 /** The open Layer description page, or null. */
@@ -72,6 +86,24 @@ export const showLicenseToast = persisted<boolean>('ge:showLicenseToast', true);
 /** Bump to dismiss the launch "Open Data" toast — e.g. a nav/deep-link redirect
  *  shouldn't leave the licence toast overlapping the target view. */
 export const dismissLicenseToast = writable(0);
+
+/** True while the launch toast flow (no-warranty disclaimer, then Open Data
+ *  licence) still has something to show. Eagerly initialised to match
+ *  LicenseToast's own show logic so gating consumers (e.g. the first-run tour)
+ *  don't race the toast's mount. LicenseToast flips it false when the flow ends. */
+function initialLicenseFlowActive(): boolean {
+  if (typeof localStorage === 'undefined') return false;
+  const disclaimerPending = !localStorage.getItem('ge:disclaimerAcked');
+  let showToast = true;
+  try {
+    const raw = localStorage.getItem('ge:showLicenseToast');
+    if (raw !== null) showToast = JSON.parse(raw);
+  } catch { /* default true */ }
+  const licenseSeen = typeof sessionStorage !== 'undefined' && !!sessionStorage.getItem('ge:licenseSeen');
+  const licenseWanted = showToast && !licenseSeen;
+  return disclaimerPending || licenseWanted;
+}
+export const licenseFlowActive = writable<boolean>(initialLicenseFlowActive());
 export const darkMode = persisted<'light' | 'dark'>('ge:darkMode', 'light');
 export const density = persisted<'compact' | 'comfortable' | 'spacious'>('ge:density', 'comfortable');
 export const listStyle = persisted<'card' | 'flat'>('ge:listStyle', 'card');

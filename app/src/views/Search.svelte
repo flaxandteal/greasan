@@ -1,10 +1,37 @@
 <script lang="ts">
   import { get } from 'svelte/store';
-  import { searchQuery, searchResults, currentEntry, currentExample, loading, activeTab, searchLang, visibleDialects, familyConfig, recentEntries, overlayView, layers } from '../lib/store';
+  import { searchQuery, searchResults, currentEntry, currentExample, loading, activeTab, searchLang, visibleDialects, familyConfig, recentEntries, overlayView, layers, filterOpen, showPhrases, posFilter, activeFilterCount } from '../lib/store';
   import { search, loadEntryFlagged, loadExample } from '../lib/dictionary';
   import type { SearchLang } from '../lib/dictionary';
   import { t } from '../lib/i18n';
   import LayerPill from './LayerPill.svelte';
+
+  // Part-of-speech filter options (raw POS values from the data, most common
+  // first). Labels resolve via i18n; the ga strings are a human slot (fall back
+  // to English until translated).
+  const POS_OPTIONS: { value: string; key: string }[] = [
+    { value: 'noun', key: 'pos.noun' },
+    { value: 'verb', key: 'pos.verb' },
+    { value: 'adjective', key: 'pos.adjective' },
+    { value: 'adverb', key: 'pos.adverb' },
+    { value: 'proper noun', key: 'pos.propernoun' },
+    { value: 'pronoun', key: 'pos.pronoun' },
+    { value: 'preposition', key: 'pos.preposition' },
+    { value: 'numeral', key: 'pos.numeral' },
+    { value: 'conjunction', key: 'pos.conjunction' },
+    { value: 'interjection', key: 'pos.interjection' },
+    { value: 'particle', key: 'pos.particle' },
+    { value: 'phrase', key: 'pos.phrase' },
+  ];
+
+  function togglePos(value: string) {
+    const cur = $posFilter;
+    posFilter.set(cur.includes(value) ? cur.filter((p) => p !== value) : [...cur, value]);
+  }
+  function clearFilters() {
+    posFilter.set([]);
+    showPhrases.set(false);
+  }
 
   /** Dialect code tag for display (codes come directly from Pagefind meta). */
   function dialectTag(dialect?: string): string {
@@ -30,7 +57,10 @@
     }
     loading.set(true);
     try {
-      const results = await search(value, lang, $visibleDialects);
+      const results = await search(value, lang, get(visibleDialects), {
+        showPhrases: get(showPhrases),
+        pos: get(posFilter),
+      });
       searchResults.set(results);
     } finally {
       loading.set(false);
@@ -55,8 +85,8 @@
     searchResults.set([]);
   }
 
-  // Re-search when dialect filters change (uses get() to avoid extra reactive deps)
-  $: $visibleDialects, refreshForDialects();
+  // Re-search when dialect OR facet filters change (get() avoids extra reactive deps)
+  $: $visibleDialects, $showPhrases, $posFilter, refreshForDialects();
   function refreshForDialects() {
     const q = get(searchQuery);
     const lang = get(searchLang);
@@ -137,11 +167,59 @@
       </button>
     {/if}
   </div>
-  <div class="ge-segs" style="margin-top:8px;">
-    {#each $familyConfig.searchLangs as lang}
-      <button class="ge-seg" class:active={$searchLang === lang.id} onclick={() => setLang(lang.id)}>{lang.label}</button>
-    {/each}
+  <div style="display:flex;gap:8px;align-items:stretch;margin-top:8px;">
+    <div class="ge-segs" style="flex:1;">
+      {#each $familyConfig.searchLangs as lang}
+        <button class="ge-seg" class:active={$searchLang === lang.id} onclick={() => setLang(lang.id)}>{lang.label}</button>
+      {/each}
+    </div>
+    <button
+      class="ge-iconbtn"
+      class:active={$filterOpen}
+      aria-label={$t('filter.title')}
+      aria-expanded={$filterOpen}
+      style="position:relative;border:1px solid var(--border);border-radius:8px;{$filterOpen ? 'background:var(--surface-2);' : ''}"
+      onclick={() => filterOpen.update((v) => !v)}
+    >
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M22 3H2l8 9.46V19l4 2v-8.54L22 3z"/>
+      </svg>
+      {#if $activeFilterCount > 0}
+        <span style="position:absolute;top:-4px;right:-4px;min-width:16px;height:16px;padding:0 4px;border-radius:8px;background:var(--accent-deep);color:#fff;font-size:10px;line-height:16px;text-align:center;font-weight:700;">{$activeFilterCount}</span>
+      {/if}
+    </button>
   </div>
+
+  {#if $filterOpen}
+    <div style="margin-top:10px;padding:12px;border:1px solid var(--border);border-radius:10px;background:var(--surface-1);">
+      {#if $searchLang === 'sampla'}
+        <div style="color:var(--fg-muted);font-size:var(--fs-small);">{$t('filter.noneForExamples')}</div>
+      {:else}
+        {#if $searchLang === 'ga'}
+          <label style="display:flex;align-items:center;gap:10px;cursor:pointer;padding:2px 0 10px;">
+            <input type="checkbox" checked={$showPhrases} onchange={(e) => showPhrases.set((e.target as HTMLInputElement).checked)} />
+            <span>
+              <span style="font-weight:600;">{$t('filter.showPhrases')}</span>
+              <span style="display:block;color:var(--fg-muted);font-size:var(--fs-small);">{$t('filter.showPhrasesHint')}</span>
+            </span>
+          </label>
+        {/if}
+        <div style="font-weight:600;font-size:var(--fs-small);color:var(--fg-soft);margin:4px 0 6px;">{$t('filter.partOfSpeech')}</div>
+        <div style="display:flex;flex-wrap:wrap;gap:6px;">
+          {#each POS_OPTIONS as opt}
+            <button
+              onclick={() => togglePos(opt.value)}
+              aria-pressed={$posFilter.includes(opt.value)}
+              style="padding:5px 10px;border-radius:999px;border:1px solid {$posFilter.includes(opt.value) ? 'var(--accent-deep)' : 'var(--border)'};background:{$posFilter.includes(opt.value) ? 'var(--accent-deep)' : 'transparent'};color:{$posFilter.includes(opt.value) ? '#fff' : 'var(--fg)'};font-size:var(--fs-small);cursor:pointer;"
+            >{$t(opt.key)}</button>
+          {/each}
+        </div>
+      {/if}
+      {#if $activeFilterCount > 0}
+        <button onclick={clearFilters} style="margin-top:12px;background:none;border:0;color:var(--link);font-size:var(--fs-small);cursor:pointer;text-decoration:underline;padding:0;">{$t('filter.clear')}</button>
+      {/if}
+    </div>
+  {/if}
 </div>
 
 {#if $searchResults.length > 0}

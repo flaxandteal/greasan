@@ -21,6 +21,26 @@ const en: Record<string, string> = {
   'search.noLayers': 'Install a dictionary layer in Settings to get started.',
   'search.goToSettings': 'Open Settings',
 
+  // Search filter drawer
+  'filter.title': 'Filters',
+  'filter.showPhrases': 'Include phrases',
+  'filter.showPhrasesHint': 'Multi-word headwords (off by default)',
+  'filter.partOfSpeech': 'Part of speech',
+  'filter.clear': 'Clear filters',
+  'filter.noneForExamples': 'No filters apply to example search.',
+  'pos.noun': 'Noun',
+  'pos.verb': 'Verb',
+  'pos.adjective': 'Adjective',
+  'pos.adverb': 'Adverb',
+  'pos.propernoun': 'Proper noun',
+  'pos.pronoun': 'Pronoun',
+  'pos.preposition': 'Preposition',
+  'pos.numeral': 'Numeral',
+  'pos.conjunction': 'Conjunction',
+  'pos.interjection': 'Interjection',
+  'pos.particle': 'Particle',
+  'pos.phrase': 'Phrase',
+
   // Entry detail
   'entry.title': 'Entry',
   'entry.senses': 'Senses',
