@@ -116,7 +116,15 @@
     // The picker's own title carries the real name; show that, not the SAF id.
     pickedFile = decodeURIComponent(picked.split('/').pop() || 'file');
     addUrl = picked;                    // content:// URI - build_layer handles it
-    if (!addName.trim()) addName = pickedFile.replace(/\.(tbx|tar\.gz|tgz|zip)$/i, '');
+    if (!addName.trim()) {
+      // A picked file maps to its catalogue Layer record by ingest format - a .tbx
+      // is Téarma - so the installed layer joins that record's name (and thus its
+      // label + colour) instead of a filename-derived id like "msf:18375". Fall
+      // back to the bare filename only when no catalogue record claims the format.
+      const fmt = detectFormat(pickedFile);
+      const known = catalogue.find((e) => e.install?.format === fmt);
+      addName = known?.install?.name || pickedFile.replace(/\.(tbx|tar\.gz|tgz|zip)$/i, '');
+    }
   }
 
   async function addFromFile() {

@@ -11,8 +11,29 @@
   // geographic axis is dialect, not source.
   import { layerStack, toggleLayerVisibility, layerSheetOpen, currentEntry, activeTab, currentLayer } from '../lib/store';
   import { layerCoverage } from '../lib/dictionary';
-  import { loadLayerBySlug } from '../lib/layers-catalogue';
+  import { loadLayerBySlug, loadLayerCatalogue } from '../lib/layers-catalogue';
   import { t } from '../lib/i18n';
+
+  // Primary tag per layer (registry name/slug → the layer's first layer_type, its
+  // primary classifier) from the layer-v2 catalogue, used to group the tray. Empty
+  // until the catalogue loads; rows then fall under "Other" only if unmatched.
+  let primaryType = $state<Record<string, string>>({});
+  $effect(() => {
+    if (!$layerSheetOpen) return;
+    let stale = false;
+    loadLayerCatalogue()
+      .then((cat) => {
+        if (stale) return;
+        const m: Record<string, string> = {};
+        for (const e of cat) {
+          const key = e.slug || e.integrationSlug;
+          if (key && e.types.length) m[key] = e.types[0];
+        }
+        primaryType = m;
+      })
+      .catch(() => {});
+    return () => { stale = true; };
+  });
 
   /** Tap a layer's label → its full description page (from the catalogue). */
   async function openDetail(name: string) {
@@ -48,6 +69,20 @@
 
   // Overlays above, base below - the stack reads bottom-up, as a stack should.
   let rows = $derived([...$layerStack].reverse());
+
+  // Group rows by primary tag, preserving stack order (group order = first
+  // appearance). Unmatched layers (e.g. a not-yet-reinstalled TBX) fall under
+  // "Other"; the base map keeps its own "Basemap" group at the bottom.
+  let groups = $derived.by(() => {
+    const order: string[] = [];
+    const byType = new Map<string, typeof rows>();
+    for (const l of rows) {
+      const type = primaryType[l.name] || (l.base ? 'Basemap' : 'Other');
+      if (!byType.has(type)) { byType.set(type, []); order.push(type); }
+      byType.get(type)!.push(l);
+    }
+    return order.map((type) => ({ type, layers: byType.get(type)! }));
+  });
 </script>
 
 <svelte:window onkeydown={onKeydown} />
@@ -71,7 +106,9 @@
       <div class="grabber"></div>
       <div class="sheet-title">{$t('layers.title')}</div>
 
-      {#each rows as l (l.name)}
+      {#each groups as g (g.type)}
+      <div class="group-title">{g.type}</div>
+      {#each g.layers as l (l.name)}
         {@const absent = coverage !== null && !coverage.has(l.name)}
         <div class="row" class:off={!l.visible}>
           <button class="row-open" onclick={() => openDetail(l.name)}>
@@ -101,6 +138,7 @@
             </span>
           </button>
         </div>
+      {/each}
       {/each}
 
       <div class="sheet-foot">
@@ -156,6 +194,13 @@
     text-transform: uppercase;
     color: var(--fg-muted);
     padding: 0 12px 6px;
+  }
+
+  .group-title {
+    font-size: var(--fs-small);
+    font-weight: 600;
+    color: var(--fg-soft);
+    padding: 10px 12px 4px;
   }
 
   .row {
