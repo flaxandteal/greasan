@@ -722,6 +722,32 @@ pub fn v2_cited_by(
 /// resolution against the graph, so this works even though the node lives in the
 /// place graph rather than the composed stack's base graph). Returns
 /// `[{id, name, lat, lng}]`, one row per citing place with geometry.
+///
+/// Parquet path (v2-duck): DuckReader::geo_points over `tiles_*.parquet` - the
+/// node-precise per-node `link_targets` reverse-lookup + geo point, no spatial
+/// extension needed (point columns, not a spatial predicate).
+#[cfg(feature = "v2-duck")]
+#[tauri::command]
+pub fn v2_geo_points(
+    head_dir: String,
+    node_path: String,
+    target_uri: String,
+) -> Result<Vec<Value>, String> {
+    use ros_madair_duck::{DuckReader, SpatialSource};
+    let glob = format!("{head_dir}/tiles_*.parquet");
+    let duck = DuckReader::open_with(&glob, SpatialSource::None).map_err(|e| e.to_string())?;
+    let points = duck
+        .geo_points(&node_path, &target_uri)
+        .map_err(|e| e.to_string())?;
+    Ok(points
+        .into_iter()
+        .map(|(id, name, lat, lng)| {
+            serde_json::json!({ "id": id, "name": name, "lat": lat, "lng": lng })
+        })
+        .collect())
+}
+
+#[cfg(not(feature = "v2-duck"))]
 #[tauri::command]
 pub fn v2_geo_points(
     head_dir: String,

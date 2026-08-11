@@ -106,6 +106,10 @@ name = "duck-probe"
 required-features = ["v2-duck"]
 
 [[example]]
+name = "geo-probe"
+required-features = ["v2-duck"]
+
+[[example]]
 name = "verify-bunamo-compose"
 required-features = ["v2"]
 
