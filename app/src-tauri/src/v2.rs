@@ -392,6 +392,28 @@ pub fn v2_query_layers(head_dirs: Vec<String>, ir: Value) -> Result<Value, Strin
 /// overlay that carries no concepts) simply contributes nothing rather than
 /// failing the stack. The command name and signature are unchanged from the
 /// `closure.json` era so the TS wrapper and `loadEntryV2` need no edits.
+#[cfg(feature = "v2-duck")]
+#[tauri::command]
+pub fn v2_closure(head_dirs: Vec<String>) -> Result<HashMap<String, String>, String> {
+    use ros_madair_duck::{DuckReader, SpatialSource};
+    let mut map: HashMap<String, String> = HashMap::new();
+    for dir in &head_dirs {
+        let catalog = Path::new(dir).join("concept_catalog.parquet");
+        if !catalog.is_file() {
+            continue;
+        }
+        let glob = format!("{dir}/tiles_*.parquet");
+        let duck = DuckReader::open_with(&glob, SpatialSource::None)
+            .map_err(|e| e.to_string())?
+            .with_catalog(&catalog.to_string_lossy())
+            .map_err(|e| e.to_string())?;
+        // Later dirs override earlier, matching the sqlite insert.
+        map.extend(duck.concept_labels().map_err(|e| e.to_string())?);
+    }
+    Ok(map)
+}
+
+#[cfg(not(feature = "v2-duck"))]
 #[tauri::command]
 pub fn v2_closure(head_dirs: Vec<String>) -> Result<HashMap<String, String>, String> {
     let mut map: HashMap<String, String> = HashMap::new();

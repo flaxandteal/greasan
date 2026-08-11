@@ -79,5 +79,12 @@ fn main() {
         }
     }
 
-    eprintln!("[duck] OK - DuckReader read tiles + descriptors + count + display from Parquet in-app");
+    // concept_labels (v2_closure port): bulk concept -> label from the catalog.
+    let labels = duck.concept_labels().expect("concept_labels");
+    eprintln!("[duck] concept_labels -> {} concept(s)", labels.len());
+    for (id, label) in labels.iter().take(3) {
+        eprintln!("[duck]   {id} => {label}");
+    }
+
+    eprintln!("[duck] OK - DuckReader: tiles + descriptors + count + display + labels from Parquet");
 }
