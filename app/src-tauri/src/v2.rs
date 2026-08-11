@@ -256,6 +256,29 @@ fn graph_path(head_dir: &str) -> PathBuf {
     Path::new(head_dir).join("graph.json")
 }
 
+/// Parquet path (v2-duck): tiles from the `data` column via DuckReader::hydrate,
+/// reusing the storage-agnostic tile→tree half. No spatial needed.
+#[cfg(feature = "v2-duck")]
+#[tauri::command]
+pub fn v2_hydrate(head_dir: String, resource_id: String, language: Option<String>) -> Result<Value, String> {
+    use ros_madair_duck::{DuckReader, SpatialSource};
+    let graph = load_graph(&graph_path(&head_dir))?;
+    let langs: Vec<&str> = match language.as_deref() {
+        Some(l) => vec![l, "ga", "gd", "en"],
+        None => vec!["ga", "gd", "en"],
+    };
+    let glob = format!("{head_dir}/tiles_*.parquet");
+    let mut duck = DuckReader::open_with(&glob, SpatialSource::None).map_err(|e| e.to_string())?;
+    let catalog = Path::new(&head_dir).join("concept_catalog.parquet");
+    if catalog.is_file() {
+        duck = duck
+            .with_catalog(&catalog.to_string_lossy())
+            .map_err(|e| e.to_string())?;
+    }
+    duck.hydrate(&resource_id, &graph, &langs).map_err(|e| e.to_string())
+}
+
+#[cfg(not(feature = "v2-duck"))]
 #[tauri::command]
 pub fn v2_hydrate(head_dir: String, resource_id: String, language: Option<String>) -> Result<Value, String> {
     let graph = load_graph(&graph_path(&head_dir))?;

@@ -134,3 +134,7 @@ tao = { version = "0.35", default-features = false }
 # patched in here - the v2 crates reach it by path, which is exactly what lets
 # the two versions coexist.
 alizarin-core = { path = "../../../magic/alizarin-sandbox/crates/alizarin-core" }
+
+[[example]]
+name = "hydrate-probe"
+required-features = ["v2-duck"]
