@@ -1,5 +1,6 @@
 <script lang="ts">
   import { get } from 'svelte/store';
+  import { fly, fade } from 'svelte/transition';
   import { searchQuery, searchResults, currentEntry, currentExample, loading, activeTab, searchLang, visibleDialects, familyConfig, recentEntries, overlayView, layers, filterOpen, showPhrases, posFilter, bunamoOnly, activeFilterCount } from '../lib/store';
   import { search, loadEntryFlagged, loadExample } from '../lib/dictionary';
   import type { SearchLang } from '../lib/dictionary';
@@ -180,10 +181,10 @@
       class:active={$filterOpen}
       aria-label={$t('filter.title')}
       aria-expanded={$filterOpen}
-      style="position:relative;border:1px solid var(--border);border-radius:8px;{$filterOpen ? 'background:var(--surface-2);' : ''}"
+      style="position:relative;border:1px solid {$activeFilterCount > 0 ? 'var(--accent-deep)' : 'var(--srf-rule)'};border-radius:8px;color:{$activeFilterCount > 0 ? 'var(--accent-deep)' : 'var(--fg-default)'};{$filterOpen ? 'background:var(--srf-card-alt);' : ''}"
       onclick={() => filterOpen.update((v) => !v)}
     >
-      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill={$activeFilterCount > 0 ? 'currentColor' : 'none'} stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
         <path d="M22 3H2l8 9.46V19l4 2v-8.54L22 3z"/>
       </svg>
       {#if $activeFilterCount > 0}
@@ -191,45 +192,64 @@
       {/if}
     </button>
   </div>
-
-  {#if $filterOpen}
-    <div style="margin-top:10px;padding:12px;border:1px solid var(--border);border-radius:10px;background:var(--surface-1);">
-      {#if $searchLang === 'sampla'}
-        <div style="color:var(--fg-muted);font-size:var(--fs-small);">{$t('filter.noneForExamples')}</div>
-      {:else}
-        {#if $searchLang === 'ga'}
-          <label style="display:flex;align-items:center;gap:10px;cursor:pointer;padding:2px 0 10px;">
-            <input type="checkbox" checked={$bunamoOnly} onchange={(e) => bunamoOnly.set((e.target as HTMLInputElement).checked)} />
-            <span>
-              <span style="font-weight:600;">{$t('filter.bunamoOnly')}</span>
-              <span style="display:block;color:var(--fg-muted);font-size:var(--fs-small);">{$t('filter.bunamoOnlyHint')}</span>
-            </span>
-          </label>
-          <label style="display:flex;align-items:center;gap:10px;cursor:pointer;padding:2px 0 10px;">
-            <input type="checkbox" checked={$showPhrases} onchange={(e) => showPhrases.set((e.target as HTMLInputElement).checked)} />
-            <span>
-              <span style="font-weight:600;">{$t('filter.showPhrases')}</span>
-              <span style="display:block;color:var(--fg-muted);font-size:var(--fs-small);">{$t('filter.showPhrasesHint')}</span>
-            </span>
-          </label>
-        {/if}
-        <div style="font-weight:600;font-size:var(--fs-small);color:var(--fg-soft);margin:4px 0 6px;">{$t('filter.partOfSpeech')}</div>
-        <div style="display:flex;flex-wrap:wrap;gap:6px;">
-          {#each POS_OPTIONS as opt}
-            <button
-              onclick={() => togglePos(opt.value)}
-              aria-pressed={$posFilter.includes(opt.value)}
-              style="padding:5px 10px;border-radius:999px;border:1px solid {$posFilter.includes(opt.value) ? 'var(--accent-deep)' : 'var(--border)'};background:{$posFilter.includes(opt.value) ? 'var(--accent-deep)' : 'transparent'};color:{$posFilter.includes(opt.value) ? '#fff' : 'var(--fg)'};font-size:var(--fs-small);cursor:pointer;"
-            >{$t(opt.key)}</button>
-          {/each}
-        </div>
-      {/if}
-      {#if $activeFilterCount > 0}
-        <button onclick={clearFilters} style="margin-top:12px;background:none;border:0;color:var(--link);font-size:var(--fs-small);cursor:pointer;text-decoration:underline;padding:0;">{$t('filter.clear')}</button>
-      {/if}
-    </div>
-  {/if}
 </div>
+
+{#if $filterOpen}
+  <!-- Filter bottom-sheet drawer -->
+  <div
+    class="ge-filter-backdrop"
+    role="button"
+    tabindex="-1"
+    aria-label={$t('filter.close')}
+    onclick={() => filterOpen.set(false)}
+    onkeydown={(e) => { if (e.key === 'Escape') filterOpen.set(false); }}
+    transition:fade={{ duration: 150 }}
+  ></div>
+  <div class="ge-filter-sheet" role="dialog" aria-modal="true" aria-label={$t('filter.title')} transition:fly={{ y: 320, duration: 220 }}>
+    <div class="ge-filter-grip"></div>
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">
+      <div style="font-weight:700;font-size:var(--fs-body);">{$t('filter.title')}</div>
+      <div style="display:flex;align-items:center;gap:14px;">
+        {#if $activeFilterCount > 0}
+          <button onclick={clearFilters} style="background:none;border:0;color:var(--link);font-size:var(--fs-small);cursor:pointer;padding:0;">{$t('filter.clear')}</button>
+        {/if}
+        <button aria-label={$t('filter.close')} onclick={() => filterOpen.set(false)} style="background:none;border:0;color:var(--fg-soft);cursor:pointer;padding:0;display:flex;">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6L6 18M6 6l12 12"/></svg>
+        </button>
+      </div>
+    </div>
+    {#if $searchLang === 'sampla'}
+      <div style="color:var(--fg-muted);font-size:var(--fs-small);padding:8px 0 4px;">{$t('filter.noneForExamples')}</div>
+    {:else}
+      {#if $searchLang === 'ga'}
+        <label style="display:flex;align-items:center;gap:10px;cursor:pointer;padding:6px 0;">
+          <input type="checkbox" checked={$bunamoOnly} onchange={(e) => bunamoOnly.set((e.target as HTMLInputElement).checked)} />
+          <span>
+            <span style="font-weight:600;">{$t('filter.bunamoOnly')}</span>
+            <span style="display:block;color:var(--fg-muted);font-size:var(--fs-small);">{$t('filter.bunamoOnlyHint')}</span>
+          </span>
+        </label>
+        <label style="display:flex;align-items:center;gap:10px;cursor:pointer;padding:6px 0;">
+          <input type="checkbox" checked={$showPhrases} onchange={(e) => showPhrases.set((e.target as HTMLInputElement).checked)} />
+          <span>
+            <span style="font-weight:600;">{$t('filter.showPhrases')}</span>
+            <span style="display:block;color:var(--fg-muted);font-size:var(--fs-small);">{$t('filter.showPhrasesHint')}</span>
+          </span>
+        </label>
+      {/if}
+      <div style="font-weight:600;font-size:var(--fs-small);color:var(--fg-soft);margin:10px 0 6px;">{$t('filter.partOfSpeech')}</div>
+      <div style="display:flex;flex-wrap:wrap;gap:6px;">
+        {#each POS_OPTIONS as opt}
+          <button
+            onclick={() => togglePos(opt.value)}
+            aria-pressed={$posFilter.includes(opt.value)}
+            style="padding:6px 12px;border-radius:999px;border:1px solid {$posFilter.includes(opt.value) ? 'var(--accent-deep)' : 'var(--srf-rule)'};background:{$posFilter.includes(opt.value) ? 'var(--accent-deep)' : 'transparent'};color:{$posFilter.includes(opt.value) ? '#fff' : 'var(--fg-default)'};font-size:var(--fs-small);cursor:pointer;"
+          >{$t(opt.key)}</button>
+        {/each}
+      </div>
+    {/if}
+  </div>
+{/if}
 
 {#if $searchResults.length > 0}
   <div class="ge-block-title" style="padding-top:12px;">{$t('search.results', { count: $searchResults.length })}</div>
@@ -359,3 +379,34 @@
     </div>
   {/if}
 {/if}
+
+<style>
+  .ge-filter-backdrop {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.35);
+    z-index: 8999;
+    border: 0;
+  }
+  .ge-filter-sheet {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 9000;
+    background: var(--srf-card);
+    border-top-left-radius: 16px;
+    border-top-right-radius: 16px;
+    box-shadow: var(--shadow-pop);
+    padding: 10px 16px calc(20px + env(safe-area-inset-bottom));
+    max-height: 78vh;
+    overflow-y: auto;
+  }
+  .ge-filter-grip {
+    width: 36px;
+    height: 4px;
+    border-radius: 2px;
+    background: var(--srf-rule);
+    margin: 2px auto 12px;
+  }
+</style>

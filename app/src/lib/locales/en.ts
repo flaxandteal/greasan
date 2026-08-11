@@ -23,8 +23,9 @@ const en: Record<string, string> = {
 
   // Search filter drawer
   'filter.title': 'Filters',
+  'filter.close': 'Close filters',
   'filter.showPhrases': 'Include phrases',
-  'filter.showPhrasesHint': 'Multi-word headwords (off by default)',
+  'filter.showPhrasesHint': 'Idioms and set expressions (phrase POS; off by default)',
   'filter.bunamoOnly': 'Core vocabulary only',
   'filter.bunamoOnlyHint': 'Restrict to the BuNaMo morphology core (~13k words with attested inflection)',
   'filter.partOfSpeech': 'Part of speech',

@@ -27,7 +27,7 @@ const ga: Record<string, string> = {
   // HUMAN SLOT - filter drawer + part-of-speech labels. Deliberately NOT filled
   // (no machine translation): these keys fall back to the English strings in
   // en.ts until a person adds the Irish. Keys awaiting translation:
-  //   filter.title, filter.showPhrases, filter.showPhrasesHint,
+  //   filter.title, filter.close, filter.showPhrases, filter.showPhrasesHint,
   //   filter.bunamoOnly, filter.bunamoOnlyHint,
   //   filter.partOfSpeech, filter.clear, filter.noneForExamples,
   //   pos.noun, pos.verb, pos.adjective, pos.adverb, pos.propernoun,

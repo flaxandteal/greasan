@@ -634,10 +634,12 @@ export async function search(
     // Facet filters (drawer), applied BEFORE the 50-cap so hidden rows don't eat
     // slots. Phrase-hide is headword-search only (the user browses phrases via
     // Samplaí); POS applies to entry results (ga/en), never example sentences.
-    // ...unless the user explicitly selected the "phrase" POS, which IS multi-word
-    // (hiding it would leave that filter permanently empty).
+    // "Phrases" = entries with the phrase POS (idioms / set expressions), NOT
+    // multi-word headwords (a multi-word noun like "fear an tí" is a normal entry
+    // and stays). Hidden by default; shown via the toggle, or when the user
+    // explicitly filters TO the phrase POS (else that filter would be empty).
     if (lang === 'ga' && !filters?.showPhrases && !filters?.pos?.includes('phrase')) {
-      merged = merged.filter((r) => !/\s/.test(r.headword.trim()));
+      merged = merged.filter((r) => (r.pos || '').toLowerCase() !== 'phrase');
     }
     if (lang !== 'sampla' && filters?.pos?.length) {
       const want = new Set(filters.pos.map((p) => p.toLowerCase()));
