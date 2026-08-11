@@ -479,21 +479,15 @@ export async function search(
     ]);
     // URIs surfaced by the mutation-stripped query - the lemma owns the inflected
     // surface form the user actually typed, so it deserves a strong rank tier.
+    // Query-variant signal: URIs the mutation-stripped query found. Kept as a URI
+    // set (it's about WHICH query matched, not a property of the row). The form-hit
+    // and in-BuNaMo signals instead ride on the row objects (_formHit / _inBunamo),
+    // so they survive the by-URI and headword collapses below.
     const demutMatchUris = new Set<string>();
-    // URIs whose match was an inflected FORM (not the headword) - "tiocfaidh"
-    // finds tar via its forms bag. OR'd across every layer and query variant.
-    const formMatchUris = new Set<string>();
-    // URIs returned by the BuNaMo layer, i.e. entries in the curated morphology
-    // core - the set the "core vocabulary" filter restricts to.
-    const bunamoUris = new Set<string>();
     const pfSets: EntrySummary[][] = [];
     for (const { qi, rs } of pfTagged) {
       pfSets.push(rs);
       if (qi === demutIdx) for (const r of rs) demutMatchUris.add(r.uri);
-      for (const r of rs) {
-        if (r._formHit) formMatchUris.add(r.uri);
-        if (r._inBunamo) bunamoUris.add(r.uri);
-      }
     }
     const resultSets: EntrySummary[][] = [...pfSets];
     if (ftsHits.length) {
@@ -528,9 +522,12 @@ export async function search(
         } else {
           // Gloss union: the forms-only BuNaMo record (no gloss) can win first-seen
           // for a lemma that ALSO comes back glossed from Wiktionary - "tar" would
-          // then show glossless. Fill a missing gloss from any layer that has one.
+          // then show glossless. Fill a missing gloss from any layer that has one,
+          // and OR the row signals so a hit from ANY layer/variant counts.
           const kept = byUri.get(r.uri)!;
           if (!kept.gloss && r.gloss) kept.gloss = r.gloss;
+          if (r._inBunamo) kept._inBunamo = true;
+          if (r._formHit) kept._formHit = true;
         }
         const branch = (r.dialect || '').split('.')[0];
         if (branch) branchesByUri.get(r.uri)!.add(branch);
@@ -586,7 +583,18 @@ export async function search(
     for (const r of merged) {
       const key = collapseKey(r);
       const prev = bestByKey.get(key);
-      if (!prev || breadth(r.dialect || '') > breadth(prev.dialect || '')) bestByKey.set(key, r);
+      if (!prev) { bestByKey.set(key, r); continue; }
+      // Two URIs for one lemma (a BuNaMo forms row + a Wiktionary row that hash to
+      // different uuids). Keep the broadest-dialect row, but carry the gloss and the
+      // in-BuNaMo / form-hit signals across, so the survivor - whichever the later
+      // filters keep - isn't glossless or wrongly dropped. Without this, "Core
+      // vocabulary" kept the glossless BuNaMo row and lost Wiktionary's gloss.
+      const keep = breadth(r.dialect || '') > breadth(prev.dialect || '') ? r : prev;
+      const drop = keep === r ? prev : r;
+      if (!keep.gloss && drop.gloss) keep.gloss = drop.gloss;
+      keep._inBunamo = keep._inBunamo || drop._inBunamo;
+      keep._formHit = keep._formHit || drop._formHit;
+      bestByKey.set(key, keep);
     }
     merged = [...bestByKey.values()];
 
@@ -614,7 +622,7 @@ export async function search(
       // Exact surface form the user typed - a stripped initial mutation
       // ("tháinig") or an inflected form ("tiocfaidh") - resolves to its lemma.
       // Lift it above prefix/substring/gloss noise.
-      if (demutMatchUris.has(r.uri) || formMatchUris.has(r.uri)) return 2;
+      if (demutMatchUris.has(r.uri) || r._formHit) return 2;
       if (t.startsWith(q)) return 3;
       if (stripDiacritics(t).startsWith(qNorm)) return 4;
       if (wholeWord(t)) return 5;
@@ -645,10 +653,11 @@ export async function search(
       const want = new Set(filters.pos.map((p) => p.toLowerCase()));
       merged = merged.filter((r) => want.has((r.pos || '').toLowerCase()));
     }
-    // Core-vocabulary filter: keep only entries BuNaMo returned. ga only - BuNaMo
-    // indexes forms (pagefind-ga), not glosses, so it can't gate an en search.
+    // Core-vocabulary filter: keep only entries BuNaMo returned (per-row flag, OR'd
+    // through both dedups above). ga only - BuNaMo indexes forms (pagefind-ga), not
+    // glosses, so it can't gate an en search.
     if (lang === 'ga' && filters?.bunamoOnly) {
-      merged = merged.filter((r) => bunamoUris.has(r.uri));
+      merged = merged.filter((r) => r._inBunamo);
     }
 
     merged.sort((a, b) => rank(a) - rank(b));
