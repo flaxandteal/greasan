@@ -1,6 +1,6 @@
 <script lang="ts">
   import { get } from 'svelte/store';
-  import { searchQuery, searchResults, currentEntry, currentExample, loading, activeTab, searchLang, visibleDialects, familyConfig, recentEntries, overlayView, layers, filterOpen, showPhrases, posFilter, activeFilterCount } from '../lib/store';
+  import { searchQuery, searchResults, currentEntry, currentExample, loading, activeTab, searchLang, visibleDialects, familyConfig, recentEntries, overlayView, layers, filterOpen, showPhrases, posFilter, bunamoOnly, activeFilterCount } from '../lib/store';
   import { search, loadEntryFlagged, loadExample } from '../lib/dictionary';
   import type { SearchLang } from '../lib/dictionary';
   import { t } from '../lib/i18n';
@@ -31,6 +31,7 @@
   function clearFilters() {
     posFilter.set([]);
     showPhrases.set(false);
+    bunamoOnly.set(false);
   }
 
   /** Dialect code tag for display (codes come directly from Pagefind meta). */
@@ -60,6 +61,7 @@
       const results = await search(value, lang, get(visibleDialects), {
         showPhrases: get(showPhrases),
         pos: get(posFilter),
+        bunamoOnly: get(bunamoOnly),
       });
       searchResults.set(results);
     } finally {
@@ -86,7 +88,7 @@
   }
 
   // Re-search when dialect OR facet filters change (get() avoids extra reactive deps)
-  $: $visibleDialects, $showPhrases, $posFilter, refreshForDialects();
+  $: $visibleDialects, $showPhrases, $posFilter, $bunamoOnly, refreshForDialects();
   function refreshForDialects() {
     const q = get(searchQuery);
     const lang = get(searchLang);
@@ -196,6 +198,13 @@
         <div style="color:var(--fg-muted);font-size:var(--fs-small);">{$t('filter.noneForExamples')}</div>
       {:else}
         {#if $searchLang === 'ga'}
+          <label style="display:flex;align-items:center;gap:10px;cursor:pointer;padding:2px 0 10px;">
+            <input type="checkbox" checked={$bunamoOnly} onchange={(e) => bunamoOnly.set((e.target as HTMLInputElement).checked)} />
+            <span>
+              <span style="font-weight:600;">{$t('filter.bunamoOnly')}</span>
+              <span style="display:block;color:var(--fg-muted);font-size:var(--fs-small);">{$t('filter.bunamoOnlyHint')}</span>
+            </span>
+          </label>
           <label style="display:flex;align-items:center;gap:10px;cursor:pointer;padding:2px 0 10px;">
             <input type="checkbox" checked={$showPhrases} onchange={(e) => showPhrases.set((e.target as HTMLInputElement).checked)} />
             <span>

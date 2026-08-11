@@ -25,6 +25,8 @@ const en: Record<string, string> = {
   'filter.title': 'Filters',
   'filter.showPhrases': 'Include phrases',
   'filter.showPhrasesHint': 'Multi-word headwords (off by default)',
+  'filter.bunamoOnly': 'Core vocabulary only',
+  'filter.bunamoOnlyHint': 'Restrict to the BuNaMo morphology core (~13k words with attested inflection)',
   'filter.partOfSpeech': 'Part of speech',
   'filter.clear': 'Clear filters',
   'filter.noneForExamples': 'No filters apply to example search.',

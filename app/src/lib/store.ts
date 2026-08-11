@@ -37,10 +37,14 @@ export const filterOpen = writable(false);
 export const showPhrases = persisted<boolean>('ge:showPhrases', false);
 /** Selected part-of-speech filter (raw POS values, e.g. "noun"). Empty = all. */
 export const posFilter = persisted<string[]>('ge:posFilter', []);
+/** Restrict headword search to the BuNaMo morphology core (~13k curated content
+ * words with attested inflection). */
+export const bunamoOnly = persisted<boolean>('ge:bunamoOnly', false);
 /** Count of active (non-default) filters, for the drawer button badge. */
 export const activeFilterCount = derived(
-  [showPhrases, posFilter],
-  ([$showPhrases, $posFilter]) => ($showPhrases ? 1 : 0) + ($posFilter.length > 0 ? 1 : 0),
+  [showPhrases, posFilter, bunamoOnly],
+  ([$showPhrases, $posFilter, $bunamoOnly]) =>
+    ($showPhrases ? 1 : 0) + ($posFilter.length > 0 ? 1 : 0) + ($bunamoOnly ? 1 : 0),
 );
 export const currentEntry = writable<any | null>(null);
 export const currentExample = writable<ExampleDetail | null>(null);

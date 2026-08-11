@@ -35,6 +35,9 @@ export interface EntrySummary {
   /** Internal ranking hint: the query matched an inflected form of this entry
    * (not its headword), e.g. "tiocfaidh" -> tar. Set in searchOneInstance. */
   _formHit?: boolean;
+  /** Internal filter hint: this hit came from the BuNaMo layer, i.e. the entry is
+   * in the curated morphology core. Set in searchOneInstance. */
+  _inBunamo?: boolean;
 }
 
 export interface ExternalExample {
@@ -267,8 +270,8 @@ const NON_SEARCH_LAYERS: ReadonlySet<string> = new Set(['place', 'concept', 'exa
 // shouldn't stop "tháinig" from finding "tar".
 const FORM_INDEX_LAYERS: ReadonlySet<string> = new Set(['bunamo']);
 
-function allPagefindBasesForLang(lang: SearchLang): string[] {
-  const bases: string[] = [];
+function allPagefindBasesForLang(lang: SearchLang): { base: string; layer: string }[] {
+  const bases: { base: string; layer: string }[] = [];
   const dir = lang === 'en' ? 'pagefind-en' : lang === 'sampla' ? 'pagefind-sampla' : `pagefind-${lang}`;
   // Samplaí is EXAMPLE-granular: it searches the example layers' own sampla index
   // (each record is one sentence, url = example UUID → tap opens the example page),
@@ -283,7 +286,7 @@ function allPagefindBasesForLang(lang: SearchLang): string[] {
     const isExample = layer.name.startsWith('example-');
     if (sampla ? !isExample : NON_SEARCH_LAYERS.has(layer.name)) continue;
     if (!layer.pagefindBase) continue;
-    bases.push(layer.pagefindBase + dir + '/');
+    bases.push({ base: layer.pagefindBase + dir + '/', layer: layer.name });
   }
   return bases;
 }
@@ -295,6 +298,7 @@ async function searchOneInstance(
   lang: SearchLang,
   dialects?: string[],
   rawToken?: string,
+  fromBunamo?: boolean,
 ): Promise<EntrySummary[]> {
   const pf = await getPagefind(pagefindBase);
 
@@ -357,6 +361,7 @@ async function searchOneInstance(
       gloss: lang === 'sampla' ? (d.meta.sentence_en || undefined) : (d.meta.gloss || undefined),
       dialect,
       _formHit: formHit,
+      _inBunamo: !!fromBunamo,
     };
   });
 }
@@ -401,6 +406,9 @@ export interface SearchFilters {
   showPhrases?: boolean;
   /** Restrict to these raw POS values (e.g. ["noun","verb"]). Empty/undefined = all. */
   pos?: string[];
+  /** Restrict to entries in the BuNaMo morphology core (~13k noun/adj/verb with
+   * attested inflection). Headword (ga) search only - BuNaMo has no gloss index. */
+  bunamoOnly?: boolean;
 }
 
 export async function search(
@@ -451,9 +459,9 @@ export async function search(
     const demutIdx = queryStrs.length > 1 ? queryStrs.length - 1 : -1;
     const [pfTagged, ftsHits] = await Promise.all([
       Promise.all(
-        bases.flatMap(base =>
+        bases.flatMap(({ base, layer }) =>
           queryStrs.map((q, qi) =>
-            searchOneInstance(base, mkPfQuery(q), lang, dialects, q)
+            searchOneInstance(base, mkPfQuery(q), lang, dialects, q, layer === 'bunamo')
               .then(rs => ({ qi, rs }))
               .catch(err => {
                 console.warn(`[dictionary] Search failed for ${base}:`, err);
@@ -475,11 +483,17 @@ export async function search(
     // URIs whose match was an inflected FORM (not the headword) - "tiocfaidh"
     // finds tar via its forms bag. OR'd across every layer and query variant.
     const formMatchUris = new Set<string>();
+    // URIs returned by the BuNaMo layer, i.e. entries in the curated morphology
+    // core - the set the "core vocabulary" filter restricts to.
+    const bunamoUris = new Set<string>();
     const pfSets: EntrySummary[][] = [];
     for (const { qi, rs } of pfTagged) {
       pfSets.push(rs);
       if (qi === demutIdx) for (const r of rs) demutMatchUris.add(r.uri);
-      for (const r of rs) if (r._formHit) formMatchUris.add(r.uri);
+      for (const r of rs) {
+        if (r._formHit) formMatchUris.add(r.uri);
+        if (r._inBunamo) bunamoUris.add(r.uri);
+      }
     }
     const resultSets: EntrySummary[][] = [...pfSets];
     if (ftsHits.length) {
@@ -628,6 +642,11 @@ export async function search(
     if (lang !== 'sampla' && filters?.pos?.length) {
       const want = new Set(filters.pos.map((p) => p.toLowerCase()));
       merged = merged.filter((r) => want.has((r.pos || '').toLowerCase()));
+    }
+    // Core-vocabulary filter: keep only entries BuNaMo returned. ga only - BuNaMo
+    // indexes forms (pagefind-ga), not glosses, so it can't gate an en search.
+    if (lang === 'ga' && filters?.bunamoOnly) {
+      merged = merged.filter((r) => bunamoUris.has(r.uri));
     }
 
     merged.sort((a, b) => rank(a) - rank(b));

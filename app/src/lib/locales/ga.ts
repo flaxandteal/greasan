@@ -28,6 +28,7 @@ const ga: Record<string, string> = {
   // (no machine translation): these keys fall back to the English strings in
   // en.ts until a person adds the Irish. Keys awaiting translation:
   //   filter.title, filter.showPhrases, filter.showPhrasesHint,
+  //   filter.bunamoOnly, filter.bunamoOnlyHint,
   //   filter.partOfSpeech, filter.clear, filter.noneForExamples,
   //   pos.noun, pos.verb, pos.adjective, pos.adverb, pos.propernoun,
   //   pos.pronoun, pos.preposition, pos.numeral, pos.conjunction,
