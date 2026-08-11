@@ -44,8 +44,23 @@ fn main() {
     for s in &summaries {
         eprintln!("[parquet] model {}", s.graph_id);
     }
+
+    // Carry the primary model's graph.json into the dataset dir so it is
+    // self-contained (the app's v2_hydrate loads `<dir>/graph.json`, as the sqlite
+    // heads do). Optional 3rd arg overrides which model is primary; default = the
+    // first emitted.
+    let primary = args
+        .next()
+        .or_else(|| summaries.first().map(|s| s.graph_id.clone()))
+        .expect("no model emitted");
+    let graph_src = data_dir
+        .join("graphs/resource_models")
+        .join(format!("{primary}.json"));
+    std::fs::copy(&graph_src, out_dir.join("graph.json"))
+        .unwrap_or_else(|e| panic!("copy graph.json ({}): {e}", graph_src.display()));
+
     eprintln!(
-        "[parquet] {} model(s) -> {}",
+        "[parquet] {} model(s) + graph.json ({primary}) -> {}",
         summaries.len(),
         out_dir.display()
     );
