@@ -30,7 +30,16 @@ fn main() {
     let graph: StaticGraph = serde_json::from_value(graph_val).expect("StaticGraph");
 
     let registry = default_registry();
-    let duck = DuckReader::open(&parquet).expect("DuckReader::open (read_parquet offline)");
+    // Attach the sibling concept_catalog.parquet so search_display's POS/dialect
+    // concept-label joins have a catalog to hit.
+    let catalog = std::path::Path::new(&parquet)
+        .parent()
+        .unwrap()
+        .join("concept_catalog.parquet");
+    let duck = DuckReader::open(&parquet)
+        .expect("DuckReader::open (read_parquet offline)")
+        .with_catalog(catalog.to_str().unwrap())
+        .expect("with_catalog");
 
     // No WHERE: SelectIds over the whole model, capped - just proving the read path
     // returns real resource ids from the Parquet tiles.
@@ -57,5 +66,18 @@ fn main() {
     eprintln!("[duck] count_records -> {n}");
     assert_eq!(n, ids.len(), "count_records must match resolve_ids count");
 
-    eprintln!("[duck] OK - DuckReader read tiles + descriptors + count from Parquet in-app");
+    // search_display (v2_search_display port): headword + POS + dialect labels.
+    // Bunamo is forms-only so POS/dialects are empty here, but this exercises the
+    // full method incl. the concept-catalog joins (they run, just match nothing).
+    const POS_NODE: &str = "a956278b-6815-5cc5-b674-e933e9c84aad";
+    const DIALECT_NODE: &str = "69fb02e1-6d10-5a11-9bc2-4a02ad7fb8b0";
+    let disp = duck.search_display(&sample, POS_NODE, DIALECT_NODE).expect("search_display");
+    eprintln!("[duck] search_display -> {} row(s)", disp.len());
+    for id in &sample {
+        if let Some(r) = disp.get(id) {
+            eprintln!("[duck]   {id} hw={:?} pos={:?} dial={:?}", r.headword, r.pos, r.dialects);
+        }
+    }
+
+    eprintln!("[duck] OK - DuckReader read tiles + descriptors + count + display from Parquet in-app");
 }

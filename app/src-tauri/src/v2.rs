@@ -504,6 +504,49 @@ pub struct SearchDisplay {
     pub dialects: Vec<String>,
 }
 
+/// Parquet path (v2-duck): headword from `descriptor_name`, POS + dialect labels
+/// from the per-nodegroup `concept_id` ⨝ concept catalog (DuckReader::search_display).
+/// First head (composition order) with a headword for a uri wins, as in sqlite.
+#[cfg(feature = "v2-duck")]
+#[tauri::command]
+pub fn v2_search_display(
+    head_dirs: Vec<String>,
+    uris: Vec<String>,
+    pos_node: String,
+    dialect_node: String,
+) -> Result<HashMap<String, SearchDisplay>, String> {
+    use ros_madair_duck::{DuckReader, SpatialSource};
+    let mut out: HashMap<String, SearchDisplay> = HashMap::new();
+    for dir in &head_dirs {
+        if uris.iter().all(|u| out.contains_key(u)) {
+            break;
+        }
+        let glob = format!("{dir}/tiles_*.parquet");
+        let mut duck = DuckReader::open_with(&glob, SpatialSource::None).map_err(|e| e.to_string())?;
+        let catalog = Path::new(dir).join("concept_catalog.parquet");
+        if catalog.is_file() {
+            duck = duck
+                .with_catalog(&catalog.to_string_lossy())
+                .map_err(|e| e.to_string())?;
+        }
+        let rows = duck
+            .search_display(&uris, &pos_node, &dialect_node)
+            .map_err(|e| e.to_string())?;
+        for (uri, row) in rows {
+            // Require a headword (matches the sqlite spine-hit contract); first
+            // head with the resource wins.
+            let Some(headword) = row.headword else { continue };
+            out.entry(uri).or_insert(SearchDisplay {
+                headword,
+                pos: row.pos.unwrap_or_default(),
+                dialects: row.dialects,
+            });
+        }
+    }
+    Ok(out)
+}
+
+#[cfg(not(feature = "v2-duck"))]
 #[tauri::command]
 pub fn v2_search_display(
     head_dirs: Vec<String>,
