@@ -42,10 +42,15 @@ fn main() {
     };
     let ids = duck.resolve_ids(&query, &graph, &registry).expect("resolve_ids");
 
-    eprintln!("[duck] resolve_ids -> {} id(s) (limit 10)", ids.len());
-    for id in ids.iter().take(3) {
-        eprintln!("[duck]   {id}");
-    }
+    eprintln!("[duck] resolve_ids -> {} id(s)", ids.len());
     assert!(!ids.is_empty(), "expected at least one resource id from the parquet");
-    eprintln!("[duck] OK - DuckReader read the Parquet dataset in-app");
+
+    // Descriptor read (the v2_descriptors port): resolve display names for a sample.
+    let sample: Vec<String> = ids.iter().take(5).cloned().collect();
+    let descs = duck.descriptors(&sample).expect("descriptors");
+    eprintln!("[duck] descriptors -> {}/{} resolved", descs.len(), sample.len());
+    for id in &sample {
+        eprintln!("[duck]   {id} => {:?}", descs.get(id));
+    }
+    eprintln!("[duck] OK - DuckReader read tiles + descriptors from Parquet in-app");
 }
