@@ -138,3 +138,7 @@ alizarin-core = { path = "../../../magic/alizarin-sandbox/crates/alizarin-core" 
 [[example]]
 name = "hydrate-probe"
 required-features = ["v2-duck"]
+
+[[example]]
+name = "compose-probe"
+required-features = ["v2-duck"]

@@ -678,6 +678,25 @@ pub fn v2_search_display(
 /// Hydrate one resource from the composed view of a layer stack: gather its tiles
 /// from every layer that has it, merge with per-nodegroup precedence (topmost
 /// wins), then hydrate to a schema-aware JSON tree. The graph is the base's.
+/// Parquet path (v2-duck): composed hydration over a stack of Parquet layer dirs
+/// via ros_madair_duck::hydrate_layers - same per-nodegroup precedence, tiles from
+/// the `data` column. (Needs each dataset dir to carry graph.json; slice 6.)
+#[cfg(feature = "v2-duck")]
+#[tauri::command]
+pub fn v2_hydrate_layers(head_dirs: Vec<String>, resource_id: String, language: Option<String>) -> Result<Value, String> {
+    let Some(base) = head_dirs.first() else {
+        return Err("v2_hydrate_layers: no layers given".to_string());
+    };
+    let graph = load_graph(&graph_path(base))?;
+    let langs: Vec<&str> = match language.as_deref() {
+        Some(l) => vec![l, "ga", "gd", "en"],
+        None => vec!["ga", "gd", "en"],
+    };
+    let dirs: Vec<&Path> = head_dirs.iter().map(|d| Path::new(d.as_str())).collect();
+    ros_madair_duck::hydrate_layers(&dirs, &resource_id, &graph, &langs).map_err(|e| e.to_string())
+}
+
+#[cfg(not(feature = "v2-duck"))]
 #[tauri::command]
 pub fn v2_hydrate_layers(head_dirs: Vec<String>, resource_id: String, language: Option<String>) -> Result<Value, String> {
     let Some(base) = head_dirs.first() else {
