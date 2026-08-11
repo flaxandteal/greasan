@@ -50,21 +50,27 @@ pagefind = { path = "../../../svg/malazan-experiment/pagefind/pagefind", default
 # The native read path: hydration, tile recovery, manifest loading. Replaces the
 # hand-rolled dict/spine/fragment_dir/chunks join and the msgpack read loop that
 # used to live in v2.rs.
-ros-madair-read = { path = "../../../magic/RosMadair-sandbox/crates/ros-madair-read", optional = true }
+ros-madair-read = { path = "../../../magic/RosMadair-sandbox-parquet/crates/ros-madair-read", optional = true }
 # The artifact format types - notably `Manifest.handlers`, which is what makes
 # the registry below derivable instead of guessable.
-ros-madair-format = { path = "../../../magic/RosMadair-sandbox/crates/ros-madair-format", optional = true }
+ros-madair-format = { path = "../../../magic/RosMadair-sandbox-parquet/crates/ros-madair-format", optional = true }
 # The single source of the extension-type registry. We no longer hand-build one
 # from alizarin-clm-core: the registry is rebuilt from the handler set the
 # *manifest declares*, so an emit/query registry mismatch fails loudly instead of
 # silently returning zero rows.
-ros-madair-handlers = { path = "../../../magic/RosMadair-sandbox/crates/ros-madair-handlers", optional = true }
-ros-madair-query = { path = "../../../magic/RosMadair-sandbox/crates/ros-madair-query", optional = true }
+ros-madair-handlers = { path = "../../../magic/RosMadair-sandbox-parquet/crates/ros-madair-handlers", optional = true }
+ros-madair-query = { path = "../../../magic/RosMadair-sandbox-parquet/crates/ros-madair-query", optional = true }
 rusqlite = { version = "0.32", features = ["bundled"], optional = true }
 # Regeneration only (`v2-emit`) - see examples/regen-macbain-v2.rs. Emitting from
 # *this* workspace keeps us off the sandbox's target/ lock and Cargo.lock, which
 # `cargo run -p ros-madair-emit --manifest-path <sandbox>` would take.
-ros-madair-emit = { path = "../../../magic/RosMadair-sandbox/crates/ros-madair-emit", optional = true }
+ros-madair-emit = { path = "../../../magic/RosMadair-sandbox-parquet/crates/ros-madair-emit", optional = true }
+# --- DuckDB+Parquet substrate (migration, see HANDOFF-substrate-migration-and-mobile.md) ---
+# ros-madair-duck compiles the ros-madair-query IR to DuckDB SQL over tile-row
+# Parquet. `duckdb` is the native binding; bundled+json+parquet static-link the
+# amalgamation + the parquet reader so read_parquet works OFFLINE (no INSTALL).
+ros-madair-duck = { path = "../../../magic/RosMadair-sandbox-parquet/crates/ros-madair-duck", optional = true }
+duckdb = { version = "1", features = ["bundled", "json", "parquet"], optional = true }
 
 [features]
 v2 = [
@@ -74,6 +80,10 @@ v2 = [
     "dep:ros-madair-query",
     "dep:rusqlite",
 ]
+# The DuckDB+Parquet read path (migration in progress). Builds on v2-emit (the
+# real app feature set) so it also exercises the app's emit calls against the
+# parquet emit crate; adds the native duckdb build + ros-madair-duck alongside.
+v2-duck = ["v2-emit", "dep:ros-madair-duck", "dep:duckdb"]
 v2-emit = ["v2", "dep:ros-madair-emit"]
 # Debug-only localhost navigation channel for deterministic driving (see
 # src/navserver.rs). Never enable for a public release.
