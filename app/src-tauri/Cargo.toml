@@ -98,6 +98,10 @@ name = "regen-layer-v2"
 required-features = ["v2-emit"]
 
 [[example]]
+name = "regen-parquet-v2"
+required-features = ["v2-emit"]
+
+[[example]]
 name = "verify-bunamo-compose"
 required-features = ["v2"]
 
