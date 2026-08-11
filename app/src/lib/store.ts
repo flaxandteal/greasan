@@ -231,18 +231,37 @@ export interface LayerStackItem {
   visible: boolean;
 }
 
+/** The layer-v2 catalogue (Layer records), loaded once at startup. The single
+ * source for a layer's display name + swatch; family.ts layerPresentation is only
+ * the fallback (for a layer not yet in the catalogue, or before it loads). */
+export const layerCatalogue = writable<import('./layers-catalogue').LayerEntry[]>([]);
+
+/** Refresh the catalogue store from the layer-v2 head. Best-effort. */
+export async function loadCatalogue(): Promise<void> {
+  try {
+    const { loadLayerCatalogue } = await import('./layers-catalogue');
+    layerCatalogue.set(await loadLayerCatalogue());
+  } catch { /* catalogue head absent - fall back to family.ts presentation */ }
+}
+
 /** The stack in composition order, as the sheet renders it. */
 export const layerStack = derived(
-  [layers, hiddenLayerNames, activeFamily],
-  ([$layers, $hidden, $family]): LayerStackItem[] => {
+  [layers, hiddenLayerNames, activeFamily, layerCatalogue],
+  ([$layers, $hidden, $family, $catalogue]): LayerStackItem[] => {
+    // layer-v2 is authoritative for display; family.ts presentation is the
+    // fallback. Key the catalogue by slug (= the layer registry name).
+    const cat = new Map($catalogue.map((e) => [e.slug || e.integrationSlug, e]));
     // The `layer` catalogue is a META head — never a toggleable stack layer.
-    const items: LayerStackItem[] = $layers.filter((l) => l.name !== 'layer').map((l) => ({
-      name: l.name,
-      label: FAMILIES[$family]?.layerPresentation?.[l.name]?.label ?? l.name,
-      swatch: layerSwatch($family, l.name),
-      base: false,
-      visible: !$hidden.includes(l.name),
-    }));
+    const items: LayerStackItem[] = $layers.filter((l) => l.name !== 'layer').map((l) => {
+      const c = cat.get(l.name);
+      return {
+        name: l.name,
+        label: c?.name || FAMILIES[$family]?.layerPresentation?.[l.name]?.label || l.name,
+        swatch: c?.swatch || layerSwatch($family, l.name),
+        base: false,
+        visible: !$hidden.includes(l.name),
+      };
+    });
     // No layer is permanently the base. Only the LAST visible layer is pinned
     // (un-hideable) so RM always gets a non-empty stack. If a stale set hid them
     // all, force the first back on to match `setHiddenLayers`' fallback.
@@ -420,6 +439,9 @@ export async function bootstrapLayers(): Promise<void> {
   // run that base is the dev constant, not the installed one.
   setHiddenLayers(get(hiddenLayerNames));
   layers.set(getDynamicLayers());
+  // Populate the catalogue so the tray shows layer-v2 names/swatches from the
+  // first render (not the family.ts fallback). Best-effort; head must be unpacked.
+  await loadCatalogue();
 }
 
 /**

@@ -9,30 +9,21 @@
   // borrow anything spatial - opacity and blending mean nothing when layers
   // merge into one entry rather than tiling a plane, and the app's genuinely
   // geographic axis is dialect, not source.
-  import { layerStack, toggleLayerVisibility, layerSheetOpen, currentEntry, activeTab, currentLayer } from '../lib/store';
+  import { layerStack, toggleLayerVisibility, layerSheetOpen, currentEntry, activeTab, currentLayer, layerCatalogue } from '../lib/store';
   import { layerCoverage } from '../lib/dictionary';
-  import { loadLayerBySlug, loadLayerCatalogue } from '../lib/layers-catalogue';
+  import { loadLayerBySlug } from '../lib/layers-catalogue';
   import { t } from '../lib/i18n';
 
   // Primary tag per layer (registry name/slug → the layer's first layer_type, its
-  // primary classifier) from the layer-v2 catalogue, used to group the tray. Empty
-  // until the catalogue loads; rows then fall under "Other" only if unmatched.
-  let primaryType = $state<Record<string, string>>({});
-  $effect(() => {
-    if (!$layerSheetOpen) return;
-    let stale = false;
-    loadLayerCatalogue()
-      .then((cat) => {
-        if (stale) return;
-        const m: Record<string, string> = {};
-        for (const e of cat) {
-          const key = e.slug || e.integrationSlug;
-          if (key && e.types.length) m[key] = e.types[0];
-        }
-        primaryType = m;
-      })
-      .catch(() => {});
-    return () => { stale = true; };
+  // primary classifier) from the shared layer-v2 catalogue store, used to group
+  // the tray. Rows fall under "Other" only if the catalogue doesn't cover them.
+  let primaryType = $derived.by(() => {
+    const m: Record<string, string> = {};
+    for (const e of $layerCatalogue) {
+      const key = e.slug || e.integrationSlug;
+      if (key && e.types.length) m[key] = e.types[0];
+    }
+    return m;
   });
 
   /** Tap a layer's label → its full description page (from the catalogue). */
