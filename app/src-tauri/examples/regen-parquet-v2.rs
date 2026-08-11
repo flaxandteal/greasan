@@ -49,9 +49,16 @@ fn main() {
     // self-contained (the app's v2_hydrate loads `<dir>/graph.json`, as the sqlite
     // heads do). Optional 3rd arg overrides which model is primary; default = the
     // first emitted.
+    // Default primary = the model with the MOST tiles (e.g. lexical_entry over the
+    // external_example sidecar in a multi-graph dataset); an explicit 3rd arg wins.
     let primary = args
         .next()
-        .or_else(|| summaries.first().map(|s| s.graph_id.clone()))
+        .or_else(|| {
+            summaries
+                .iter()
+                .max_by_key(|s| s.tiles)
+                .map(|s| s.graph_id.clone())
+        })
         .expect("no model emitted");
     let graph_src = data_dir
         .join("graphs/resource_models")
