@@ -374,6 +374,29 @@ pub fn v2_closure(head_dirs: Vec<String>) -> Result<HashMap<String, String>, Str
 /// hydrate, and crucially without needing that resource's MODEL graph (the head ships
 /// only the base graph.json). Every `spine_*` table (one per model) is searched across
 /// the layer stack; first hit wins. Batch: one call resolves many uris.
+/// Parquet path (v2-duck): read the promoted `descriptor_name` tile column per
+/// resource via DuckReader over each dir's `tiles_*.parquet`. No spatial needed for
+/// descriptors, so open with `SpatialSource::None` (no extension, no network).
+#[cfg(feature = "v2-duck")]
+#[tauri::command]
+pub fn v2_descriptors(
+    head_dirs: Vec<String>,
+    uris: Vec<String>,
+) -> Result<HashMap<String, String>, String> {
+    use ros_madair_duck::{DuckReader, SpatialSource};
+    let mut out: HashMap<String, String> = HashMap::new();
+    for dir in &head_dirs {
+        let glob = format!("{dir}/tiles_*.parquet");
+        let duck = DuckReader::open_with(&glob, SpatialSource::None).map_err(|e| e.to_string())?;
+        for (uri, name) in duck.descriptors(&uris).map_err(|e| e.to_string())? {
+            out.entry(uri).or_insert(name);
+        }
+    }
+    Ok(out)
+}
+
+/// sqlite-head path (default / shipping): `spine.display_name` ⨝ `dict`.
+#[cfg(not(feature = "v2-duck"))]
 #[tauri::command]
 pub fn v2_descriptors(
     head_dirs: Vec<String>,
