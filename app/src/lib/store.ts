@@ -1,4 +1,5 @@
 import { writable, derived, readable, get, type Writable } from 'svelte/store';
+import { listen } from '@tauri-apps/api/event';
 import { ready } from './wasm';
 import { FAMILIES, DEFAULT_FAMILY, layerSwatch, type FamilyId } from './family';
 import { switchFamily, addDynamicLayer, addV2Layer, removeV2Layer, getDynamicLayers, registerV2Layers, initOfflineLayers, setHiddenLayers, search, loadEntryFlagged, type DynamicLayerInfo, type ExampleDetail } from './dictionary';
@@ -317,6 +318,28 @@ export function setActiveFamily(familyId: FamilyId): void {
 }
 
 /**
+ * Live-update `buildProgress` from `build-progress` events for one layer_id, until
+ * unlistened. Events are PUSHED from Rust, so they render smoothly even while a
+ * CPU-pegged on-device emit starves the `get_layer_status` poll (which stays as the
+ * completion detector + a foreground-resync fallback). Returns the unlisten fn.
+ */
+async function subscribeBuildProgress(layerId: string): Promise<() => void> {
+  return listen<{ layer_id: string; state: string; progress: number; error?: string; output_path?: string }>(
+    'build-progress',
+    (e) => {
+      const p = e.payload;
+      if (p.layer_id !== layerId) return;
+      buildProgress.set({
+        state: p.state,
+        progress: p.progress,
+        error: p.error ?? null,
+        output_path: p.output_path ?? null,
+      });
+    },
+  );
+}
+
+/**
  * Import a layer via the Tauri builder: fetch source, build index, add to store.
  * Progress is exposed via the buildProgress store.
  */
@@ -326,9 +349,15 @@ export async function importLayer(sourceUrl: string, name: string, format = 'pre
 
   const { layer_id } = await buildLayer({ sourceUrl, format, layerName: name });
 
-  const finalStatus = await waitForBuild(layer_id, (status) => {
-    buildProgress.set(status);
-  });
+  const unlisten = await subscribeBuildProgress(layer_id);
+  let finalStatus: BuildLayerStatus;
+  try {
+    finalStatus = await waitForBuild(layer_id, (status) => {
+      buildProgress.set(status);
+    });
+  } finally {
+    unlisten();
+  }
 
   if (finalStatus.state === 'failed') {
     buildProgress.set(finalStatus);
@@ -360,9 +389,15 @@ export async function installPackage(url: string, name: string): Promise<void> {
 
   const { layer_id } = await buildLayer({ sourceUrl: url, format: 'built', layerName: name });
 
-  const finalStatus = await waitForBuild(layer_id, (status) => {
-    buildProgress.set(status);
-  });
+  const unlisten = await subscribeBuildProgress(layer_id);
+  let finalStatus: BuildLayerStatus;
+  try {
+    finalStatus = await waitForBuild(layer_id, (status) => {
+      buildProgress.set(status);
+    });
+  } finally {
+    unlisten();
+  }
 
   if (finalStatus.state === 'failed') {
     buildProgress.set(finalStatus);

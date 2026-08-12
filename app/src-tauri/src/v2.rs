@@ -842,7 +842,6 @@ pub fn v2_emit_overlay(
     business_data_json: String,
 ) -> Result<(), String> {
     use std::fs;
-    use tauri::Emitter;
     let head = Path::new(&head_dir);
     let graph_json = head.join("graph.json");
     if !graph_json.is_file() {
@@ -878,27 +877,56 @@ pub fn v2_emit_overlay(
     // blocking thread (`tauri::async_runtime::spawn_blocking`) so it does not tie
     // up a command worker for minutes, and should thread a cancel signal (an
     // `AtomicBool` set by a sibling command) into the `ControlFlow` below.
-    let mut on_progress = |p: ros_madair_emit::EmitProgress| {
-        let payload = match p {
-            ros_madair_emit::EmitProgress::Phase(name) => {
-                serde_json::json!({ "phase": name })
-            }
-            ros_madair_emit::EmitProgress::Streaming { done, total } => {
-                serde_json::json!({ "done": done, "total": total })
-            }
+    // Slice 7: editable overlays (notes/flags) are Parquet layers on the duck
+    // substrate, so the write path re-emits a Parquet dataset the DuckReader can
+    // compose - not a sqlite head. head_dir was cleared above, so there is no FTS
+    // sidecar to preserve here (overlays are not full-text searched).
+    #[cfg(feature = "v2-duck")]
+    {
+        let _ = &app; // no per-tick progress from emit_parquet
+        let cfg_by_graph: std::collections::HashMap<String, ros_madair_emit::ClusterConfig> =
+            std::collections::HashMap::new();
+        ros_madair_emit::emit_parquet(
+            prebuild.to_str().ok_or("non-utf8 prebuild path")?,
+            head.to_str().ok_or("non-utf8 head path")?,
+            "https://example.org/",
+            &ros_madair_emit::default_registry(),
+            &cfg_by_graph,
+        )
+        .map_err(|e| format!("emit_parquet: {e}"))?;
+        // Complete manifest (every field present, format_version == FORMAT_VERSION);
+        // see scripts/package-parquet-layer.mjs. handlers:[] → default_registry.
+        fs::write(
+            head.join("manifest.json"),
+            r#"{"format_version":1,"base_uri":"https://example.org/","handlers":[],"models":[],"artifacts":[],"budgets":{"max_result_rows":1000,"max_group_count":500}}"#,
+        )
+        .map_err(|e| format!("write manifest: {e}"))?;
+    }
+    #[cfg(not(feature = "v2-duck"))]
+    {
+        use tauri::Emitter;
+        let mut on_progress = |p: ros_madair_emit::EmitProgress| {
+            let payload = match p {
+                ros_madair_emit::EmitProgress::Phase(name) => {
+                    serde_json::json!({ "phase": name })
+                }
+                ros_madair_emit::EmitProgress::Streaming { done, total } => {
+                    serde_json::json!({ "done": done, "total": total })
+                }
+            };
+            let _ = app.emit("emit-progress", payload);
+            std::ops::ControlFlow::Continue(())
         };
-        let _ = app.emit("emit-progress", payload);
-        std::ops::ControlFlow::Continue(())
-    };
-    ros_madair_emit::emit_with_progress(
-        prebuild.to_str().ok_or("non-utf8 prebuild path")?,
-        head.to_str().ok_or("non-utf8 head path")?,
-        "https://example.org/",
-        &ros_madair_emit::EmitOptions::default(),
-        &ros_madair_emit::default_registry(),
-        &mut on_progress,
-    )
-    .map_err(|e| format!("emit: {e}"))?;
+        ros_madair_emit::emit_with_progress(
+            prebuild.to_str().ok_or("non-utf8 prebuild path")?,
+            head.to_str().ok_or("non-utf8 head path")?,
+            "https://example.org/",
+            &ros_madair_emit::EmitOptions::default(),
+            &ros_madair_emit::default_registry(),
+            &mut on_progress,
+        )
+        .map_err(|e| format!("emit: {e}"))?;
+    }
     fs::copy(&model_dst, head.join("graph.json")).map_err(|e| e.to_string())?;
     let _ = fs::remove_dir_all(&prebuild);
     Ok(())

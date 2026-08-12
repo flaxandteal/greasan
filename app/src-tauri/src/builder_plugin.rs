@@ -13,7 +13,7 @@ use pagefind::api::PagefindIndex;
 use pagefind::options::PagefindServiceConfig;
 use ros_madair_core::{build_to_memory, SkosCollection, StaticGraph, StaticResource};
 use serde::{Deserialize, Serialize};
-use tauri::{command, AppHandle, Manager, Runtime};
+use tauri::{command, AppHandle, Emitter, Manager, Runtime};
 
 use crate::tbx_parser;
 use crate::BuilderState;
@@ -153,6 +153,16 @@ fn update_status<R: Runtime>(app: &AppHandle<R>, layer_id: &str, state: &str, pr
             );
         }
     }
+    // PUSH the update to the webview. A CPU-pegged on-device emit (emit_parquet)
+    // starves the frontend's `get_layer_status` POLL - its command round-trips queue
+    // behind the build - so the in-app progress card froze at its initial value while
+    // the native notification (below) tracked fine. A one-way `build-progress` event
+    // is fire-and-forget from Rust and delivered to the webview's event queue, so it
+    // survives the load; the frontend listens and updates the card. (See store.ts.)
+    let _ = app.emit(
+        "build-progress",
+        serde_json::json!({ "layer_id": layer_id, "state": state, "progress": progress }),
+    );
     // Mirror progress to the foreground-service notification (no-op off Android).
     crate::fg_service::update(notif_label(state), (progress * 100.0).round() as i32);
 }
@@ -166,11 +176,15 @@ fn update_status_complete<R: Runtime>(app: &AppHandle<R>, layer_id: &str, output
                     state: "complete".to_string(),
                     progress: 1.0,
                     error: None,
-                    output_path: Some(output_path),
+                    output_path: Some(output_path.clone()),
                 },
             );
         }
     }
+    let _ = app.emit(
+        "build-progress",
+        serde_json::json!({ "layer_id": layer_id, "state": "complete", "progress": 1.0, "output_path": output_path }),
+    );
     crate::fg_service::stop();
 }
 
@@ -182,12 +196,16 @@ fn update_status_failed<R: Runtime>(app: &AppHandle<R>, layer_id: &str, error: S
                 BuildLayerStatus {
                     state: "failed".to_string(),
                     progress: 0.0,
-                    error: Some(error),
+                    error: Some(error.clone()),
                     output_path: None,
                 },
             );
         }
     }
+    let _ = app.emit(
+        "build-progress",
+        serde_json::json!({ "layer_id": layer_id, "state": "failed", "progress": 0.0, "error": error }),
+    );
     crate::fg_service::stop();
 }
 
@@ -482,27 +500,78 @@ fn stream_tbx_v2_build(
         let fts_n = fts.finish()?;
         stamp(format!("fts: {} ms, {fts_n} entries", t.elapsed().as_millis()));
 
-        // emit is now the long pole (~5.75 min at Téarma scale). It reports
-        // ~100 Streaming{done,total} ticks over the run, so animate the bar +
-        // notification across 0.70..0.97 instead of parking at one value.
+        // emit is now the long pole (~5.75 min at Téarma scale).
         report("indexing", 0.70);
         let t = std::time::Instant::now();
-        let mut on_progress = |p: ros_madair_emit::EmitProgress| {
-            if let ros_madair_emit::EmitProgress::Streaming { done, total } = p {
-                let frac = if total > 0 { done as f64 / total as f64 } else { 0.0 };
-                report("indexing", 0.70 + 0.27 * frac);
-            }
-            std::ops::ControlFlow::Continue(())
-        };
-        ros_madair_emit::emit_with_progress(
-            src.to_str().ok_or("non-utf8 prebuild path")?,
-            out_dir.to_str().ok_or("non-utf8 out path")?,
-            "https://example.org/",
-            &ros_madair_emit::EmitOptions::default(),
-            &ros_madair_emit::default_registry(),
-            &mut on_progress,
-        )
-        .map_err(|e| format!("emit: {e}"))?;
+
+        // Slice 7: on the DuckDB substrate the on-device Téarma tile store is a
+        // Parquet dataset (tiles_*.parquet + concept_catalog.parquet), read by
+        // DuckReader exactly like the bundled heads - NOT a sqlite head. The FTS5
+        // `search.sqlite` sidecar written above stays untouched (emit_parquet only
+        // create_dir_all's out_dir; it never clears it), so on-device search keeps
+        // its bm25 index. emit_parquet has no fine-grained progress callback, so the
+        // bar advances coarsely across this phase rather than per-tick.
+        #[cfg(feature = "v2-duck")]
+        {
+            let cfg_by_graph: std::collections::HashMap<String, ros_madair_emit::ClusterConfig> =
+                std::collections::HashMap::new();
+            // emit_parquet streams and never learns the total, but we already have
+            // it (`total`, the build-loop count). Map the ingest `done` into the
+            // 0.70..0.94 band; the `Phase("writing")` before the opaque COPY sort
+            // parks at 0.95 (it can't sub-tick), then the manifest write lands 0.97.
+            let total_f = total as f64;
+            let mut on_progress = |p: ros_madair_emit::EmitProgress| {
+                match p {
+                    ros_madair_emit::EmitProgress::Streaming { done, .. } => {
+                        let frac = if total_f > 0.0 { (done as f64 / total_f).min(1.0) } else { 0.0 };
+                        report("indexing", 0.70 + 0.24 * frac);
+                    }
+                    ros_madair_emit::EmitProgress::Phase(_) => report("indexing", 0.95),
+                }
+                std::ops::ControlFlow::Continue(())
+            };
+            ros_madair_emit::emit_parquet_with_progress(
+                src.to_str().ok_or("non-utf8 prebuild path")?,
+                out_dir.to_str().ok_or("non-utf8 out path")?,
+                "https://example.org/",
+                &ros_madair_emit::default_registry(),
+                &cfg_by_graph,
+                &mut on_progress,
+            )
+            .map_err(|e| format!("emit_parquet: {e}"))?;
+            // Parquet heads need a COMPLETE manifest for the duck read path's
+            // registry()/load_manifest to parse - every Manifest field must be present
+            // and format_version must equal FORMAT_VERSION (mirrors
+            // scripts/package-parquet-layer.mjs; see its comment). handlers:[] →
+            // default_registry, which is what emit_parquet used above.
+            std::fs::write(
+                out_dir.join("manifest.json"),
+                r#"{"format_version":1,"base_uri":"https://example.org/","handlers":[],"models":[],"artifacts":[],"budgets":{"max_result_rows":1000,"max_group_count":500}}"#,
+            )
+            .map_err(|e| format!("write manifest: {e}"))?;
+            report("indexing", 0.97);
+        }
+        #[cfg(not(feature = "v2-duck"))]
+        {
+            // The sqlite head emit reports ~100 Streaming{done,total} ticks; animate
+            // the bar across 0.70..0.97 instead of parking at one value.
+            let mut on_progress = |p: ros_madair_emit::EmitProgress| {
+                if let ros_madair_emit::EmitProgress::Streaming { done, total } = p {
+                    let frac = if total > 0 { done as f64 / total as f64 } else { 0.0 };
+                    report("indexing", 0.70 + 0.27 * frac);
+                }
+                std::ops::ControlFlow::Continue(())
+            };
+            ros_madair_emit::emit_with_progress(
+                src.to_str().ok_or("non-utf8 prebuild path")?,
+                out_dir.to_str().ok_or("non-utf8 out path")?,
+                "https://example.org/",
+                &ros_madair_emit::EmitOptions::default(),
+                &ros_madair_emit::default_registry(),
+                &mut on_progress,
+            )
+            .map_err(|e| format!("emit: {e}"))?;
+        }
         stamp(format!("emit: {} ms", t.elapsed().as_millis()));
 
         total

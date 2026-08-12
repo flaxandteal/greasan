@@ -80,7 +80,7 @@ const LAYERS = [
     links: [{ t: 'Archive.org', u: 'https://archive.org/details/etymologicaldict00macbuoft', ty: 'Source' }], downloads: [] },
   { slug: 'tearma', head: 'tearma-v2', name: 'Téarma',
     licence: 'No open reuse licence', attribution: 'Téarma.ie - terminology data (c) Foras na Gaeilge; implementation (c) Gaois, Fiontar & Scoil na Gaeilge, DCU. Not redistributed; loaded on-device from your own downloaded TBX.',
-    types: ['Terminology', 'Glosses'], formats: ['TBX', 'RM'],
+    types: ['Glosses', 'Terminology'], formats: ['TBX', 'RM'],
     swatch: 'var(--layer-te)', default_on: 'true', descType: 'Overview',
     desc: 'The National Terminology Database for Irish - domain-specific terminology across many fields.',
     config: { searchable: true, langs: ['ga', 'en'],
@@ -117,6 +117,24 @@ const LAYERS = [
     desc: 'Bilingual example sentences from the Gaois Parallel Corpus of Legislation.',
     config: { searchable: true, langs: ['sampla'] },
     links: [{ t: 'Gaois', u: 'https://www.gaois.ie/', ty: 'Homepage' }], downloads: [] },
+  { slug: 'example-udt', head: 'example-udt-v2', name: 'UD Irish',
+    licence: 'CC BY-SA 4.0', attribution: 'Irish Universal Dependencies Treebank (UD Irish-IDT, CC BY-SA 4.0)',
+    // Primarily an examples layer (gold POS-tagged sentences), like Tatoeba/Gaois.
+    types: ['Examples'], formats: ['RM'],
+    swatch: 'var(--layer-udt)', default_on: 'true', descType: 'Overview',
+    desc: 'Gold POS-tagged example sentences from the Irish Universal Dependencies treebank, linked unambiguously to the headwords they illustrate.',
+    config: { searchable: true, langs: ['sampla'] },
+    links: [{ t: 'UD Irish-IDT', u: 'https://universaldependencies.org/treebanks/ga_idt/', ty: 'Homepage' }], downloads: [] },
+  { slug: 'concept', head: 'concept-v2', name: 'Concepts',
+    licence: 'CC BY 4.0', attribution: 'Meaning-concepts derived from Logainm.ie (CC BY 4.0)',
+    // NOTE: no dedicated "Concepts"/"Meanings" value exists in the Layer Types
+    // collection - using 'Senses' as the closest existing tag (a LexicalConcept is
+    // a meaning unit). Change here (and, for a new tag, in models/layer/collections.csv)
+    // if a first-class Concepts type is wanted.
+    types: ['Senses'], formats: ['Arches JSON', 'RM'],
+    swatch: 'var(--layer-concept)', default_on: 'true', descType: 'Overview',
+    desc: 'Meaning-concepts (LexicalConcept) that placenames evoke - hydrated against placename and entry links rather than searched directly.',
+    config: { searchable: false, internal: true }, links: [], downloads: [] },
   { slug: 'person', head: 'person-v2', name: 'Person',
     licence: 'CC0 1.0', attribution: 'App-generated',
     types: ['Annotations'], formats: ['RM'],
