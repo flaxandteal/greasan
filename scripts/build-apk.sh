@@ -11,6 +11,8 @@
 #   scripts/build-apk.sh --debug            # debug APK (auto-signed, all ABIs)
 #   scripts/build-apk.sh --release          # PUBLIC release: no nav-server, alpha-signed
 #   scripts/build-apk.sh --no-rezip         # skip the bundle-head refresh
+#   scripts/build-apk.sh --duck             # DuckDB+Parquet substrate: ship parquet
+#                                           #   heads (v2-duck) not sqlite heads
 #
 # It ALWAYS bakes in `--features v2` (forgetting it ships a v2-less APK where
 # `v2_prepare_offline` is missing) and, unless --no-rezip, refreshes each bundled
@@ -30,13 +32,14 @@ PKG="org.flaxandteal.greasan"
 # (licensing), so it is built on-device (tbx-v2 → FTS5 sidecar) instead.
 HEADS=(wiktionary-v2-full macbain-v2 bunamo-v2 place-v2 concept-v2 example-tatoeba-v2 example-gaois-v2 example-udt-v2 person-v2 note-v2 layer-v2)
 
-INSTALL=0; LAUNCH=0; DEBUG=0; REZIP=1; RELEASE=0; DEVICE=""
+INSTALL=0; LAUNCH=0; DEBUG=0; REZIP=1; RELEASE=0; DUCK=0; DEVICE=""
 while [ $# -gt 0 ]; do
   case "$1" in
     --install)  INSTALL=1 ;;
     --launch)   LAUNCH=1 ;;
     --debug)    DEBUG=1 ;;
     --release)  RELEASE=1 ;;
+    --duck)     DUCK=1 ;;
     --no-rezip) REZIP=0 ;;
     --device)   DEVICE="${2:?--device needs a serial}"; shift ;;
     -h|--help)  sed -n '2,25p' "$0"; exit 0 ;;
@@ -47,7 +50,22 @@ done
 adbc() { adb ${DEVICE:+-s "$DEVICE"} "$@"; }
 
 # --- 1. Refresh bundled head zips from head dirs (flat, deflate, NO pagefind) ---
-if [ $REZIP -eq 1 ]; then
+# --duck ships the Parquet substrate heads (built by scripts/build-parquet-layers.mjs
+# into data/bundle/parquet-heads/<h>.zip); the default ships the sqlite heads emitted
+# into data/<h>/. offline.rs is format-agnostic - only the zip CONTENTS differ.
+if [ $REZIP -eq 1 ] && [ $DUCK -eq 1 ]; then
+  mkdir -p "$ROOT/data/bundle/heads"
+  for h in "${HEADS[@]}"; do
+    pq="$ROOT/data/bundle/parquet-heads/$h.zip"; zip="$ROOT/data/bundle/heads/$h.zip"
+    [ -f "$pq" ] || { echo "!! missing $pq - run scripts/build-parquet-layers.mjs $h first" >&2; exit 1; }
+    if [ ! -f "$zip" ] || [ "$pq" -nt "$zip" ]; then
+      echo "[bundle] copying parquet head $h"
+      cp -f "$pq" "$zip"
+    else
+      echo "[bundle] $h up to date"
+    fi
+  done
+elif [ $REZIP -eq 1 ]; then
   mkdir -p "$ROOT/data/bundle/heads"
   for h in "${HEADS[@]}"; do
     src="$ROOT/data/$h"; zip="$ROOT/data/bundle/heads/$h.zip"
@@ -63,15 +81,25 @@ fi
 
 # --- 1a. Per-layer versions index: {head -> snapshot_id} from each head's
 # manifest, so the app (offline.rs) re-extracts only the layers whose data changed
-# on an update, not all ~400MB. Regenerated every build (also under --no-rezip). ---
-python3 - "$ROOT" "${HEADS[@]}" <<'PY'
-import json, pathlib, sys
-root = pathlib.Path(sys.argv[1]); heads = sys.argv[2:]
+# on an update, not all ~400MB. Regenerated every build (also under --no-rezip).
+# --duck reads snapshot_id from inside the parquet-head zip (unzip -p manifest.json);
+# the default reads data/<h>/manifest.json. ---
+python3 - "$ROOT" "$DUCK" "${HEADS[@]}" <<'PY'
+import json, pathlib, sys, subprocess
+root = pathlib.Path(sys.argv[1]); duck = sys.argv[2] == "1"; heads = sys.argv[3:]
 vers = {}
 for h in heads:
-    mf = root / "data" / h / "manifest.json"
-    if mf.exists():
-        vers[h] = json.loads(mf.read_text()).get("snapshot_id", "")
+    if duck:
+        zp = root / "data" / "bundle" / "parquet-heads" / f"{h}.zip"
+        if zp.exists():
+            raw = subprocess.run(["unzip", "-p", str(zp), "manifest.json"],
+                                 capture_output=True, text=True).stdout
+            if raw.strip():
+                vers[h] = json.loads(raw).get("snapshot_id", "")
+    else:
+        mf = root / "data" / h / "manifest.json"
+        if mf.exists():
+            vers[h] = json.loads(mf.read_text()).get("snapshot_id", "")
 (root / "data" / "bundle" / "heads-versions.json").write_text(json.dumps(vers))
 print(f"[bundle] heads-versions.json: {len(vers)} layers")
 PY
@@ -92,8 +120,11 @@ fi
 # nav-server is a debug-only unauthenticated localhost control port (127.0.0.1:8787)
 # - NEVER ship it in a public release. --release omits it; local/dev builds keep it
 # for the tour probe. See Cargo.toml.
-FEATURES="v2-emit,nav-server"
-[ $RELEASE -eq 1 ] && FEATURES="v2-emit"
+# v2-duck implies v2-emit (Cargo: v2-duck = ["v2-emit", ...]); it swaps the read
+# path onto DuckReader/Parquet. nav-server stays a debug-only add-on either way.
+BASE="v2-emit"; [ $DUCK -eq 1 ] && BASE="v2-duck"
+FEATURES="$BASE,nav-server"
+[ $RELEASE -eq 1 ] && FEATURES="$BASE"
 BUILD_ARGS=(--apk --features "$FEATURES" --target aarch64)
 [ $DEBUG -eq 1 ] && BUILD_ARGS+=(--debug)
 echo "[apk] tauri android build ${BUILD_ARGS[*]}"
