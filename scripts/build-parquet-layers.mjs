@@ -43,7 +43,7 @@ for (const [head, prebuild] of LAYERS) {
   console.log(`\n========== ${head}  (${prebuild} -> ${dataset}) ==========`);
   execSync(
     `cargo run --release --example regen-parquet-v2 --features v2-emit ` +
-      `--manifest-path app/src-tauri/Cargo.toml -- ${prebuild} ${dataset}`,
+      `--manifest-path app/src-tauri/Cargo.toml -- data/${prebuild} ${dataset}`,
     { stdio: 'inherit', env },
   );
   execSync(`node scripts/package-parquet-layer.mjs ${dataset} ${head}`, { stdio: 'inherit' });
