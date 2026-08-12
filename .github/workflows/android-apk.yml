@@ -1,0 +1,159 @@
+name: Android APK (testers)
+
+# Builds a signed Gréasán APK and attaches it to a GitHub Release for public
+# tester download. Triggered by pushing a tag like `v0.1.0-pilot`, or manually.
+#
+# PREREQUISITES (one-time, see docs/android-ci-setup.md):
+#   - Sibling repos pushed to GitHub and added as submodules under .deps/
+#   - Repo secrets:
+#       DEPS_PAT           PAT with read access to the private submodule repos
+#       DATA_BUNDLE_URL    URL to a tar/zip of heads + basemap (see fetch step)
+#       ANDROID_KEYSTORE_B64   base64 of the release keystore (.jks)
+#       ANDROID_KEYSTORE_PASSWORD
+#       ANDROID_KEY_ALIAS
+#       ANDROID_KEY_PASSWORD
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: "Tag/name for the draft release"
+        required: false
+        default: "manual-android"
+
+permissions:
+  contents: write            # needed to create the Release + upload the APK
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    env:
+      # NDK version Tauri v2 expects; pin to avoid silent drift.
+      NDK_VERSION: "27.0.11902837"
+    steps:
+      - name: Free up disk (NDK + 370MB data + rust target dirs are hungry)
+        uses: jlumbroso/free-disk-space@main
+        with:
+          android: false        # we NEED the Android SDK
+          large-packages: true
+          docker-images: true
+          tool-cache: false
+
+      - name: Checkout (with submodules)
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          # PAT so private .deps/* submodules can be cloned.
+          token: ${{ secrets.DEPS_PAT }}
+
+      - name: Reconstruct sibling layout
+        run: bash scripts/ci/link-siblings.sh
+
+      # --- Toolchains -----------------------------------------------------
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Rust toolchain (+ Android + wasm targets)
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-linux-android,armv7-linux-androideabi,i686-linux-android,x86_64-linux-android,wasm32-unknown-unknown
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: |
+            app/src-tauri
+            .deps/RosMadair
+
+      - name: Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Android SDK + NDK
+        uses: android-actions/setup-android@v3
+      - name: Install NDK
+        run: sdkmanager "ndk;${NDK_VERSION}"
+      - name: Export NDK env
+        run: echo "NDK_HOME=$ANDROID_SDK_ROOT/ndk/${NDK_VERSION}" >> "$GITHUB_ENV"
+
+      - name: wasm-pack
+        run: curl https://rustwasm.github.io/wasm-pack/installer/init.sh -sSf | sh
+
+      - name: Tauri CLI
+        run: npm i -g @tauri-apps/cli@^2
+
+      # --- Build the combined wasm (pkg-alizarin) -------------------------
+      # ros-madair-alizarin npm dep is a BUILT artifact, not source.
+      - name: Build ros-madair-alizarin (combined wasm)
+        working-directory: .deps/RosMadair
+        run: |
+          npm ci
+          npm run build:combined   # -> pkg-alizarin/ros_madair_alizarin.{js,wasm}
+
+      # --- Frontend deps --------------------------------------------------
+      - name: npm ci (app)
+        working-directory: app
+        run: npm ci
+
+      # --- Bundle data (heads + basemap pmtiles) --------------------------
+      - name: Fetch data bundle
+        run: |
+          curl -fSL "${{ secrets.DATA_BUNDLE_URL }}" -o /tmp/data-bundle.tar.zst
+          # Expected layout inside the archive (adjust to how you pack it):
+          #   data/bundle/heads/*.zip
+          #   app/src-tauri/basemap/goidelic.pmtiles
+          tar --zstd -xf /tmp/data-bundle.tar.zst -C .
+          ls -la data/bundle/heads app/src-tauri/basemap
+
+      # --- Regenerate Android project + overlay ---------------------------
+      - name: tauri android init
+        working-directory: app
+        run: npm run tauri android init -- --skip-targets-install
+
+      - name: Apply foreground-service overlay
+        run: bash scripts/ci/apply-android-overlay.sh app/src-tauri
+
+      # --- Signing keystore ----------------------------------------------
+      - name: Write keystore + gradle signing props
+        working-directory: app/src-tauri/gen/android
+        run: |
+          echo "${{ secrets.ANDROID_KEYSTORE_B64 }}" | base64 -d > release.jks
+          cat > keystore.properties <<EOF
+          storeFile=release.jks
+          storePassword=${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          keyAlias=${{ secrets.ANDROID_KEY_ALIAS }}
+          keyPassword=${{ secrets.ANDROID_KEY_PASSWORD }}
+          EOF
+          # NOTE: Tauri's generated app/build.gradle.kts must be taught to read
+          # keystore.properties for the `release` signingConfig. See
+          # docs/android-ci-setup.md — this is a one-line overlay to build.gradle.kts.
+
+      # --- Build the APK --------------------------------------------------
+      - name: Build signed APK
+        working-directory: app
+        run: npm run tauri android build -- --apk
+        # Produces:
+        #  src-tauri/gen/android/app/build/outputs/apk/universal/release/app-universal-release.apk
+
+      - name: Locate APK
+        id: apk
+        run: |
+          f=$(find app/src-tauri/gen/android -name '*-release.apk' | head -1)
+          echo "path=$f" >> "$GITHUB_OUTPUT"
+          echo "Found: $f"
+
+      # --- Publish --------------------------------------------------------
+      - name: Publish to GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_type == 'tag' && github.ref_name || inputs.release_tag }}
+          name: Gréasán ${{ github.ref_type == 'tag' && github.ref_name || inputs.release_tag }}
+          draft: true            # review before making it public
+          files: ${{ steps.apk.outputs.path }}
+          body: |
+            Gréasán Android pilot build.
+            Install: enable "Install unknown apps" for your browser/files app, then open the APK.
