@@ -3,6 +3,7 @@
   import { FAMILIES, type FamilyId } from '../lib/family';
   import { t, localePreference } from '../lib/i18n';
   import { diagEntries, diagTotalMs, diagTotalBytes, diagReset } from '../lib/diagnostics';
+  import { startTour } from '../lib/tour';
 
   const familyIds = Object.keys(FAMILIES) as FamilyId[];
 
@@ -80,14 +81,6 @@
         </button>
       {/each}
     </div>
-  </div>
-
-  <div class="ge-block-title">{$t('settings.layers')}</div>
-  <div style="padding:0 16px;">
-    <button class="ge-suggested-layer" onclick={() => overlayView.set('layers')}>
-      <span class="ge-suggested-label">{$t('layers.manageAll')}</span>
-      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18l6-6-6-6"/></svg>
-    </button>
   </div>
 
   <div class="ge-block-title">{$t('settings.dialects')}</div>
@@ -243,6 +236,12 @@
     </div>
   {/if}
 
+  <div class="ge-block-title">{$t('settings.help')}</div>
+  <div style="padding:0 16px 8px;display:flex;flex-direction:column;gap:8px;">
+    <button class="ge-help-btn" onclick={() => startTour()}>{$t('settings.showTour')}</button>
+    <button class="ge-help-btn" onclick={() => overlayView.set('faq')}>{$t('faq.title')}</button>
+  </div>
+
   <div class="ge-block-title" id="license-section">{$t('settings.license')}</div>
   <div style="padding:0 16px 32px;">
     <div class="ge-list">
@@ -259,6 +258,7 @@
             <p>{$t('settings.licenseExamples')}</p>
             <p>{$t('settings.licenseMacbain')}</p>
             <p>{$t('settings.licenseLogainm')}</p>
+            <p>{$t('settings.licenseTearma')}</p>
             <p>{$t('settings.licenseFonts')}</p>
             <p>{$t('settings.licenseShareAlike')}</p>
             <p style="margin-top:8px;font-size:var(--fs-micro);color:var(--fg-soft);">
@@ -429,6 +429,19 @@
     color: var(--fg-body);
     cursor: pointer;
   }
+
+  .ge-help-btn {
+    width: 100%;
+    text-align: left;
+    font-size: var(--fs-body);
+    padding: 11px 14px;
+    border: 1px solid var(--srf-rule);
+    border-radius: 8px;
+    background: var(--srf-card);
+    color: var(--fg-body);
+    cursor: pointer;
+  }
+  .ge-help-btn:active { background: var(--srf-divider); }
 
   .ge-layer-row,
   .ge-suggested-layer {

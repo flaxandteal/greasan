@@ -13,10 +13,12 @@
 //   greasan://layers             open the layer sheet
 //   greasan://flags              open the flags page
 //   greasan://faq                open the FAQ overlay
+import { get } from 'svelte/store';
 import { listen } from '@tauri-apps/api/event';
 import { currentEntry, currentExample, currentLayer, overlayView, layerSheetOpen, openMap, loading, dismissLicenseToast } from './store';
 import { search, loadEntryFlagged, loadExample, placeHeadDir } from './dictionary';
 import { loadLayerBySlug } from './layers-catalogue';
+import { tourActive, endTour } from './tour';
 
 // The place graph's `name_elements.element_entry` reverse-link node — the same
 // UUID EntryDetail uses to plot the placenames constituted by a headword.
@@ -64,6 +66,9 @@ export async function handleDeepLink(url: string): Promise<void> {
   let u: URL;
   try { u = new URL(url); } catch { return; }
   if (u.protocol !== 'greasan:') return;
+  // A real navigation (deep link / nav event) wins over the first-run tour —
+  // cancel it so the two don't fight over the view stack.
+  if (get(tourActive)) endTour();
   // A redirect into a specific view shouldn't sit under the launch licence toast.
   dismissLicenseToast.update((n) => n + 1);
   const route = u.host;

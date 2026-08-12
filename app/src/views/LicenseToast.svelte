@@ -1,36 +1,66 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import { showLicenseToast, dismissLicenseToast } from '../lib/store';
+  import { showLicenseToast, dismissLicenseToast, licenseFlowActive } from '../lib/store';
   import { t } from '../lib/i18n';
 
   let visible = $state(false);
   let dismissed = $state(false);
+  // 'disclaimer' = the once-ever first-install notice, shown BEFORE the licensing
+  // toast; 'license' = the per-session Open Data toast.
+  let stage = $state<'disclaimer' | 'license'>('license');
 
   // A nav/deep-link redirect bumps `dismissLicenseToast` — hide the toast so it
-  // doesn't overlap the target view. Skip the effect's initial (mount) run.
+  // doesn't overlap the target view. Skip the effect's initial (mount) run, and
+  // never auto-hide the disclaimer (it must be acknowledged).
   let toastPrimed = false;
   $effect(() => {
     void $dismissLicenseToast;
     if (!toastPrimed) { toastPrimed = true; return; }
-    if (visible) dismiss();
+    if (visible && stage === 'license') dismiss();
   });
+
+  const licenseWanted = () =>
+    $showLicenseToast && !sessionStorage.getItem('ge:licenseSeen');
 
   export function show() {
     dismissed = false;
+    // Manual re-open (from Settings) shows the licensing toast, not the disclaimer.
+    stage = 'license';
     visible = true;
   }
 
   onMount(() => {
-    // Show on first launch (or once per session) if the setting allows it
-    if ($showLicenseToast && !sessionStorage.getItem('ge:licenseSeen')) {
+    const disclaimerPending =
+      typeof localStorage !== 'undefined' && !localStorage.getItem('ge:disclaimerAcked');
+    if (disclaimerPending) {
+      stage = 'disclaimer';
       setTimeout(() => { visible = true; }, 600);
+    } else if (licenseWanted()) {
+      stage = 'license';
+      setTimeout(() => { visible = true; }, 600);
+    } else {
+      // Nothing to show this launch — the toast flow is already complete.
+      licenseFlowActive.set(false);
     }
   });
+
+  // First-install disclaimer acknowledged → record it (persists across launches),
+  // then hand off to the licensing toast, or close if licensing is off/seen.
+  function ackDisclaimer() {
+    try { localStorage.setItem('ge:disclaimerAcked', '1'); } catch { /* ignore */ }
+    if (licenseWanted()) {
+      stage = 'license';
+    } else {
+      dismiss();
+    }
+  }
 
   function dismiss() {
     visible = false;
     dismissed = true;
     sessionStorage.setItem('ge:licenseSeen', '1');
+    // Toast flow finished — release the first-run tour gate.
+    licenseFlowActive.set(false);
   }
 
   interface Props {
@@ -41,7 +71,7 @@
 </script>
 
 {#if visible && !dismissed}
-  <div class="toast-backdrop" onclick={dismiss} role="presentation">
+  <div class="toast-backdrop" onclick={stage === 'disclaimer' ? ackDisclaimer : dismiss} role="presentation">
     <div class="toast-card" onclick={(e) => e.stopPropagation()} role="dialog" aria-label={$t('toast.aria')}>
       <div class="toast-icon">
         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
@@ -50,18 +80,28 @@
         </svg>
       </div>
       <div class="toast-body">
-        <div class="toast-title">{$t('toast.title')}</div>
-        <div class="toast-text">
-          {$t('toast.body')}
-        </div>
-        <div class="toast-actions">
-          <button class="toast-link" onclick={() => { dismiss(); onShowFull?.(); }}>
-            {$t('toast.details')}
-          </button>
-          <button class="toast-dismiss" onclick={dismiss}>
-            {$t('toast.ok')}
-          </button>
-        </div>
+        {#if stage === 'disclaimer'}
+          <div class="toast-title">{$t('toast.disclaimerTitle')}</div>
+          <div class="toast-text">{$t('toast.disclaimerBody')}</div>
+          <div class="toast-actions">
+            <button class="toast-dismiss" onclick={ackDisclaimer}>
+              {$t('toast.disclaimerOk')}
+            </button>
+          </div>
+        {:else}
+          <div class="toast-title">{$t('toast.title')}</div>
+          <div class="toast-text">
+            {$t('toast.body')}
+          </div>
+          <div class="toast-actions">
+            <button class="toast-link" onclick={() => { dismiss(); onShowFull?.(); }}>
+              {$t('toast.details')}
+            </button>
+            <button class="toast-dismiss" onclick={dismiss}>
+              {$t('toast.ok')}
+            </button>
+          </div>
+        {/if}
       </div>
     </div>
   </div>

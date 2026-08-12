@@ -2,7 +2,7 @@
   import { App } from 'konsta/svelte';
   import { onMount } from 'svelte';
   import { get } from 'svelte/store';
-  import { currentEntry, currentExample, currentLayer, wasmReady, activeTab, darkMode, density, listStyle, bootstrapLayers, pushRecent, overlayView, preparingDictionary, mapState } from './lib/store';
+  import { currentEntry, currentExample, currentLayer, wasmReady, activeTab, darkMode, density, listStyle, bootstrapLayers, pushRecent, overlayView, preparingDictionary, mapState, licenseFlowActive } from './lib/store';
   import { t } from './lib/i18n';
   import Search from './views/Search.svelte';
   import EntryDetail from './views/EntryDetail.svelte';
@@ -17,9 +17,19 @@
   import LayerManager from './views/LayerManager.svelte';
   import Faq from './views/Faq.svelte';
   import FlagsPage from './views/FlagsPage.svelte';
+  import Tour from './views/Tour.svelte';
+  import { maybeStartFirstRun, tourActive, endTour } from './lib/tour';
 
   let navigatingBack = false;
   let showLicenseInSettings = $state(false);
+
+  // First-run tour: fire once the app is usable (wasm up, bundled dictionary
+  // unpacked) AND the launch toast flow (no-warranty disclaimer, then Open Data
+  // licence) has finished — the tour must come after those. `maybeStartFirstRun`
+  // is self-guarding and a no-op if the current tour version was already seen.
+  $effect(() => {
+    if ($wasmReady && !$preparingDictionary && !$licenseFlowActive) maybeStartFirstRun();
+  });
 
   function openLicenseSettings() {
     activeTab.set('settings');
@@ -63,6 +73,9 @@
     // Pop history → navigate back through views. Map sits on top of the entry,
     // so it unwinds first.
     function onPopState() {
+      // Back button during the first-run tour cancels the tour rather than
+      // unwinding the view underneath it.
+      if (get(tourActive)) { endTour(); return; }
       navigatingBack = true;
       if (get(mapState)) {
         mapState.set(null);
@@ -134,6 +147,8 @@
     <LayerSheet />
 
     <LicenseToast onShowFull={openLicenseSettings} />
+
+    <Tour />
   </div>
 </App>
 
