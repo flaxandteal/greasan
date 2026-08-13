@@ -43,7 +43,12 @@ export type V2Expr =
   /** `value` is the concept id (URI/UUID) as interned in the head's `dict`. */
   | { concept: { path: string; op: 'is' | 'descendant_or_self_of'; value: string } }
   /** Chunk-coarse: results are an over-approximation, marked `coarse`. */
-  | { has_link: { path: string; target?: string } };
+  | { has_link: { path: string; target?: string } }
+  /** Spatial bbox-OVERLAP on a `SpatialBbox` (geojson) node - the query box's
+   *  corners in the head's lng/lat space. A strict SUPERSET of true intersection
+   *  ("headwords/places near here"), so results are recall-tolerant: never claim
+   *  exact containment. Compiles `coarse`. */
+  | { bbox: { path: string; min_lng: number; min_lat: number; max_lng: number; max_lat: number } };
 
 /** What to compute (mirrors `ros_madair_query::Measure`). */
 export type V2Measure = 'count_records' | 'select_ids';
