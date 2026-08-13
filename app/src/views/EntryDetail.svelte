@@ -52,35 +52,12 @@
     }
   });
 
-  // Verb independent/dependent toggle. Only tense forms carry the split; verbal
-  // noun/adjective and imperative are invariant and always shown.
-  let showDependent = $state(false);
-  const VERB_TENSES = ['past', 'present', 'future', 'conditional'];
-  const isTenseForm = (f: FormItem) => VERB_TENSES.some((t) => f.tags.includes(t));
-  const anyDependent = (fs: FormItem[] | null | undefined) => !!fs?.some((f) => f.tags.includes('dependent'));
-  // Toggle shows for a verb whose active source carries dependent forms - the
-  // generated tab always does; the attested tab does once BuNaMo emits them.
-  let hasDependent = $derived(
-    !!entry &&
-      posKind(entry.pos) === 'verb' &&
-      (anyDependent(generated) || anyDependent((entry.forms ?? []) as FormItem[])),
-  );
-
-  /** Scope a form set per POS before pivoting: verbs by the indep/dep toggle,
-   *  nouns to the confirmable nom/gen. Used for both attested and generated. */
+  /** Scope a form set per POS before pivoting: nouns to the confirmable nom/gen.
+   *  Verbs pass through whole - paradigm.ts now slots base / a (dep-a) / n (dep-n)
+   *  by tag and drops the superseded radical `dependent`, so no toggle here. */
   function scopeForms(forms: FormItem[]): FormItem[] {
     if (entry && posKind(entry.pos) === 'verb') {
-      // Keep VN/VA/imperative always; swap tense forms by the ni toggle, then strip
-      // the dependency marker so paradigm.ts pivots them uniformly.
-      return forms
-        .filter((f) =>
-          !isTenseForm(f)
-            ? true
-            : showDependent
-              ? f.tags.includes('dependent')
-              : !f.tags.includes('dependent'),
-        )
-        .map((f) => ({ ...f, tags: f.tags.filter((t) => t !== 'dependent') }));
+      return forms;
     }
     // Adjectives: nom + gen (masc/fem) + pl + graded are all learner-core and
     // attested, so pass them through (drop only any stray articled form). The
@@ -94,39 +71,13 @@
     );
   }
 
-  // Dependent-clause particle shown as a grey prefix on the dependent forms (like
-  // the noun article), with its initial mutation applied to the bare stem - so it
-  // works identically for attested (BuNaMo) and generated forms. go (eclipsis) for
-  // the non-past and the irregular past; gur (lenition) for the regular past;
-  // nothing for the imperative (no dependent).
-  function depParticle(tense: string): string {
-    if (!showDependent || tense === 'imperative') return '';
-    if (tense === 'past') return (entry?.grammarClass ?? '') === 'irr' ? 'go' : 'gur';
-    return 'go';
-  }
-  const ECLIPSE: Record<string, string> = { b: 'mb', c: 'gc', d: 'nd', f: 'bhf', g: 'ng', p: 'bp', t: 'dt' };
-  function mutateForParticle(particle: string, w: string): string {
-    if (!w) return w;
-    const c = w[0].toLowerCase();
-    if (particle === 'go') {
-      if (ECLIPSE[c]) return ECLIPSE[c] + w.slice(1); // eclipsis
-      if ('aeiouáéíóú'.includes(c)) return 'n-' + w; // vowel -> n-
-      return w; // s, l, m, n, r, h unchanged
-    }
-    // gur -> lenition; s before c/m/p/t does not lenite.
-    if (c === 's' && 'cmpt'.includes((w[1] ?? '').toLowerCase())) return w;
-    if ('bcdfgmpst'.includes(c)) return w[0] + 'h' + w.slice(1);
-    return w; // vowels, l, n, r, h unchanged
-  }
-  /** A verb cell's grey particle + its forms. INDEPENDENT forms arrive already
-   * realised - séimhiú/d' is baked in by the Gramadan engine (build-bunamo-data.py
-   * for the attested tab, gramadan-wasm for the generated tab), so no mutation is
-   * applied here. DEPENDENT forms are the stored dependent stem; the toggle adds
-   * the particle (go/gur) and its eclipsis/lenition. */
-  function depCell(tense: string, forms: { text: string }[]): { particle: string; text: string } {
-    const p = depParticle(tense);
-    if (p) return { particle: p, text: forms.map((f) => mutateForParticle(p, f.text)).join(', ') };
-    return { particle: '', text: forms.map((f) => f.text).join(', ') };
+  // The subordinate (g = go/gur) form is derived from the interrogative (a): the
+  // particle swaps an->go, ar->gur and NOTHING else - same mutation, same stem
+  // (an ndúirt -> go ndúirt, ar chuala -> gur chuala). All per-verb irregular
+  // exceptions already live in `a` (baked by the Gramadan engine), so this is exact
+  // for regulars AND irregulars, unlike the old hand-rolled particle+mutation.
+  function deriveG(a: string): string {
+    return a.replace(/^an\b/, 'go').replace(/^ar\b/, 'gur');
   }
 
   let attestedParadigm = $derived.by(() => {
@@ -152,7 +103,6 @@
   $effect(() => {
     entry?.uri;
     activeGramTab = 0;
-    showDependent = false;
   });
   let activeTabIndex = $derived(Math.min(activeGramTab, Math.max(0, gramTabs.length - 1)));
   let paradigm = $derived(gramTabs[activeTabIndex]?.paradigm ?? null);
@@ -378,22 +328,6 @@
           <div class="gram-src">Gramadán<span class="gram-gen"> · generated</span></div>
         {/if}
 
-        {#if hasDependent}
-          <!-- Independent/dependent toggle, mirroring the noun article toggle. "ní"
-               is the dependent particle; on = dependent forms (dearna), off = the
-               independent forms (rinne). Tense rows only; VN/VA/imperative invariant. -->
-          <div class="dep-toggle-row">
-            <button
-              type="button"
-              class="dep-toggle"
-              class:on={showDependent}
-              aria-pressed={showDependent}
-              onclick={() => (showDependent = !showDependent)}
-              title={showDependent ? 'Dependent forms (after ní, go, an)' : 'Independent forms'}
-            >ní</button>
-            <span class="dep-hint">{showDependent ? 'spleách' : 'neamhspleách'}</span>
-          </div>
-        {/if}
 
         {#if paradigm.kind === 'noun' || paradigm.kind === 'adjective'}
           <!-- number × case grid -->
@@ -452,13 +386,42 @@
                   <span class="count">{tsec.rows.length}</span>
                 </button>
                 <div class="ge-acc-body">
-                  {#each tsec.rows as r}
-                    {@const dc = depCell(tsec.tense, r.forms)}
-                    <div class="ge-form-line">
-                      <span class="ge-para-person">{personLabel(r.person)}</span>
-                      <span class="gf-word">{#if dc.particle}<span class="dep-particle">{dc.particle}</span> {/if}{dc.text}</span>
-                    </div>
-                  {/each}
+                  {#if paradigm.hasShapes}
+                    <!-- Independent (base) + the realised dependent SHAPES: a =
+                         interrogative (an/ar), n = negative (ní/níor), g =
+                         subordinate (go/gur). g is derived from a (an->go, ar->gur);
+                         the engine (gramadan) bakes the per-verb irregular particle +
+                         mutation into a/n, so nothing is hand-rolled here. -->
+                    <table class="ge-para ge-verb-shapes">
+                      <thead>
+                        <tr>
+                          <th class="ge-para-corner"></th>
+                          <th></th>
+                          <th title={$t('forms.interrogative')}>an</th>
+                          <th title={$t('forms.negativeParticle')}>ní</th>
+                          <th title={$t('forms.subordinate')}>go</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {#each tsec.rows as r}
+                          <tr>
+                            <th class="ge-para-axis">{personLabel(r.person)}</th>
+                            <td>{r.base.map((c) => c.text).join(', ')}</td>
+                            <td>{r.a.map((c) => c.text).join(', ')}</td>
+                            <td>{r.n.map((c) => c.text).join(', ')}</td>
+                            <td>{r.a.map((c) => deriveG(c.text)).join(', ')}</td>
+                          </tr>
+                        {/each}
+                      </tbody>
+                    </table>
+                  {:else}
+                    {#each tsec.rows as r}
+                      <div class="ge-form-line">
+                        <span class="ge-para-person">{personLabel(r.person)}</span>
+                        <span class="gf-word">{r.base.map((c) => c.text).join(', ')}</span>
+                      </div>
+                    {/each}
+                  {/if}
                 </div>
               </div>
             {/each}
@@ -615,18 +578,9 @@
   }
   .gram-src { font-size: 11px; color: var(--fg-soft); margin-bottom: 8px; }
   .gram-gen { font-style: italic; opacity: 0.85; }
-  .dep-toggle-row { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
-  .dep-toggle {
-    font: italic 12px/1 inherit; padding: 3px 12px; border-radius: 999px; cursor: pointer;
-    border: 1px solid color-mix(in srgb, var(--fg-soft) 35%, transparent);
-    background: transparent; color: var(--fg-soft); transition: all 0.12s;
-  }
-  .dep-toggle.on {
-    color: var(--fg-default); background: color-mix(in srgb, var(--accent, #4a7a63) 16%, transparent);
-    border-color: color-mix(in srgb, var(--accent, #4a7a63) 45%, transparent);
-  }
-  .dep-hint { font-size: 11px; color: var(--fg-soft); font-style: italic; }
-  .dep-particle { color: var(--fg-soft); opacity: 0.65; margin-right: 0.3em; }
+  /* Verb dependent-shape grid: base + a (interrog) / n (neg) / g (subord) columns. */
+  .ge-verb-shapes th[title] { font-weight: 600; color: var(--fg-soft); cursor: help; }
+  .ge-verb-shapes td { white-space: nowrap; }
 
   /* Adjective comparison + section subheads */
   .ge-para-sub {

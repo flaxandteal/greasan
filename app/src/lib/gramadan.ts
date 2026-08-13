@@ -1,8 +1,10 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Thin wrapper over the gramadan-wasm binding. Generates morphological forms for a
 // headword (as paradigm.ts FormItem[]) when the entry has a grammatical class but
-// no BuNaMo forms (Téarma). Noun is live; verb/adjective return `supported:false`
-// until gramadan-rs gains them (see gramadan-rs/HANDOFF-verb-adjective-paradigms.md).
+// no BuNaMo forms (Téarma). Noun and VERB are live - verbs include the realised
+// interrogative (dep-a) and negative (dep-n) dependent shapes via gramadan-rs
+// (see gramadan-rs/HANDOFF-verb-shape-rules.md); the subordinate (go/gur) is
+// derived from dep-a in the view. Adjective still returns `supported:false`.
 import init, { paradigm_forms } from './gramadan-pkg/gramadan.js';
 import type { FormItem } from './paradigm';
 

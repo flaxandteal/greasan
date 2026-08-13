@@ -50,6 +50,11 @@ describe('buildParadigm - verb', () => {
     { writtenRep: 'mholamar', tags: ['past', 'plural', 'first-person'] },
     { writtenRep: 'moladh', tags: ['past', 'autonomous'] },
     { writtenRep: 'molaim', tags: ['present', 'singular', 'first-person'] },
+    // Dependent SHAPES (gramadan-generated): interrogative (dep-a) + negative (dep-n).
+    { writtenRep: 'ar mhol', tags: ['past', 'dep-a'] },
+    { writtenRep: 'níor mhol', tags: ['past', 'dep-n'] },
+    // Radical `dependent` is superseded by dep-a/dep-n and must NOT show as base.
+    { writtenRep: 'mhol', tags: ['past', 'dependent'] },
   ];
 
   it('pins verbal noun/adjective as principal parts', () => {
@@ -65,9 +70,19 @@ describe('buildParadigm - verb', () => {
     const p = buildParadigm(mol, 'verb') as VerbParadigm;
     expect(p.tenses.map((t) => t.tense)).toEqual(['past', 'present']);
     const past = p.tenses.find((t) => t.tense === 'past')!;
-    expect(past.rows.map((r) => r.person)).toEqual(['1pl', 'base', 'autonomous']);
-    expect(past.rows.find((r) => r.person === '1pl')!.forms[0].text).toBe('mholamar');
-    expect(past.rows.find((r) => r.person === 'autonomous')!.forms[0].text).toBe('moladh');
+    expect(past.rows.map((r) => r.person)).toEqual(['base', '1pl', 'autonomous']);
+    expect(past.rows.find((r) => r.person === '1pl')!.base[0].text).toBe('mholamar');
+    expect(past.rows.find((r) => r.person === 'autonomous')!.base[0].text).toBe('moladh');
+  });
+
+  it('slots dep-a/dep-n into the interrogative/negative shape columns', () => {
+    const p = buildParadigm(mol, 'verb') as VerbParadigm;
+    expect(p.hasShapes).toBe(true);
+    const base = p.tenses.find((t) => t.tense === 'past')!.rows.find((r) => r.person === 'base')!;
+    expect(base.a.map((c) => c.text)).toEqual(['ar mhol']);
+    expect(base.n.map((c) => c.text)).toEqual(['níor mhol']);
+    // radical `dependent` (also "mhol") is dropped, not duplicated into base.
+    expect(base.base.map((c) => c.text)).toEqual(['mhol']);
   });
 });
 
