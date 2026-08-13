@@ -33,7 +33,10 @@ nlp = [
 
 [tool.uv.sources]
 gramadan-rs = { path = "../Gramadan/gramadan-rs" }
-gramadan-py = { path = "data/gramadan-src/Python" }
+# The Gramadan repo is the source of truth for the Python engine too (matching
+# gramadan-rs above); the former data/gramadan-src vendored copy had diverged
+# (lagged features.py) and is no longer the build's gramadan.
+gramadan-py = { path = "../Gramadan/Python" }
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/goidelic"]
