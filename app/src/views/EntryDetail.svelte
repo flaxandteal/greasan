@@ -414,6 +414,29 @@
                         {/each}
                       </tbody>
                     </table>
+                  {:else if paradigm.hasDependent}
+                    <!-- BuNaMo attested forms: independent (base) + the radical
+                         dependent stem exactly as stored in the XML (no particle,
+                         no derivation). The realised an/ni/go shapes live on the
+                         Gramadan tab, which derives them per-verb. -->
+                    <table class="ge-para ge-verb-shapes">
+                      <thead>
+                        <tr>
+                          <th class="ge-para-corner"></th>
+                          <th></th>
+                          <th title={$t('forms.dependent')}>{$t('forms.dependent')}</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {#each tsec.rows as r}
+                          <tr>
+                            <th class="ge-para-axis">{personLabel(r.person)}</th>
+                            <td>{r.base.map((c) => c.text).join(', ')}</td>
+                            <td>{r.dep.map((c) => c.text).join(', ')}</td>
+                          </tr>
+                        {/each}
+                      </tbody>
+                    </table>
                   {:else}
                     {#each tsec.rows as r}
                       <div class="ge-form-line">

@@ -53,7 +53,7 @@ describe('buildParadigm - verb', () => {
     // Dependent SHAPES (gramadan-generated): interrogative (dep-a) + negative (dep-n).
     { writtenRep: 'ar mhol', tags: ['past', 'dep-a'] },
     { writtenRep: 'níor mhol', tags: ['past', 'dep-n'] },
-    // Radical `dependent` is superseded by dep-a/dep-n and must NOT show as base.
+    // Attested radical `dependent` (BuNaMo) lands in its own `dep` column, not base.
     { writtenRep: 'mhol', tags: ['past', 'dependent'] },
   ];
 
@@ -81,8 +81,16 @@ describe('buildParadigm - verb', () => {
     const base = p.tenses.find((t) => t.tense === 'past')!.rows.find((r) => r.person === 'base')!;
     expect(base.a.map((c) => c.text)).toEqual(['ar mhol']);
     expect(base.n.map((c) => c.text)).toEqual(['níor mhol']);
-    // radical `dependent` (also "mhol") is dropped, not duplicated into base.
+    // independent base carries only the ['past'] form, not the radical dependent.
     expect(base.base.map((c) => c.text)).toEqual(['mhol']);
+  });
+
+  it('keeps the attested radical dependent in its own dep column', () => {
+    const p = buildParadigm(mol, 'verb') as VerbParadigm;
+    expect(p.hasDependent).toBe(true);
+    const base = p.tenses.find((t) => t.tense === 'past')!.rows.find((r) => r.person === 'base')!;
+    // radical `dependent` ("mhol") lands in dep, not base or the a/n shape columns.
+    expect(base.dep.map((c) => c.text)).toEqual(['mhol']);
   });
 });
 
