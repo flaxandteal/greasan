@@ -82,6 +82,8 @@ const ga: Record<string, string> = {
   'forms.verbalAdjective': 'aidiacht bhriathartha',
   'forms.base': 'bun',
   'forms.autonomous': 'saor',
+  'forms.independent': 'neamhspleách',
+  'forms.dependent': 'spleách',
 
   // Example detail
   'example.title': 'Sampla',

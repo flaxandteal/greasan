@@ -43,6 +43,7 @@
   $effect(() => {
     const e = entry;
     generated = null;
+    showDependent = false;
     const kind = e ? posKind(e.pos) : 'other';
     if (e && (kind === 'noun' || kind === 'verb' || kind === 'adjective') && (e.grammarClass ?? '') !== '') {
       const key = e.uri;
@@ -71,14 +72,11 @@
     );
   }
 
-  // The subordinate (g = go/gur) form is derived from the interrogative (a): the
-  // particle swaps an->go, ar->gur and NOTHING else - same mutation, same stem
-  // (an ndúirt -> go ndúirt, ar chuala -> gur chuala). All per-verb irregular
-  // exceptions already live in `a` (baked by the Gramadan engine), so this is exact
-  // for regulars AND irregulars, unlike the old hand-rolled particle+mutation.
-  function deriveG(a: string): string {
-    return a.replace(/^an\b/, 'go').replace(/^ar\b/, 'gur');
-  }
+  // Verb tables default to the independent form (one column). A toggle above the
+  // value column swaps to the dependent view: the realised interrogative (an/ar) +
+  // negative (ni/nior) shapes on the Gramadan tab (two columns), or the attested
+  // radical dependent stem on the BuNaMo tab (one column). Reset per entry below.
+  let showDependent = $state(false);
 
   let attestedParadigm = $derived.by(() => {
     const attested = (entry?.forms ?? []) as FormItem[];
@@ -386,53 +384,49 @@
                   <span class="count">{tsec.rows.length}</span>
                 </button>
                 <div class="ge-acc-body">
-                  {#if paradigm.hasShapes}
-                    <!-- Independent (base) + the realised dependent SHAPES: a =
-                         interrogative (an/ar), n = negative (ní/níor), g =
-                         subordinate (go/gur). g is derived from a (an->go, ar->gur);
-                         the engine (gramadan) bakes the per-verb irregular particle +
-                         mutation into a/n, so nothing is hand-rolled here. -->
+                  {#if paradigm.hasShapes || paradigm.hasDependent}
+                    <!-- Independent by default (one column). The toggle above the
+                         value column swaps to the dependent view: on the Gramadán
+                         tab the realised an/ar + ní/níor shapes (the engine bakes
+                         each verb's irregular particle + mutation); on the BuNaMo
+                         tab the attested radical dependent stem, as stored. -->
                     <table class="ge-para ge-verb-shapes">
                       <thead>
                         <tr>
                           <th class="ge-para-corner"></th>
-                          <th></th>
-                          <th title={$t('forms.interrogative')}>an</th>
-                          <th title={$t('forms.negativeParticle')}>ní</th>
-                          <th title={$t('forms.subordinate')}>go</th>
+                          <th
+                            class="dep-toggle-cell"
+                            colspan={showDependent && paradigm.hasShapes ? 2 : 1}
+                          >
+                            <button
+                              class="dep-toggle"
+                              class:on={showDependent}
+                              aria-pressed={showDependent}
+                              onclick={() => (showDependent = !showDependent)}
+                              title={showDependent ? $t('forms.dependent') : $t('forms.independent')}
+                            >{showDependent ? $t('forms.dependent') : $t('forms.independent')}</button>
+                          </th>
                         </tr>
-                      </thead>
-                      <tbody>
-                        {#each tsec.rows as r}
-                          <tr>
-                            <th class="ge-para-axis">{personLabel(r.person)}</th>
-                            <td>{r.base.map((c) => c.text).join(', ')}</td>
-                            <td>{r.a.map((c) => c.text).join(', ')}</td>
-                            <td>{r.n.map((c) => c.text).join(', ')}</td>
-                            <td>{r.a.map((c) => deriveG(c.text)).join(', ')}</td>
+                        {#if showDependent && paradigm.hasShapes}
+                          <tr class="ge-shape-subhead">
+                            <th class="ge-para-corner"></th>
+                            <th title={$t('forms.interrogative')}>an/ar</th>
+                            <th title={$t('forms.negativeParticle')}>ní/níor</th>
                           </tr>
-                        {/each}
-                      </tbody>
-                    </table>
-                  {:else if paradigm.hasDependent}
-                    <!-- BuNaMo attested forms: independent (base) + the radical
-                         dependent stem exactly as stored in the XML (no particle,
-                         no derivation). The realised an/ni/go shapes live on the
-                         Gramadan tab, which derives them per-verb. -->
-                    <table class="ge-para ge-verb-shapes">
-                      <thead>
-                        <tr>
-                          <th class="ge-para-corner"></th>
-                          <th></th>
-                          <th title={$t('forms.dependent')}>{$t('forms.dependent')}</th>
-                        </tr>
+                        {/if}
                       </thead>
                       <tbody>
                         {#each tsec.rows as r}
                           <tr>
                             <th class="ge-para-axis">{personLabel(r.person)}</th>
-                            <td>{r.base.map((c) => c.text).join(', ')}</td>
-                            <td>{r.dep.map((c) => c.text).join(', ')}</td>
+                            {#if showDependent && paradigm.hasShapes}
+                              <td>{r.a.map((c) => c.text).join(', ')}</td>
+                              <td>{r.n.map((c) => c.text).join(', ')}</td>
+                            {:else if showDependent}
+                              <td>{r.dep.map((c) => c.text).join(', ')}</td>
+                            {:else}
+                              <td>{r.base.map((c) => c.text).join(', ')}</td>
+                            {/if}
                           </tr>
                         {/each}
                       </tbody>
@@ -601,9 +595,21 @@
   }
   .gram-src { font-size: 11px; color: var(--fg-soft); margin-bottom: 8px; }
   .gram-gen { font-style: italic; opacity: 0.85; }
-  /* Verb dependent-shape grid: base + a (interrog) / n (neg) / g (subord) columns. */
+  /* Verb table: independent (base) by default; a toggle above the value column
+     swaps to the dependent view (an/ar + ní/níor, or the BuNaMo radical). */
   .ge-verb-shapes th[title] { font-weight: 600; color: var(--fg-soft); cursor: help; }
   .ge-verb-shapes td { white-space: nowrap; }
+  .dep-toggle-cell { padding: 0 6px 4px !important; text-align: left; }
+  .dep-toggle {
+    font: italic 12px/1 inherit; padding: 3px 12px; border-radius: 999px; cursor: pointer;
+    border: 1px solid color-mix(in srgb, var(--fg-soft) 35%, transparent);
+    background: transparent; color: var(--fg-soft); transition: all 0.12s;
+  }
+  .dep-toggle.on {
+    color: var(--fg-default); background: color-mix(in srgb, var(--accent, #4a7a63) 16%, transparent);
+    border-color: color-mix(in srgb, var(--accent, #4a7a63) 45%, transparent);
+  }
+  .ge-shape-subhead th { font-size: 12px; }
 
   /* Adjective comparison + section subheads */
   .ge-para-sub {
