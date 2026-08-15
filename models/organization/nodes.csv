@@ -1,0 +1,5 @@
+parent_alias,alias,name,datatype,cardinality,ontology_class,parent_property,description,collection_name,required,searchable,exportable,sortorder
+,name,Name,string,1,https://schema.org/name,https://schema.org/name,Organization name (the resource descriptor),,true,true,true,1
+,identifier,Identifier,string,1,https://schema.org/identifier,https://schema.org/identifier,"Stable actor URI - the value carried as an attestation's actor id, so verification can match this organization to a signer. SHOULD be non-localized-string (needs an alizarin NAPI rebuild); string for now.",,false,true,true,2
+,url,Homepage,string,1,https://schema.org/url,https://schema.org/url,Canonical URL for the source or publisher,,false,false,true,3
+,public_key_multibase,Verification Key,string,1,https://w3id.org/security#publicKeyMultibase,https://w3id.org/security#publicKeyMultibase,"Ed25519 public key in sec:publicKeyMultibase form (z6Mk…). SHOULD be non-localized-string (the VALID_DATATYPES fix is committed; needs a NAPI rebuild), string for now. Present ONLY when the organization signs - nodegroup left blank otherwise.",,false,false,true,4

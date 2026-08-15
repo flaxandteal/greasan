@@ -1,0 +1,2 @@
+name,ontology_class,author,description,is_resource
+Organization,https://schema.org/Organization,,"An organization or project - a data source or publisher whose attestation may be recognised. Carries a verification key only when it participates in signing (only Flax & Teal at present).",true
