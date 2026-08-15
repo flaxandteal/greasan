@@ -79,6 +79,23 @@ export async function hydrateV2(headDir: string, resourceId: string): Promise<un
   return await invoke<unknown>('v2_hydrate', { headDir, resourceId });
 }
 
+/** A layer's attestation verdict. `reason` is empty when trusted; when untrusted
+ *  it is human-facing and distinguishes an unsigned layer from a tampered one. */
+export interface LayerVerification {
+  trusted: boolean;
+  reason: string;
+}
+
+/**
+ * Verify a layer head against its attestations: the backend recomputes the
+ * snapshot_id from the artifacts on disk and checks the signature over it.
+ * Trusted enables silently; untrusted drives the enable-time warning
+ * (Accept/Reject) - it does NOT hard-refuse. `reason` supplies the warning copy.
+ */
+export async function verifyLayer(headDir: string): Promise<LayerVerification> {
+  return await invoke<LayerVerification>('v2_verify_layer', { headDir });
+}
+
 /**
  * Compile + execute a query IR against the head. Rejects with the serialized
  * `QueryError` (a repairable, typed JSON object) when the IR is invalid.

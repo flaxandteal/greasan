@@ -883,7 +883,7 @@ pub fn v2_emit_overlay(
     // sidecar to preserve here (overlays are not full-text searched).
     #[cfg(feature = "v2-duck")]
     {
-        let _ = &app; // no per-tick progress from emit_parquet
+        use tauri::Manager;
         let cfg_by_graph: std::collections::HashMap<String, ros_madair_emit::ClusterConfig> =
             std::collections::HashMap::new();
         ros_madair_emit::emit_parquet(
@@ -894,13 +894,17 @@ pub fn v2_emit_overlay(
             &cfg_by_graph,
         )
         .map_err(|e| format!("emit_parquet: {e}"))?;
-        // Complete manifest (every field present, format_version == FORMAT_VERSION);
-        // see scripts/package-parquet-layer.mjs. handlers:[] → default_registry.
-        fs::write(
-            head.join("manifest.json"),
-            r#"{"format_version":1,"base_uri":"https://example.org/","handlers":[],"models":[],"artifacts":[],"budgets":{"max_result_rows":1000,"max_group_count":500}}"#,
-        )
-        .map_err(|e| format!("write manifest: {e}"))?;
+        // emit_parquet writes a real self-describing manifest.json now (real
+        // snapshot_id + handlers + models) - no stub. Sign the overlay in place so
+        // an edited/frozen overlay carries the same attestations.json as any other
+        // head; the read side verifies it uniformly.
+        let key = app
+            .path()
+            .app_data_dir()
+            .map_err(|e| e.to_string())?
+            .join("signing")
+            .join("ed25519.key");
+        ros_madair_emit::sign_head(head, &key).map_err(|e| format!("sign_head: {e}"))?;
     }
     #[cfg(not(feature = "v2-duck"))]
     {
@@ -941,6 +945,47 @@ pub fn v2_emit_overlay(
     _business_data_json: String,
 ) -> Result<(), String> {
     Err("v2_emit_overlay: this build lacks the v2-emit feature".to_string())
+}
+
+/// The result of verifying a layer head against its own attestations. `reason`
+/// is empty when trusted; when untrusted it is human-facing (the enable-time
+/// warning shows it) and distinguishes an unsigned layer from a tampered one.
+#[cfg(feature = "v2")]
+#[derive(serde::Serialize)]
+pub struct LayerVerification {
+    pub trusted: bool,
+    pub reason: String,
+}
+
+/// Verify a layer head: recompute its snapshot_id from the artifacts on disk and
+/// check the signature over it (see `ros_madair_emit::verify_head`). Drives the
+/// enable-time trust gate - trusted enables silently; untrusted raises a
+/// warn-with-reason popup (Accept/Reject) rather than hard-refusing.
+#[cfg(all(feature = "v2", feature = "v2-emit"))]
+#[tauri::command]
+pub fn v2_verify_layer(head_dir: String) -> Result<LayerVerification, String> {
+    match ros_madair_emit::verify_head(Path::new(&head_dir))
+        .map_err(|e| format!("verify_head: {e}"))?
+    {
+        ros_madair_emit::Verdict::Trusted { .. } => Ok(LayerVerification {
+            trusted: true,
+            reason: String::new(),
+        }),
+        ros_madair_emit::Verdict::Untrusted { reason } => {
+            Ok(LayerVerification { trusted: false, reason })
+        }
+    }
+}
+
+/// Stub without the emit crate: cannot recompute/verify, so report
+/// untrusted-unknown rather than fabricate a pass.
+#[cfg(all(feature = "v2", not(feature = "v2-emit")))]
+#[tauri::command]
+pub fn v2_verify_layer(_head_dir: String) -> Result<LayerVerification, String> {
+    Ok(LayerVerification {
+        trusted: false,
+        reason: "verification unavailable in this build".to_string(),
+    })
 }
 
 /// DEBUG on-device emit memory measurement (HANDOFF-streaming-build.md). If the

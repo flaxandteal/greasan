@@ -102,6 +102,7 @@ pub fn run() {
         v2::v2_cited_by,
         v2::v2_geo_points,
         v2::v2_emit_overlay,
+        v2::v2_verify_layer,
         offline::v2_prepare_offline,
     ]);
 

@@ -217,6 +217,18 @@ fn layers_dir<R: Runtime>(app: &AppHandle<R>) -> Result<PathBuf, String> {
     Ok(app_data.join("layers"))
 }
 
+/// This device's Ed25519 signing-identity path (SSH-host-key style: minted on
+/// first use, reused forever). One identity per install signs every head it
+/// builds - so a tester can tell "a head I built" from a swapped forgery.
+#[cfg(feature = "v2-emit")]
+fn signing_key_path<R: Runtime>(app: &AppHandle<R>) -> Result<PathBuf, String> {
+    let app_data = app
+        .path()
+        .app_data_dir()
+        .map_err(|e| format!("cannot resolve app data dir: {e}"))?;
+    Ok(app_data.join("signing").join("ed25519.key"))
+}
+
 /// Extract a tar.gz VERBATIM into `dest`, preserving the archive's directory
 /// structure (only stripping a leading `./`). Used to lay an emit-layout prebuild
 /// (`graphs/resource_models/`, `business_data/`, `reference_data/`, `manifest.json`)
@@ -539,16 +551,10 @@ fn stream_tbx_v2_build(
                 &mut on_progress,
             )
             .map_err(|e| format!("emit_parquet: {e}"))?;
-            // Parquet heads need a COMPLETE manifest for the duck read path's
-            // registry()/load_manifest to parse - every Manifest field must be present
-            // and format_version must equal FORMAT_VERSION (mirrors
-            // scripts/package-parquet-layer.mjs; see its comment). handlers:[] →
-            // default_registry, which is what emit_parquet used above.
-            std::fs::write(
-                out_dir.join("manifest.json"),
-                r#"{"format_version":1,"base_uri":"https://example.org/","handlers":[],"models":[],"artifacts":[],"budgets":{"max_result_rows":1000,"max_group_count":500}}"#,
-            )
-            .map_err(|e| format!("write manifest: {e}"))?;
+            // emit_parquet now writes a real self-describing manifest.json (a true
+            // snapshot_id over the content hashes, the actual handler set, and the
+            // models) - no hand-crafted stub. The head is signed by the caller,
+            // after this returns, so the read side can verify / warn on enable.
             report("indexing", 0.97);
         }
         #[cfg(not(feature = "v2-duck"))]
@@ -1042,7 +1048,7 @@ pub async fn build_layer<R: Runtime>(
                 let id_cb = id_clone.clone();
                 let emit_res = tokio::task::spawn_blocking(move || -> Result<usize, String> {
                     let report = |state: &str, p: f64| update_status(&app_cb, &id_cb, state, p);
-                    stream_tbx_v2_build(
+                    let n = stream_tbx_v2_build(
                         &out,
                         &graph,
                         &collections,
@@ -1051,7 +1057,18 @@ pub async fn build_layer<R: Runtime>(
                         TEARMA_UUID_NS,
                         5000,
                         &report,
-                    )
+                    )?;
+                    // Sign the freshly-emitted head in place (L0): attestations.json
+                    // beside it, keyed by this device's identity. Only the Parquet
+                    // path here carries the self-describing manifest sign_head needs.
+                    #[cfg(feature = "v2-duck")]
+                    {
+                        report("signing", 0.98);
+                        let key = signing_key_path(&app_cb)?;
+                        ros_madair_emit::sign_head(&out, &key)
+                            .map_err(|e| format!("sign_head: {e}"))?;
+                    }
+                    Ok(n)
                 })
                 .await;
                 stamp!("TOTAL wall: {} ms", t_all.elapsed().as_millis());
