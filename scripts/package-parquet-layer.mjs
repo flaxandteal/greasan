@@ -34,12 +34,23 @@ const EMIT_MANIFEST = resolve('../magic/RosMadair-sandbox-parquet/crates/ros-mad
 const keyPath = process.env.RM_SIGNING_KEY || resolve('data/keys/publisher-ed25519.key');
 const dataset = resolve(datasetDir);
 
+// Named attribution: bundled layers are DERIVED from public records by Flax &
+// Teal - a `derived` role naming the F&T actor (distinct from an upstream
+// publisher's `endorsed`). The actor URI will resolve to a schema:Organization
+// resource once that model lands; overridable for a different publisher.
+const actor = process.env.RM_ACTOR ?? 'https://flaxandteal.co.uk/#organization';
+const actorName = process.env.RM_ACTOR_NAME ?? 'Flax & Teal Limited';
+const role = process.env.RM_ROLE ?? 'derived';
+const attrFlags = actor
+  ? ` --role ${role} --actor "${actor}" --actor-name "${actorName}"`
+  : '';
+
 // `sign` seals the manifest (real artifacts + snapshot_id) and writes
 // attestations.json, printing the snapshot_id on stdout. --quiet keeps cargo's
 // chatter off stdout so the id is all we read.
 const snapshot_id = execSync(
   `cargo run --release --quiet --bin ros-madair-emit --manifest-path "${EMIT_MANIFEST}" ` +
-    `-- sign "${dataset}" "${keyPath}"`,
+    `-- sign "${dataset}" "${keyPath}"${attrFlags}`,
   { encoding: 'utf8' },
 ).trim();
 

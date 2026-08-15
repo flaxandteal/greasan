@@ -38,7 +38,7 @@
     <div class="ge-layer-block-head">
       <span class="ge-layer-block-swatch" style="background:{layer.swatch || 'var(--layer-default)'}"></span>
       <span class="ge-layer-block-name">{layer.name}</span>
-      {#if trust}<TrustShield status={trust.status} reason={trust.reason} />{/if}
+      {#if trust}<TrustShield status={trust.status} reason={trust.reason} author={trust.author} role={trust.role} />{/if}
     </div>
     {#if layer.types.length}
       <div class="ge-layer-block-types">{layer.types.join(' · ')}</div>

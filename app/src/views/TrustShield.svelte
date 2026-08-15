@@ -1,11 +1,14 @@
 <script lang="ts">
-  import type { LayerTrust } from '../lib/v2';
+  import type { LayerTrust, LayerRole } from '../lib/v2';
 
   // A layer's attestation trust as a coloured shield: green = verified (a valid
   // signature over the current content), yellow = unverified (unsigned, e.g. an
   // old or third-party layer), red = tampered (altered since signed, or an
-  // invalid signature). `reason` (when present) is the tooltip.
-  let { status, reason = '' }: { status: LayerTrust; reason?: string } = $props();
+  // invalid signature). When verified WITH a named attribution, the tooltip names
+  // the author + role: "Derived by …" (produced from public records) vs "Endorsed
+  // by …" (the authoritative upstream publisher vouches).
+  let { status, reason = '', author = '', role = '' }:
+    { status: LayerTrust; reason?: string; author?: string; role?: LayerRole } = $props();
 
   const COLOR: Record<LayerTrust, string> = {
     verified: '#2e7d52',
@@ -17,13 +20,20 @@
     unverified: 'Unverified (unsigned)',
     tampered: 'Tampered',
   };
+  // Verified + named → "Endorsed by X" / "Derived by X"; else the plain label
+  // (or the failure reason). Endorsed is the stronger, upstream-authority claim.
+  let tip = $derived(
+    status === 'verified' && author
+      ? `${role === 'endorsed' ? 'Endorsed' : 'Derived'} by ${author}`
+      : reason || LABEL[status],
+  );
 </script>
 
 <span
   class="trust-shield"
   style="color:{COLOR[status]}"
-  title={reason || LABEL[status]}
-  aria-label={reason || LABEL[status]}
+  title={tip}
+  aria-label={tip}
   role="img"
 >
   <svg width="15" height="16" viewBox="0 0 24 24" aria-hidden="true">

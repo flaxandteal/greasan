@@ -85,9 +85,15 @@ export async function hydrateV2(headDir: string, resourceId: string): Promise<un
  *  - `tampered`   red shield    — altered since signed, or an invalid signature
  *  `reason` is human-facing copy for the warning; empty when verified. */
 export type LayerTrust = 'verified' | 'unverified' | 'tampered';
+export type LayerRole = 'derived' | 'endorsed' | 'authored' | '';
 export interface LayerVerification {
   status: LayerTrust;
   reason: string;
+  /** Named attribution when a verified layer carries one. `author` is the actor
+   *  name; `role` = 'derived' (produced from public records by them) or
+   *  'endorsed' (the authoritative upstream publisher vouches). Empty = anonymous. */
+  author: string;
+  role: LayerRole;
 }
 
 /**

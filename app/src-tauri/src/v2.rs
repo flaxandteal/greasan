@@ -956,6 +956,11 @@ pub fn v2_emit_overlay(
 pub struct LayerVerification {
     pub status: String,
     pub reason: String,
+    /// Named attribution when the (verified) layer carries one: the actor's name
+    /// and role ("derived" = produced from public records by them; "endorsed" =
+    /// the authoritative upstream publisher vouches). Empty when anonymous.
+    pub author: String,
+    pub role: String,
 }
 
 /// Verify an installed layer by name: resolve its head at `{app_data}/layers/
@@ -978,15 +983,42 @@ pub fn v2_verify_layer(
         .map_err(|e| e.to_string())?
         .join("layers")
         .join(&name);
-    let (status, reason) = match ros_madair_emit::verify_head(&head) {
-        Ok(ros_madair_emit::HeadTrust::Verified { .. }) => ("verified", String::new()),
-        Ok(ros_madair_emit::HeadTrust::Unsigned) => ("unverified", String::new()),
-        Ok(ros_madair_emit::HeadTrust::Failed { reason }) => ("tampered", reason),
+    let (status, reason, author, role) = match ros_madair_emit::verify_head(&head) {
+        Ok(ros_madair_emit::HeadTrust::Verified { attributions, .. }) => {
+            // Surface the first named attribution, if any (endorsed outranks
+            // derived — an upstream endorsement is the stronger claim to show).
+            let pick = attributions
+                .iter()
+                .find(|a| a.role == ros_madair_emit::Role::Endorsed)
+                .or_else(|| attributions.first());
+            match pick {
+                Some(a) => {
+                    let role = match a.role {
+                        ros_madair_emit::Role::Endorsed => "endorsed",
+                        ros_madair_emit::Role::Derived => "derived",
+                        ros_madair_emit::Role::Authored => "authored",
+                    };
+                    ("verified", String::new(), a.actor_name.clone(), role.to_string())
+                }
+                None => ("verified", String::new(), String::new(), String::new()),
+            }
+        }
+        Ok(ros_madair_emit::HeadTrust::Unsigned) => {
+            ("unverified", String::new(), String::new(), String::new())
+        }
+        Ok(ros_madair_emit::HeadTrust::Failed { reason }) => {
+            ("tampered", reason, String::new(), String::new())
+        }
         // No manifest at that path (never built here, or a differently-located
         // head): report unverified rather than error out the whole list.
-        Err(_) => ("unverified", String::new()),
+        Err(_) => ("unverified", String::new(), String::new(), String::new()),
     };
-    Ok(LayerVerification { status: status.to_string(), reason })
+    Ok(LayerVerification {
+        status: status.to_string(),
+        reason,
+        author,
+        role,
+    })
 }
 
 /// Stub without the emit crate: cannot recompute/verify, so report unverified
@@ -997,6 +1029,8 @@ pub fn v2_verify_layer(_name: String) -> Result<LayerVerification, String> {
     Ok(LayerVerification {
         status: "unverified".to_string(),
         reason: "verification unavailable in this build".to_string(),
+        author: String::new(),
+        role: String::new(),
     })
 }
 
