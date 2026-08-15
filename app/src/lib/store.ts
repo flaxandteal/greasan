@@ -288,7 +288,7 @@ export async function refreshLayerTrust(): Promise<void> {
       try {
         return [name, await verifyLayer(name)];
       } catch (e) {
-        return [name, { status: 'tampered', reason: String(e), author: '', role: '' }];
+        return [name, { status: 'tampered', reason: String(e), author: '', role: '', confirmed: false }];
       }
     }),
   );

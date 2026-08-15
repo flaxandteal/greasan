@@ -951,6 +951,20 @@ pub fn v2_emit_overlay(
 /// is one of `"verified"` (green shield), `"unverified"` (yellow — unsigned), or
 /// `"tampered"` (red — altered/invalid). `reason` is human-facing copy for the
 /// enable-time warning; empty for verified.
+/// PINNED ROOT — Flax & Teal's platform attestation key. Trusted because it
+/// ships INSIDE the signed APK; this is the anchor the whole confirmation chain
+/// hangs off. An attestation whose actor is F&T AND whose signing key is this key
+/// is CONFIRMED, not merely self-asserted.
+///
+/// NOTE: this is the current dev/publisher key. For a real release, replace it
+/// with F&T's canonical key (`ros-madair-emit pubkey <key>`). Stage 2 extends the
+/// trusted set to recognised UPSTREAM publishers via an F&T-attested actor→key
+/// registry (the catalogue layer), so `endorsed`-by-upstream can confirm too.
+#[cfg(feature = "v2")]
+const FT_ROOT_ACTOR: &str = "https://flaxandteal.co.uk/#organization";
+#[cfg(feature = "v2")]
+const FT_ROOT_KEY: &str = "z6Mko9zKqAQFkifiqRe6t2Cntw7NHs7SiFboTWZednS6wJsf";
+
 #[cfg(feature = "v2")]
 #[derive(serde::Serialize)]
 pub struct LayerVerification {
@@ -961,6 +975,9 @@ pub struct LayerVerification {
     /// the authoritative upstream publisher vouches). Empty when anonymous.
     pub author: String,
     pub role: String,
+    /// True when the attribution's signer is a PINNED/registered key (currently
+    /// F&T's root) — "confirmed" rather than merely self-asserted.
+    pub confirmed: bool,
 }
 
 /// Verify an installed layer by name: resolve its head at `{app_data}/layers/
@@ -983,7 +1000,7 @@ pub fn v2_verify_layer(
         .map_err(|e| e.to_string())?
         .join("layers")
         .join(&name);
-    let (status, reason, author, role) = match ros_madair_emit::verify_head(&head) {
+    let (status, reason, author, role, confirmed) = match ros_madair_emit::verify_head(&head) {
         Ok(ros_madair_emit::HeadTrust::Verified { attributions, .. }) => {
             // Surface the first named attribution, if any (endorsed outranks
             // derived — an upstream endorsement is the stronger claim to show).
@@ -998,26 +1015,37 @@ pub fn v2_verify_layer(
                         ros_madair_emit::Role::Derived => "derived",
                         ros_madair_emit::Role::Authored => "authored",
                     };
-                    ("verified", String::new(), a.actor_name.clone(), role.to_string())
+                    // CONFIRM against the pinned root: the actor is F&T and the
+                    // signer is the pinned key. (Stage 2 widens this to a registry.)
+                    let confirmed =
+                        a.actor_id == FT_ROOT_ACTOR && a.public_key_multibase == FT_ROOT_KEY;
+                    (
+                        "verified",
+                        String::new(),
+                        a.actor_name.clone(),
+                        role.to_string(),
+                        confirmed,
+                    )
                 }
-                None => ("verified", String::new(), String::new(), String::new()),
+                None => ("verified", String::new(), String::new(), String::new(), false),
             }
         }
         Ok(ros_madair_emit::HeadTrust::Unsigned) => {
-            ("unverified", String::new(), String::new(), String::new())
+            ("unverified", String::new(), String::new(), String::new(), false)
         }
         Ok(ros_madair_emit::HeadTrust::Failed { reason }) => {
-            ("tampered", reason, String::new(), String::new())
+            ("tampered", reason, String::new(), String::new(), false)
         }
         // No manifest at that path (never built here, or a differently-located
         // head): report unverified rather than error out the whole list.
-        Err(_) => ("unverified", String::new(), String::new(), String::new()),
+        Err(_) => ("unverified", String::new(), String::new(), String::new(), false),
     };
     Ok(LayerVerification {
         status: status.to_string(),
         reason,
         author,
         role,
+        confirmed,
     })
 }
 
@@ -1031,6 +1059,7 @@ pub fn v2_verify_layer(_name: String) -> Result<LayerVerification, String> {
         reason: "verification unavailable in this build".to_string(),
         author: String::new(),
         role: String::new(),
+        confirmed: false,
     })
 }
 

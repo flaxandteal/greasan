@@ -63,7 +63,7 @@
     try {
       v = await verifyLayer(l.name); // authoritative fresh check at enable time
     } catch (e) {
-      v = { status: 'tampered', reason: String(e), author: '', role: '' };
+      v = { status: 'tampered', reason: String(e), author: '', role: '', confirmed: false };
     }
     layerTrust.update(t => ({ ...t, [l.name]: v }));
     if (v.status === 'verified') { await toggleLayerVisibility(l.name); return; }

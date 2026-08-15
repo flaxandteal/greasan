@@ -94,6 +94,9 @@ export interface LayerVerification {
    *  'endorsed' (the authoritative upstream publisher vouches). Empty = anonymous. */
   author: string;
   role: LayerRole;
+  /** True when the attribution is CONFIRMED against a pinned/registered key
+   *  (F&T's root) rather than merely self-asserted. */
+  confirmed: boolean;
 }
 
 /**

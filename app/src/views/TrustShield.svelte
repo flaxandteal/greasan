@@ -7,8 +7,9 @@
   // invalid signature). When verified WITH a named attribution, the tooltip names
   // the author + role: "Derived by …" (produced from public records) vs "Endorsed
   // by …" (the authoritative upstream publisher vouches).
-  let { status, reason = '', author = '', role = '' }:
-    { status: LayerTrust; reason?: string; author?: string; role?: LayerRole } = $props();
+  let { status, reason = '', author = '', role = '', confirmed = false }:
+    { status: LayerTrust; reason?: string; author?: string; role?: LayerRole; confirmed?: boolean } =
+    $props();
 
   const COLOR: Record<LayerTrust, string> = {
     verified: '#2e7d52',
@@ -20,11 +21,13 @@
     unverified: 'Unverified (unsigned)',
     tampered: 'Tampered',
   };
-  // Verified + named → "Endorsed by X" / "Derived by X"; else the plain label
-  // (or the failure reason). Endorsed is the stronger, upstream-authority claim.
+  // Verified + named → "Endorsed by X" / "Derived by X", with a confirmed vs
+  // self-asserted qualifier (confirmed = signer matches a pinned/registered key).
+  // Else the plain label (or the failure reason).
   let tip = $derived(
     status === 'verified' && author
-      ? `${role === 'endorsed' ? 'Endorsed' : 'Derived'} by ${author}`
+      ? `${role === 'endorsed' ? 'Endorsed' : 'Derived'} by ${author}` +
+        (confirmed ? ' (confirmed)' : ' (self-asserted)')
       : reason || LABEL[status],
   );
 </script>
