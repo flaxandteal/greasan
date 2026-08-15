@@ -947,43 +947,55 @@ pub fn v2_emit_overlay(
     Err("v2_emit_overlay: this build lacks the v2-emit feature".to_string())
 }
 
-/// The result of verifying a layer head against its own attestations. `reason`
-/// is empty when trusted; when untrusted it is human-facing (the enable-time
-/// warning shows it) and distinguishes an unsigned layer from a tampered one.
+/// The result of verifying a layer head against its own attestations. `status`
+/// is one of `"verified"` (green shield), `"unverified"` (yellow — unsigned), or
+/// `"tampered"` (red — altered/invalid). `reason` is human-facing copy for the
+/// enable-time warning; empty for verified.
 #[cfg(feature = "v2")]
 #[derive(serde::Serialize)]
 pub struct LayerVerification {
-    pub trusted: bool,
+    pub status: String,
     pub reason: String,
 }
 
-/// Verify a layer head: recompute its snapshot_id from the artifacts on disk and
-/// check the signature over it (see `ros_madair_emit::verify_head`). Drives the
-/// enable-time trust gate - trusted enables silently; untrusted raises a
-/// warn-with-reason popup (Accept/Reject) rather than hard-refusing.
+/// Verify an installed layer by name: resolve its head at `{app_data}/layers/
+/// {name}`, recompute the snapshot_id from the artifacts on disk, and check the
+/// signature over it (see `ros_madair_emit::verify_head`). Taking a name (not a
+/// path) lets the UI verify any layer - visible or hidden - without knowing the
+/// native head location. Drives the three-shield badge + the enable-time gate:
+/// verified enables silently; unverified/tampered raise a warn popup
+/// (Accept/Reject) rather than hard-refusing.
 #[cfg(all(feature = "v2", feature = "v2-emit"))]
 #[tauri::command]
-pub fn v2_verify_layer(head_dir: String) -> Result<LayerVerification, String> {
-    match ros_madair_emit::verify_head(Path::new(&head_dir))
-        .map_err(|e| format!("verify_head: {e}"))?
-    {
-        ros_madair_emit::Verdict::Trusted { .. } => Ok(LayerVerification {
-            trusted: true,
-            reason: String::new(),
-        }),
-        ros_madair_emit::Verdict::Untrusted { reason } => {
-            Ok(LayerVerification { trusted: false, reason })
-        }
-    }
+pub fn v2_verify_layer(
+    app: tauri::AppHandle,
+    name: String,
+) -> Result<LayerVerification, String> {
+    use tauri::Manager;
+    let head = app
+        .path()
+        .app_data_dir()
+        .map_err(|e| e.to_string())?
+        .join("layers")
+        .join(&name);
+    let (status, reason) = match ros_madair_emit::verify_head(&head) {
+        Ok(ros_madair_emit::HeadTrust::Verified { .. }) => ("verified", String::new()),
+        Ok(ros_madair_emit::HeadTrust::Unsigned) => ("unverified", String::new()),
+        Ok(ros_madair_emit::HeadTrust::Failed { reason }) => ("tampered", reason),
+        // No manifest at that path (never built here, or a differently-located
+        // head): report unverified rather than error out the whole list.
+        Err(_) => ("unverified", String::new()),
+    };
+    Ok(LayerVerification { status: status.to_string(), reason })
 }
 
-/// Stub without the emit crate: cannot recompute/verify, so report
-/// untrusted-unknown rather than fabricate a pass.
+/// Stub without the emit crate: cannot recompute/verify, so report unverified
+/// rather than fabricate a pass.
 #[cfg(all(feature = "v2", not(feature = "v2-emit")))]
 #[tauri::command]
-pub fn v2_verify_layer(_head_dir: String) -> Result<LayerVerification, String> {
+pub fn v2_verify_layer(_name: String) -> Result<LayerVerification, String> {
     Ok(LayerVerification {
-        trusted: false,
+        status: "unverified".to_string(),
         reason: "verification unavailable in this build".to_string(),
     })
 }

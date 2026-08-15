@@ -4,6 +4,7 @@ import { ready } from './wasm';
 import { FAMILIES, DEFAULT_FAMILY, layerSwatch, type FamilyId } from './family';
 import { switchFamily, addDynamicLayer, addV2Layer, removeV2Layer, getDynamicLayers, registerV2Layers, initOfflineLayers, setHiddenLayers, search, loadEntryFlagged, type DynamicLayerInfo, type ExampleDetail } from './dictionary';
 import { buildLayer, waitForBuild, listLayers, listV2Layers, assetUrl, removeLayerFiles, type BuildLayerStatus } from './tauri-builder';
+import { verifyLayer, type LayerVerification } from './v2';
 import type { SearchLang, EntrySummary } from './dictionary';
 
 export type { DynamicLayerInfo } from './dictionary';
@@ -273,6 +274,27 @@ export const layerStack = derived(
   },
 );
 
+// Per-layer attestation trust, keyed by layer name, for the shield badges.
+// Populated by refreshLayerTrust; also updated at enable-time by the gate.
+export const layerTrust = writable<Record<string, LayerVerification>>({});
+
+/** Verify every layer in the stack and publish per-name trust for the shields.
+ *  Best-effort: a failed invoke marks that layer tampered (a red shield is the
+ *  safe default when we cannot confirm) rather than dropping it. */
+export async function refreshLayerTrust(): Promise<void> {
+  const names = get(layerStack).map((l) => l.name);
+  const pairs = await Promise.all(
+    names.map(async (name): Promise<[string, LayerVerification]> => {
+      try {
+        return [name, await verifyLayer(name)];
+      } catch (e) {
+        return [name, { status: 'tampered', reason: String(e) }];
+      }
+    }),
+  );
+  layerTrust.set(Object.fromEntries(pairs));
+}
+
 /**
  * Toggle a layer's visibility, then refresh whatever is on screen. Both the
  * result set and the composed entry change when the stack changes, so a stale
@@ -315,6 +337,7 @@ export function setActiveFamily(familyId: FamilyId): void {
   searchLang.set(FAMILIES[familyId].searchLangs[0]?.id ?? 'en');
   switchFamily(familyId);
   layers.set(getDynamicLayers());
+  void refreshLayerTrust();
 }
 
 /**
@@ -374,6 +397,7 @@ export async function importLayer(sourceUrl: string, name: string, format = 'pre
     await addDynamicLayer(baseUrl, name);
   }
   layers.set(getDynamicLayers());
+  void refreshLayerTrust();
 
   buildProgress.set(null);
   buildingLayerName.set(null);
@@ -419,6 +443,7 @@ export async function installPackage(url: string, name: string): Promise<void> {
 
   await addDynamicLayer(baseUrl, name, pagefindBase);
   layers.set(getDynamicLayers());
+  void refreshLayerTrust();
 
   buildProgress.set(null);
   buildingLayerName.set(null);
@@ -428,6 +453,7 @@ export async function installPackage(url: string, name: string): Promise<void> {
 export async function addLayerDirect(baseUrl: string, name: string, pagefindBase?: string): Promise<void> {
   await addDynamicLayer(baseUrl, name, pagefindBase);
   layers.set(getDynamicLayers());
+  void refreshLayerTrust();
 }
 
 export async function removeLayer(name: string): Promise<void> {
@@ -445,6 +471,7 @@ export async function removeLayer(name: string): Promise<void> {
   hiddenLayerNames.update(h => h.filter(n => n !== name));
   // Refresh the reactive store so the Layer Manager live-updates.
   layers.set(getDynamicLayers());
+  void refreshLayerTrust();
 }
 
 /**
@@ -474,6 +501,7 @@ export async function bootstrapLayers(): Promise<void> {
   // run that base is the dev constant, not the installed one.
   setHiddenLayers(get(hiddenLayerNames));
   layers.set(getDynamicLayers());
+  void refreshLayerTrust();
   // Populate the catalogue so the tray shows layer-v2 names/swatches from the
   // first render (not the family.ts fallback). Best-effort; head must be unpacked.
   await loadCatalogue();
@@ -512,6 +540,7 @@ export async function restoreLayers(): Promise<void> {
       }
     }
     layers.set(getDynamicLayers());
+  void refreshLayerTrust();
   } catch (err) {
     console.warn('[store] restoreLayers failed:', err);
   }

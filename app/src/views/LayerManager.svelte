@@ -12,14 +12,16 @@
   import {
     layerStack, toggleLayerVisibility, layers, removeLayer,
     buildProgress, buildingLayerName, importLayer, installPackage,
-    overlayView,
+    overlayView, layerTrust,
   } from '../lib/store';
+  import { verifyLayer, type LayerVerification } from '../lib/v2';
   import type { SuggestedLayer } from '../lib/family';
   import { t } from '../lib/i18n';
   import { open } from '@tauri-apps/plugin-dialog';
   import { onMount } from 'svelte';
   import { loadLayerCatalogue, type LayerEntry } from '../lib/layers-catalogue';
   import LayerBlockCard from './LayerBlockCard.svelte';
+  import TrustShield from './TrustShield.svelte';
 
   let catalogue = $state<LayerEntry[]>([]);
   onMount(() => { loadLayerCatalogue().then(c => (catalogue = c)).catch(() => {}); });
@@ -47,6 +49,33 @@
     if (!ok) return;
     try { await removeLayer(l.name); } catch (e) { console.warn('[layers] remove failed:', e); }
   }
+
+  // ── Enable-time trust gate ──────────────────────────────────────────────
+  // Enabling a layer verifies it first. A verified (green) layer enables
+  // silently; an unverified (yellow) or tampered (red) one raises a warning with
+  // Accept/Reject - we WARN, never hard-refuse (this is a dictionary; the strict
+  // refuse-to-open policy is Aonach Mor's, on the same verdict). Disabling is
+  // always safe, so it never gates.
+  let gate = $state<{ name: string; label: string; v: LayerVerification } | null>(null);
+
+  async function enableGuarded(l: { name: string; label: string }) {
+    let v: LayerVerification;
+    try {
+      v = await verifyLayer(l.name); // authoritative fresh check at enable time
+    } catch (e) {
+      v = { status: 'tampered', reason: String(e) };
+    }
+    layerTrust.update(t => ({ ...t, [l.name]: v }));
+    if (v.status === 'verified') { await toggleLayerVisibility(l.name); return; }
+    gate = { name: l.name, label: l.label, v }; // warn: open the modal
+  }
+  async function acceptGate() {
+    if (!gate) return;
+    const name = gate.name;
+    gate = null;
+    await toggleLayerVisibility(name);
+  }
+  function rejectGate() { gate = null; }
 
   // Installed layers split by visibility. The pinned "base" (last one standing)
   // is shown as active but not togglable off.
@@ -214,13 +243,13 @@
     {/if}
 
     {#each active as l}
-      <LayerBlockCard layer={entryFor(l)} toggle toggled onToggle={() => toggleLayerVisibility(l.name)} actionLabel={$t('layers.aria')} onRemove={() => confirmRemove(l)} removeLabel={$t('layers.removeLayer')} />
+      <LayerBlockCard layer={entryFor(l)} trust={$layerTrust[l.name]} toggle toggled onToggle={() => toggleLayerVisibility(l.name)} actionLabel={$t('layers.aria')} onRemove={() => confirmRemove(l)} removeLabel={$t('layers.removeLayer')} />
     {/each}
 
     {#if hidden.length > 0}
       <div class="lm-group">{$t('layers.stHidden')}</div>
       {#each hidden as l}
-        <LayerBlockCard layer={entryFor(l)} toggle toggled={false} onToggle={() => toggleLayerVisibility(l.name)} actionLabel={$t('layers.aria')} onRemove={() => confirmRemove(l)} removeLabel={$t('layers.removeLayer')} />
+        <LayerBlockCard layer={entryFor(l)} trust={$layerTrust[l.name]} toggle toggled={false} onToggle={() => enableGuarded(l)} actionLabel={$t('layers.aria')} onRemove={() => confirmRemove(l)} removeLabel={$t('layers.removeLayer')} />
       {/each}
     {/if}
 
@@ -268,6 +297,27 @@
 
     {#if addError}<div class="lm-error">{addError}</div>{/if}
   </div>
+
+  <!-- ── Enable-time trust warning (Accept / Reject) ─────────────── -->
+  {#if gate}
+    <div class="lm-gate-backdrop" role="dialog" aria-modal="true">
+      <div class="lm-gate">
+        <div class="lm-gate-icon"><TrustShield status={gate.v.status} reason="" /></div>
+        <div class="lm-gate-title">
+          {gate.v.status === 'tampered' ? $t('trust.tamperedTitle') : $t('trust.unsignedTitle')}
+        </div>
+        <div class="lm-gate-name">{gate.label}</div>
+        <div class="lm-gate-body">
+          {gate.v.reason
+            || (gate.v.status === 'tampered' ? $t('trust.tamperedBody') : $t('trust.unsignedBody'))}
+        </div>
+        <div class="lm-gate-actions">
+          <button class="lm-ghost" onclick={rejectGate}>{$t('trust.reject')}</button>
+          <button class="lm-primary" onclick={acceptGate}>{$t('trust.accept')}</button>
+        </div>
+      </div>
+    </div>
+  {/if}
 </div>
 
 <style>
@@ -305,4 +355,21 @@
   .lm-primary:disabled { opacity: .5; cursor: default; }
   .lm-adv { align-self: flex-start; background: none; border: none; color: var(--fg-muted); font-size: var(--fs-small); text-transform: uppercase; letter-spacing: .06em; cursor: pointer; padding: 4px 0; }
   .lm-error { font-size: var(--fs-small); color: var(--danger, #b0463c); padding-top: 2px; }
+
+  /* Enable-time trust warning */
+  .lm-gate-backdrop {
+    position: fixed; inset: 0; z-index: 50; display: flex; align-items: center; justify-content: center;
+    background: color-mix(in oklab, #000 45%, transparent); padding: 24px;
+  }
+  .lm-gate {
+    width: 100%; max-width: 340px; background: var(--srf-card, var(--srf-base));
+    border: 1px solid var(--srf-rule); border-radius: 16px; padding: 20px;
+    display: flex; flex-direction: column; align-items: center; text-align: center; gap: 8px;
+  }
+  .lm-gate-icon :global(svg) { width: 34px; height: 36px; }
+  .lm-gate-title { font-weight: 700; font-size: var(--fs-body); }
+  .lm-gate-name { font-size: var(--fs-small); color: var(--fg-muted); }
+  .lm-gate-body { font-size: var(--fs-small); color: var(--fg-body); line-height: 1.45; }
+  .lm-gate-actions { display: flex; gap: 10px; margin-top: 8px; width: 100%; }
+  .lm-gate-actions > button { flex: 1; }
 </style>

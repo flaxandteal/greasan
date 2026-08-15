@@ -79,21 +79,26 @@ export async function hydrateV2(headDir: string, resourceId: string): Promise<un
   return await invoke<unknown>('v2_hydrate', { headDir, resourceId });
 }
 
-/** A layer's attestation verdict. `reason` is empty when trusted; when untrusted
- *  it is human-facing and distinguishes an unsigned layer from a tampered one. */
+/** A layer's attestation verdict, as a three-state trust status:
+ *  - `verified`   green shield  — a valid signature over the current content
+ *  - `unverified` yellow shield — unsigned (old/third-party); a soft heads-up
+ *  - `tampered`   red shield    — altered since signed, or an invalid signature
+ *  `reason` is human-facing copy for the warning; empty when verified. */
+export type LayerTrust = 'verified' | 'unverified' | 'tampered';
 export interface LayerVerification {
-  trusted: boolean;
+  status: LayerTrust;
   reason: string;
 }
 
 /**
- * Verify a layer head against its attestations: the backend recomputes the
- * snapshot_id from the artifacts on disk and checks the signature over it.
- * Trusted enables silently; untrusted drives the enable-time warning
- * (Accept/Reject) - it does NOT hard-refuse. `reason` supplies the warning copy.
+ * Verify an installed layer BY NAME against its attestations: the backend
+ * resolves its head, recomputes the snapshot_id from the artifacts on disk, and
+ * checks the signature over it. `verified` enables silently; `unverified`/
+ * `tampered` drive the enable-time warning (Accept/Reject) - it does NOT
+ * hard-refuse. `reason` supplies the warning copy.
  */
-export async function verifyLayer(headDir: string): Promise<LayerVerification> {
-  return await invoke<LayerVerification>('v2_verify_layer', { headDir });
+export async function verifyLayer(name: string): Promise<LayerVerification> {
+  return await invoke<LayerVerification>('v2_verify_layer', { name });
 }
 
 /**

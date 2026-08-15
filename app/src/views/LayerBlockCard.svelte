@@ -7,9 +7,13 @@
   // the description page; an optional trailing action (e.g. remove) is separate.
   import { currentLayer } from '../lib/store';
   import type { LayerEntry } from '../lib/layers-catalogue';
+  import type { LayerVerification } from '../lib/v2';
+  import TrustShield from './TrustShield.svelte';
 
-  let { layer, actionLabel, actionText, onAction, toggle, toggled, onToggle, disabled, onRemove, removeLabel }: {
+  let { layer, actionLabel, actionText, onAction, toggle, toggled, onToggle, disabled, onRemove, removeLabel, trust }: {
     layer: LayerEntry;
+    /** Attestation verdict, when this is an installed layer - drives the shield. */
+    trust?: LayerVerification;
     /** Icon-button (X) action, e.g. remove. */
     actionLabel?: string;
     /** Labelled action instead of the X - e.g. "Install" / "Build". */
@@ -34,6 +38,7 @@
     <div class="ge-layer-block-head">
       <span class="ge-layer-block-swatch" style="background:{layer.swatch || 'var(--layer-default)'}"></span>
       <span class="ge-layer-block-name">{layer.name}</span>
+      {#if trust}<TrustShield status={trust.status} reason={trust.reason} />{/if}
     </div>
     {#if layer.types.length}
       <div class="ge-layer-block-types">{layer.types.join(' · ')}</div>

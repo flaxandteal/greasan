@@ -172,6 +172,14 @@ const en: Record<string, string> = {
   'layers.removeLayer': 'Remove layer',
   'layers.removeConfirm': 'Remove “{name}” from this device? A device-built layer has to be rebuilt from its file to get it back.',
 
+  // Enable-time trust warning (green/yellow/red shield -> Accept/Reject).
+  'trust.unsignedTitle': 'This layer is unsigned',
+  'trust.unsignedBody': 'It carries no signature, so we can not confirm who produced it or that it is unaltered. Enable it anyway?',
+  'trust.tamperedTitle': 'This layer looks altered',
+  'trust.tamperedBody': 'Its contents do not match its signature - it may have been changed or corrupted since it was signed. Enable it anyway?',
+  'trust.accept': 'Enable anyway',
+  'trust.reject': 'Cancel',
+
   'settings.title': 'Settings',
   'settings.dictionary': 'Dictionary',
   'settings.layers': 'Layers',
