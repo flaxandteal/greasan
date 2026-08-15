@@ -43,3 +43,6 @@ scripts/ros-madair-build
 # Env files with secrets (LOGAINM_API_KEY etc.) - never commit
 .env
 .env.*
+
+# Signing private keys - NEVER commit
+*.ed25519.key
