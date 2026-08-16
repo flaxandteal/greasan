@@ -63,6 +63,67 @@ pub fn load_graph(path: &Path) -> Result<StaticGraph, String> {
     Ok(graph)
 }
 
+/// `load_graph`, cached by path (invalidated on mtime+len change). A resource
+/// open hydrates against the same layer graphs every time; parsing them once and
+/// handing back an `Arc` avoids re-reading graph.json per call. The one owner of
+/// layer-graph loading for the duck hydrate path - base graph and fxg-bearing
+/// overlays both come through here, so there is a single mechanism and cache.
+#[cfg(feature = "v2-duck")]
+fn load_graph_cached(path: &Path) -> Result<std::sync::Arc<StaticGraph>, String> {
+    use std::sync::{Mutex, OnceLock};
+    use std::time::SystemTime;
+    static CACHE: OnceLock<Mutex<HashMap<PathBuf, (SystemTime, u64, std::sync::Arc<StaticGraph>)>>> =
+        OnceLock::new();
+    let meta = std::fs::metadata(path).map_err(|e| format!("stat {}: {e}", path.display()))?;
+    let mtime = meta.modified().map_err(|e| e.to_string())?;
+    let len = meta.len();
+    let mut cache = CACHE
+        .get_or_init(|| Mutex::new(HashMap::new()))
+        .lock()
+        .map_err(|e| e.to_string())?;
+    if let Some((t, l, g)) = cache.get(path) {
+        if *t == mtime && *l == len {
+            return Ok(g.clone());
+        }
+    }
+    let g = std::sync::Arc::new(load_graph(path)?);
+    cache.insert(path.to_path_buf(), (mtime, len, g.clone()));
+    Ok(g)
+}
+
+/// The composed `LayeredGraph` for a base + zero-or-more fxg-bearing overlays,
+/// retained across hydrates so its lazily-built merged lookup index survives too
+/// (not just the member parses). Always a `LayeredGraph` - even a single layer -
+/// so hydrate takes one concrete graph and the layer count is internal to it.
+/// Keyed by member `Arc` identity: `load_graph_cached` hands back the same `Arc`
+/// while a graph.json is unchanged, so a reinstall mints a new `Arc` -> new key
+/// -> rebuilt composition; identical inputs reuse the cached one.
+#[cfg(feature = "v2-duck")]
+fn cached_layered_graph(
+    base: &std::sync::Arc<StaticGraph>,
+    overlays: &[std::sync::Arc<StaticGraph>],
+) -> std::sync::Arc<alizarin_core::LayeredGraph> {
+    use std::sync::{Mutex, OnceLock};
+    static CACHE: OnceLock<Mutex<HashMap<Vec<usize>, std::sync::Arc<alizarin_core::LayeredGraph>>>> =
+        OnceLock::new();
+    let key: Vec<usize> = std::iter::once(std::sync::Arc::as_ptr(base) as usize)
+        .chain(overlays.iter().map(|o| std::sync::Arc::as_ptr(o) as usize))
+        .collect();
+    let mut cache = CACHE
+        .get_or_init(|| Mutex::new(HashMap::new()))
+        .lock()
+        .expect("layered-graph cache poisoned");
+    if let Some(lg) = cache.get(&key) {
+        return lg.clone();
+    }
+    let lg = std::sync::Arc::new(alizarin_core::LayeredGraph::over(
+        base.clone(),
+        overlays.to_vec(),
+    ));
+    cache.insert(key, lg.clone());
+    lg
+}
+
 /// The datatype-capability registry to plan queries with - rebuilt from the
 /// handler set the artifact's manifest *declares* it was emitted with.
 ///
@@ -687,7 +748,26 @@ pub fn v2_hydrate_layers(head_dirs: Vec<String>, resource_id: String, language: 
     let Some(base) = head_dirs.first() else {
         return Err("v2_hydrate_layers: no layers given".to_string());
     };
-    let graph = load_graph(&graph_path(base))?;
+    // The app owns layer-graph loading (one cached `load_graph`): the base model,
+    // plus the fxg-bearing overlays a computed layer contributes. When any
+    // overlay declares functions we retain a composed LayeredGraph (dirs[0] is
+    // the base; overlays are the rest that declare fxgs) and pass it as the
+    // derive-pass view; otherwise the base graph is its own view.
+    let base_graph = load_graph_cached(&graph_path(base))?;
+    let overlays: Vec<std::sync::Arc<StaticGraph>> = head_dirs
+        .iter()
+        .skip(1)
+        .filter_map(|d| load_graph_cached(&graph_path(d)).ok())
+        .filter(|g| {
+            g.functions_x_graphs
+                .as_ref()
+                .is_some_and(|v| !v.is_empty())
+        })
+        .collect();
+    // One graph for hydrate: always a LayeredGraph (a single-layer one when no
+    // computed layer is installed). Whether it wraps one layer or many is
+    // internal to it - hydrate never sees the multiplicity.
+    let composed = cached_layered_graph(&base_graph, &overlays);
     let langs: Vec<&str> = match language.as_deref() {
         Some(l) => vec![l, "ga", "gd", "en"],
         None => vec!["ga", "gd", "en"],
@@ -703,7 +783,7 @@ pub fn v2_hydrate_layers(head_dirs: Vec<String>, resource_id: String, language: 
     ros_madair_duck::hydrate_layers(
         &dirs,
         &resource_id,
-        &graph,
+        &composed,
         &langs,
         Some(&layer_ids),
         &functions,
