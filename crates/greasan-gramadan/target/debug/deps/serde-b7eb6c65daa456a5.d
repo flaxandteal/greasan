@@ -1,0 +1,14 @@
+/home/philtweir/Cód/Oscailte/Gréasán/crates/greasan-gramadan/target/debug/deps/serde-b7eb6c65daa456a5.d: /home/philtweir/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.229/src/lib.rs /home/philtweir/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.229/src/integer128.rs /home/philtweir/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.229/src/private/mod.rs /home/philtweir/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.229/src/private/de.rs /home/philtweir/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.229/src/private/ser.rs /home/philtweir/Cód/Oscailte/Gréasán/crates/greasan-gramadan/target/debug/build/serde-7ae6af26ebf81526/out/private.rs
+
+/home/philtweir/Cód/Oscailte/Gréasán/crates/greasan-gramadan/target/debug/deps/libserde-b7eb6c65daa456a5.rlib: /home/philtweir/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.229/src/lib.rs /home/philtweir/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.229/src/integer128.rs /home/philtweir/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.229/src/private/mod.rs /home/philtweir/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.229/src/private/de.rs /home/philtweir/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.229/src/private/ser.rs /home/philtweir/Cód/Oscailte/Gréasán/crates/greasan-gramadan/target/debug/build/serde-7ae6af26ebf81526/out/private.rs
+
+/home/philtweir/Cód/Oscailte/Gréasán/crates/greasan-gramadan/target/debug/deps/libserde-b7eb6c65daa456a5.rmeta: /home/philtweir/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.229/src/lib.rs /home/philtweir/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.229/src/integer128.rs /home/philtweir/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.229/src/private/mod.rs /home/philtweir/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.229/src/private/de.rs /home/philtweir/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.229/src/private/ser.rs /home/philtweir/Cód/Oscailte/Gréasán/crates/greasan-gramadan/target/debug/build/serde-7ae6af26ebf81526/out/private.rs
+
+/home/philtweir/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.229/src/lib.rs:
+/home/philtweir/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.229/src/integer128.rs:
+/home/philtweir/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.229/src/private/mod.rs:
+/home/philtweir/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.229/src/private/de.rs:
+/home/philtweir/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.229/src/private/ser.rs:
+/home/philtweir/Cód/Oscailte/Gréasán/crates/greasan-gramadan/target/debug/build/serde-7ae6af26ebf81526/out/private.rs:
+
+# env-dep:OUT_DIR=/home/philtweir/Cód/Oscailte/Gréasán/crates/greasan-gramadan/target/debug/build/serde-7ae6af26ebf81526/out

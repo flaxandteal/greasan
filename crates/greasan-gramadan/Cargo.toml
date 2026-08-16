@@ -1,0 +1,14 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+[package]
+name = "greasan-gramadan"
+version = "0.1.0"
+edition = "2021"
+description = "Gréasán Derive provider: gramadan-rs paradigm forms as a graph-attached function, producing the `forms` nodegroup on demand"
+
+[dependencies]
+# The native morphology engine (same crate the app + gramadan-wasm use).
+gramadan = { path = "../../../Gramadan/gramadan-rs", default-features = false }
+# The functions-registry contract (DeriveProvider / StaticTile / StaticGraph /
+# ComputeTilesConfig / FunctionsRegistry). Same alizarin-core the app links.
+alizarin-core = { path = "../../../magic/alizarin-sandbox/crates/alizarin-core" }
+serde_json = "1"
