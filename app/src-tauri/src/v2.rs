@@ -693,13 +693,110 @@ pub fn v2_hydrate_layers(head_dirs: Vec<String>, resource_id: String, language: 
         None => vec!["ga", "gd", "en"],
     };
     let dirs: Vec<&Path> = head_dirs.iter().map(|d| Path::new(d.as_str())).collect();
-    // TODO(greasan-gramadan): build this registry ONCE (OnceLock) with the
-    // gramadan Derive provider registered, and pass the per-dir layer ids (in
-    // place of None) so membership resolves and computed layers fire. Empty
-    // registry + None layer_ids is a behaviour-identical no-op for now.
-    let functions = alizarin_core::default_functions_registry();
-    ros_madair_duck::hydrate_layers(&dirs, &resource_id, &graph, &langs, None, &functions)
-        .map_err(|e| e.to_string())
+    // Register the graph-attached Derive providers (greasan-gramadan) and pass
+    // each dir's layer id, so a computed layer's presence spine materialises its
+    // forms JIT. `member_of` in the layer's functions_x_graphs config matches a
+    // layer id below; with no computed layer installed this is a no-op (nothing
+    // declares a compute-tiles function, so nothing fires).
+    let functions = gramadan_registry(&dirs);
+    let layer_ids: Vec<String> = head_dirs.iter().map(|d| layer_id_of(d)).collect();
+    ros_madair_duck::hydrate_layers(
+        &dirs,
+        &resource_id,
+        &graph,
+        &langs,
+        Some(&layer_ids),
+        &functions,
+    )
+    .map_err(|e| e.to_string())
+}
+
+/// A layer's id is its directory basename (the layer name) - the same value a
+/// computed layer's `functions_x_graphs` config carries in `member_of`.
+#[cfg(feature = "v2-duck")]
+fn layer_id_of(dir: &str) -> String {
+    Path::new(dir)
+        .file_name()
+        .map(|n| n.to_string_lossy().into_owned())
+        .unwrap_or_else(|| dir.to_string())
+}
+
+/// Build the FunctionsRegistry for a hydrate pass: the gramadan Derive provider,
+/// with a [`GramadanVocab`] resolved from the loaded concept catalogs so its
+/// generated `gram_features` reference the SAME concepts as attested BuNaMo forms
+/// (and therefore merge cleanly rather than duplicating).
+#[cfg(feature = "v2-duck")]
+fn gramadan_registry(dirs: &[&Path]) -> alizarin_core::FunctionsRegistry {
+    let mut registry = alizarin_core::default_functions_registry();
+    greasan_gramadan::register(&mut registry, gramadan_vocab(dirs));
+    registry
+}
+
+/// Invert the concept catalog (id -> label) for the labels the gramadan provider
+/// stamps: the axis tags (number/case), gender, and the form dialect. Labels come
+/// straight from `build-bunamo-data.py`'s vocabulary, so the two paths agree.
+#[cfg(feature = "v2-duck")]
+fn gramadan_vocab(dirs: &[&Path]) -> greasan_gramadan::GramadanVocab {
+    use ros_madair_duck::{DuckReader, SpatialSource};
+    // label -> concept id, folded across every loaded catalog (first wins).
+    let mut by_label: HashMap<String, String> = HashMap::new();
+    for dir in dirs {
+        let catalog = dir.join("concept_catalog.parquet");
+        if !catalog.is_file() {
+            continue;
+        }
+        let glob = format!("{}/tiles_*.parquet", dir.display());
+        let Ok(duck) = DuckReader::open_with(&glob, SpatialSource::None)
+            .and_then(|d| d.with_catalog(&catalog.to_string_lossy()))
+        else {
+            continue;
+        };
+        if let Ok(labels) = duck.concept_labels() {
+            for (id, label) in labels {
+                by_label.entry(label).or_insert(id);
+            }
+        }
+    }
+
+    let mut tag_concepts = HashMap::new();
+    for tag in [
+        "singular",
+        "plural",
+        "nominative",
+        "genitive",
+        "vocative",
+        "dative",
+        "masculine",
+        "feminine",
+    ] {
+        if let Some(id) = by_label.get(tag) {
+            tag_concepts.insert(tag.to_string(), id.clone());
+        }
+    }
+    // gender node concept id -> is-feminine. Match on the label prefix so both a
+    // dedicated Gender collection ("Masculine"/"Feminine") and the feature tags
+    // ("masculine"/"feminine") resolve.
+    let mut gender_is_fem = HashMap::new();
+    for (label, id) in &by_label {
+        let l = label.to_lowercase();
+        if l.starts_with("fem") {
+            gender_is_fem.insert(id.clone(), true);
+        } else if l.starts_with("masc") {
+            gender_is_fem.insert(id.clone(), false);
+        }
+    }
+    // form_dialect = "Irish" (build-bunamo stamps this on every form).
+    let dialect_concept = by_label
+        .get("Irish")
+        .or_else(|| by_label.get("Irish (General)"))
+        .cloned()
+        .unwrap_or_default();
+
+    greasan_gramadan::GramadanVocab {
+        tag_concepts,
+        gender_is_fem,
+        dialect_concept,
+    }
 }
 
 #[cfg(not(feature = "v2-duck"))]

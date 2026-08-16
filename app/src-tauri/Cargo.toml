@@ -71,6 +71,10 @@ ros-madair-emit = { path = "../../../magic/RosMadair-sandbox-parquet/crates/ros-
 # amalgamation + the parquet reader so read_parquet works OFFLINE (no INSTALL).
 ros-madair-duck = { path = "../../../magic/RosMadair-sandbox-parquet/crates/ros-madair-duck", optional = true }
 duckdb = { version = "1", features = ["bundled", "json", "parquet"], optional = true }
+# The gramadan Derive provider: generates the `forms` nodegroup on demand from
+# gramadan-rs. Registered into the FunctionsRegistry the duck hydrate path runs,
+# so a computed layer's presence spine materialises paradigm forms JIT.
+greasan-gramadan = { path = "../../crates/greasan-gramadan", optional = true }
 
 [features]
 v2 = [
@@ -83,7 +87,7 @@ v2 = [
 # The DuckDB+Parquet read path (migration in progress). Builds on v2-emit (the
 # real app feature set) so it also exercises the app's emit calls against the
 # parquet emit crate; adds the native duckdb build + ros-madair-duck alongside.
-v2-duck = ["v2-emit", "dep:ros-madair-duck", "dep:duckdb"]
+v2-duck = ["v2-emit", "dep:ros-madair-duck", "dep:duckdb", "dep:greasan-gramadan"]
 v2-emit = ["v2", "dep:ros-madair-emit"]
 # Debug-only localhost navigation channel for deterministic driving (see
 # src/navserver.rs). Never enable for a public release.
