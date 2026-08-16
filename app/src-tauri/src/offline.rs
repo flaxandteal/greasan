@@ -64,13 +64,16 @@ const CORPORA: &[CorpusSpec] = &[
     // on-device (tbx-v2 → FTS5 `search.sqlite` sidecar) and installed as a
     // layer, not a bundled corpus. See `family.ts`'s `tearma` suggested layer.
     CorpusSpec {
-        // Morphology enrichment (BuNaMo): forms + grammar_class compose onto the
-        // shared goi ids. Pagefind is ga-only (inflected surface forms). Its
-        // pagefind zips live in the head dir, so index == head basename.
-        name: "bunamo",
-        head: "bunamo-v2",
-        index: "bunamo-v2",
-        langs: &["ga"],
+        // Computed morphology (Gramadán forms): a reduced-order REPLACEMENT for
+        // bunamo. Ships only grammar_class per noun (~1.6MB vs bunamo's ~7.8MB);
+        // its own graph declares the compute-tiles fxg, so greasan-gramadan
+        // materialises the full paradigm on device (headword from wiktionary,
+        // class from here). No pagefind - computed forms are not build-time
+        // indexable, so inflected-form search is not provided by this layer.
+        name: "gramadan-forms",
+        head: "gramadan-forms-v2",
+        index: "gramadan-forms-v2",
+        langs: &[],
     },
     CorpusSpec {
         // Logainm placenames - its OWN graph (schema.org/Place), NOT the shared
