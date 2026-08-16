@@ -693,7 +693,13 @@ pub fn v2_hydrate_layers(head_dirs: Vec<String>, resource_id: String, language: 
         None => vec!["ga", "gd", "en"],
     };
     let dirs: Vec<&Path> = head_dirs.iter().map(|d| Path::new(d.as_str())).collect();
-    ros_madair_duck::hydrate_layers(&dirs, &resource_id, &graph, &langs).map_err(|e| e.to_string())
+    // TODO(greasan-gramadan): build this registry ONCE (OnceLock) with the
+    // gramadan Derive provider registered, and pass the per-dir layer ids (in
+    // place of None) so membership resolves and computed layers fire. Empty
+    // registry + None layer_ids is a behaviour-identical no-op for now.
+    let functions = alizarin_core::default_functions_registry();
+    ros_madair_duck::hydrate_layers(&dirs, &resource_id, &graph, &langs, None, &functions)
+        .map_err(|e| e.to_string())
 }
 
 #[cfg(not(feature = "v2-duck"))]
