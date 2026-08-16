@@ -18,6 +18,7 @@ const LAYERS = [
   ['wiktionary-v2-full', 'prebuild-wiktionary'],
   ['macbain-v2', 'prebuild-macbain'],
   ['bunamo-v2', 'prebuild-bunamo'],
+  ['gramadan-forms-v2', 'prebuild-gramadan-forms'],
   ['place-v2', 'prebuild-place'],
   ['concept-v2', 'prebuild-concept'],
   ['example-tatoeba-v2', 'prebuild-example-tatoeba'],
