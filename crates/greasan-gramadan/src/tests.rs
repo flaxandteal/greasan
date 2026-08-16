@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 use super::*;
+use alizarin_core::StaticGraph;
 
 const NUMBERS: [&str; 2] = ["singular", "plural"];
 const CASES: [&str; 4] = ["nominative", "genitive", "vocative", "dative"];

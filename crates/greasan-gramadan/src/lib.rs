@@ -17,7 +17,7 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 use alizarin_core::{
-    ComputeTilesConfig, DeriveProvider, FunctionsRegistry, RegisteredFunction, StaticGraph,
+    ComputeTilesConfig, DeriveProvider, FunctionsRegistry, GraphLookup, RegisteredFunction,
     StaticTile,
 };
 use gramadan::features::{Form, Gender};
@@ -176,17 +176,18 @@ fn concept_id(v: &serde_json::Value) -> Option<String> {
 }
 
 impl GramadanForms {
-    /// nodeid for a node alias, from the graph.
-    fn node_id(graph: &StaticGraph, alias: &str) -> Option<String> {
-        graph
-            .nodes
-            .iter()
-            .find(|n| n.alias.as_deref() == Some(alias))
-            .map(|n| n.nodeid.clone())
+    /// nodeid for a node alias, from the graph. Resolved through [`GraphLookup`]
+    /// so an overlay-defined node (a computed layer's own nodegroup) is visible.
+    fn node_id(graph: &dyn GraphLookup, alias: &str) -> Option<String> {
+        graph.get_node_by_alias(alias).map(|n| n.nodeid.clone())
     }
 
     /// The first scalar value of a node (by alias) across the resource's tiles.
-    fn value_of(graph: &StaticGraph, tiles: &[StaticTile], alias: &str) -> Option<serde_json::Value> {
+    fn value_of(
+        graph: &dyn GraphLookup,
+        tiles: &[StaticTile],
+        alias: &str,
+    ) -> Option<serde_json::Value> {
         let id = Self::node_id(graph, alias)?;
         tiles.iter().find_map(|t| t.data.get(&id).cloned())
     }
@@ -196,7 +197,7 @@ impl DeriveProvider for GramadanForms {
     fn derive(
         &self,
         resource_id: &str,
-        graph: &StaticGraph,
+        graph: &dyn GraphLookup,
         tiles: &[StaticTile],
         config: &ComputeTilesConfig,
     ) -> Result<Vec<StaticTile>, String> {
