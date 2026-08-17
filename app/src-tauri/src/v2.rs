@@ -423,6 +423,11 @@ fn open_layers(head_dirs: &[String]) -> Result<Layers, String> {
 /// `CountRecords` measure returns a composed count (`Layers::count`); anything
 /// else resolves the matching UUIDs (`Layers::resolve`), since a number cannot be
 /// precedence-filtered.
+///
+/// sqlite-only (`Layers`/`open_layers`); gated off the duck substrate. It has NO
+/// callers (single-head `v2_query` covers the layer catalogue via the duck
+/// `run_query`), so the duck build gets a stub rather than a parquet port.
+#[cfg(not(feature = "v2-duck"))]
 #[tauri::command]
 pub fn v2_query_layers(head_dirs: Vec<String>, ir: Value) -> Result<Value, String> {
     let Some(base) = head_dirs.first() else {
@@ -449,6 +454,17 @@ pub fn v2_query_layers(head_dirs: Vec<String>, ir: Value) -> Result<Value, Strin
             .map_err(|e| e.to_string())?;
         Ok(serde_json::json!({ "measure": "select_ids", "ids": ids }))
     }
+}
+
+/// Duck-substrate stub for `v2_query_layers`. The sqlite composed-query path
+/// cannot read parquet heads and has no callers, so this errors loudly rather
+/// than silently returning nothing. If a composed multi-layer query is ever
+/// needed on duck, port it via `ros_madair_duck` (per-layer resolve + merge),
+/// mirroring the `cited_by` reverse-lookup.
+#[cfg(feature = "v2-duck")]
+#[tauri::command]
+pub fn v2_query_layers(_head_dirs: Vec<String>, _ir: Value) -> Result<Value, String> {
+    Err("v2_query_layers: not implemented on the duck substrate (no callers)".to_string())
 }
 
 // ---------------------------------------------------------------------------
