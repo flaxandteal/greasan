@@ -68,12 +68,14 @@ const CORPORA: &[CorpusSpec] = &[
         // bunamo. Ships only grammar_class per noun (~1.6MB vs bunamo's ~7.8MB);
         // its own graph declares the compute-tiles fxg, so greasan-gramadan
         // materialises the full paradigm on device (headword from wiktionary,
-        // class from here). No pagefind - computed forms are not build-time
-        // indexable, so inflected-form search is not provided by this layer.
+        // class from here). Pagefind is ga-only, over the inflected forms
+        // recovered from the build-time paradigm (search "fir" -> lemma "fear"),
+        // exactly as bunamo provided - the forms exist at build time even though
+        // the tiles ship class-only. Zips live in the head dir (index == head).
         name: "gramadan-forms",
         head: "gramadan-forms-v2",
         index: "gramadan-forms-v2",
-        langs: &[],
+        langs: &["ga"],
     },
     CorpusSpec {
         // Logainm placenames - its OWN graph (schema.org/Place), NOT the shared

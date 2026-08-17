@@ -42,10 +42,28 @@ import {
   parseStaticGraph,
   setNapiModule,
 } from '../app/node_modules/alizarin/dist/alizarin.js';
+import * as pagefind from '../app/node_modules/pagefind/lib/index.js';
 import { readFileSync, writeFileSync, mkdirSync, existsSync } from 'fs';
 import { execSync, execFileSync } from 'child_process';
 import { fileURLToPath } from 'url';
 import { dirname, resolve } from 'path';
+
+// Resource-UUID derivation - MUST match the Rust emitter: the composed entry id
+// is uuid5(uuid5(ALIZARIN_NS, "resource/{graphId}"), resourceId). A Pagefind
+// hit's `url` is this uuid, so it resolves to the full composed entry.
+import { createHash } from 'node:crypto';
+const ALIZARIN_NS = '1a79f1c8-9505-4bea-a18e-28a053f725ca';
+function uuidv5(name, ns) {
+  const nsb = Buffer.from(ns.replace(/-/g, ''), 'hex');
+  const b = Buffer.from(createHash('sha1').update(Buffer.concat([nsb, Buffer.from(name, 'utf8')])).digest().subarray(0, 16));
+  b[6] = (b[6] & 0x0f) | 0x50;
+  b[8] = (b[8] & 0x3f) | 0x80;
+  const h = b.toString('hex');
+  return `${h.slice(0, 8)}-${h.slice(8, 12)}-${h.slice(12, 16)}-${h.slice(16, 20)}-${h.slice(20, 32)}`;
+}
+function stripDiacritics(text) {
+  return text.normalize('NFD').replace(/[̀-ͯ]/g, '').normalize('NFC');
+}
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const root = resolve(__dirname, '..');
@@ -241,6 +259,79 @@ if (existsSync(headGraph)) {
   const ok = raw.includes(GRAMADAN_PROVIDER_ID) && raw.includes(LAYER_ID);
   console.log(`[gramadan-forms] head graph.json carries the fxg: ${ok ? 'YES' : 'NO (!)'}`);
   if (!ok) process.exit(1);
+}
+
+// --- Pagefind: inflected-form search, recovered from the build-time forms -----
+// The tiles ship class-only (forms are generated on device), but the forms
+// themselves exist at build time in the bunamo CSV (build-bunamo-data.py runs the
+// same Gramadán engine). Index them so a search for a surface form ("fir")
+// surfaces the lemma entry ("fear") - exactly the search bunamo-v2 provided. One
+// ga record per noun; url = composed entry uuid; en/sampla emitted empty (valid).
+{
+  const tPf = performance.now();
+  console.log('\n[gramadan-forms] === Pagefind inflected-form index ===');
+  const RESOURCE_NS = uuidv5(`resource/${GRAPH_ID}`, ALIZARIN_NS);
+  const resourceIdToUuid = (rid) => uuidv5(rid, RESOURCE_NS);
+
+  const wrIdx = bHeader.indexOf('written_rep');
+  const lemmaJsonPath = resolve(root, 'data/processed/bunamo_lemmas.json');
+  const lemmas = existsSync(lemmaJsonPath) ? JSON.parse(readFileSync(lemmaJsonPath, 'utf8')) : {};
+
+  // Distinct written forms per NOUN resource (the class CSV already selected the
+  // noun set; here we gather their surface forms from the full bunamo CSV).
+  const formsByRid = new Map();
+  for (let i = 1; i < bunamoLines.length; i++) {
+    if (!bunamoLines[i]) continue;
+    const cols = parseRow(bunamoLines[i]);
+    const rid = cols[bId];
+    if (!rid || !classByRid.has(rid)) continue; // only the nouns this layer covers
+    const wr = (cols[wrIdx] || '').trim();
+    if (!wr) continue;
+    if (!formsByRid.has(rid)) formsByRid.set(rid, new Set());
+    formsByRid.get(rid).add(wr);
+  }
+
+  const { index: gaIndex } = await pagefind.createIndex({ forceLanguage: 'ga' });
+  const { index: enIndex } = await pagefind.createIndex({ forceLanguage: 'en' });
+  const { index: samplaIndex } = await pagefind.createIndex({ forceLanguage: 'ga' });
+  if (!gaIndex || !enIndex || !samplaIndex) {
+    console.error('[gramadan-forms] Failed to create pagefind indices');
+    process.exit(1);
+  }
+
+  let gaCount = 0;
+  for (const [rid, formSet] of formsByRid) {
+    const forms = [...formSet];
+    const lemma = lemmas[rid] || forms[0];
+    const bag = new Set();
+    for (const f of [lemma, ...forms]) {
+      if (!f) continue;
+      bag.add(f);
+      bag.add(stripDiacritics(f));
+    }
+    await gaIndex.addCustomRecord({
+      url: resourceIdToUuid(rid),
+      content: [...bag].join(' '),
+      language: 'ga',
+      meta: { title: lemma, dialect: 'Irish' },
+      filters: { dialect: ['GA'] },
+    });
+    gaCount++;
+  }
+  console.log(`[gramadan-forms] Pagefind records: ga=${gaCount} (en/sampla empty)`);
+
+  await gaIndex.writeFiles({ outputPath: resolve(outDir, 'pagefind-ga') });
+  await enIndex.writeFiles({ outputPath: resolve(outDir, 'pagefind-en') });
+  await samplaIndex.writeFiles({ outputPath: resolve(outDir, 'pagefind-sampla') });
+  for (const dir of ['pagefind-ga', 'pagefind-en', 'pagefind-sampla']) {
+    const src = resolve(outDir, dir);
+    if (existsSync(src)) {
+      const dest = resolve(outDir, `${dir}.zip`);
+      execSync(`cd "${src}" && rm -f "${dest}" && zip -0 -q -r "${dest}" .`);
+    }
+  }
+  console.log(`[gramadan-forms] Pagefind total: ${elapsed(tPf)}`);
+  await pagefind.close();
 }
 
 console.log(`[gramadan-forms] Done (${elapsed(t0)})`);
