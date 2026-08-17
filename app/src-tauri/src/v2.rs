@@ -968,6 +968,7 @@ pub fn v2_hydrate_layers(head_dirs: Vec<String>, resource_id: String, language: 
 /// (a link-datatype node alias, e.g. `cognate_entry_id`). Base layer is
 /// authoritative for graph + registry; `Layers::cited_by` owns the
 /// coarse-then-verify scan and per-nodegroup composition.
+#[cfg(not(feature = "v2-duck"))]
 #[tauri::command]
 pub fn v2_cited_by(
     head_dirs: Vec<String>,
@@ -983,6 +984,32 @@ pub fn v2_cited_by(
     layers
         .cited_by(&uri, &node_path, &graph, Some(&registry))
         .map_err(|e| e.to_string())
+}
+
+/// Parquet counterpart of `v2_cited_by`: reverse-link over the Parquet
+/// `link_targets`. The sqlite `open_layers`/`Layers::cited_by` path above cannot
+/// read a v2-duck head (there is no `head.sqlite`), so it returned nothing here -
+/// which left the Logainm placenames section (a `cited_by` over the place graph's
+/// `element_entry` node) empty on duck builds. Resolve the node alias against the
+/// base graph (the place head for placenames), then union the reverse-lookup
+/// across the layer set (pooled readers).
+#[cfg(feature = "v2-duck")]
+#[tauri::command]
+pub fn v2_cited_by(
+    head_dirs: Vec<String>,
+    uri: String,
+    node_path: String,
+) -> Result<Vec<String>, String> {
+    let Some(base) = head_dirs.first() else {
+        return Err("v2_cited_by: no layers given".to_string());
+    };
+    let graph = load_graph_cached(&graph_path(base))?;
+    let node_id = graph
+        .get_node_by_alias(&node_path)
+        .map(|n| n.nodeid.clone())
+        .ok_or_else(|| format!("v2_cited_by: unknown alias '{node_path}'"))?;
+    let dirs: Vec<&Path> = head_dirs.iter().map(|d| Path::new(d.as_str())).collect();
+    ros_madair_duck::cited_by(&dirs, &node_id, &uri).map_err(|e| e.to_string())
 }
 
 // ---------------------------------------------------------------------------
