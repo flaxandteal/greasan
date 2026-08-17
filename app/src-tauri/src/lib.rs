@@ -95,6 +95,7 @@ pub fn run() {
         v2::v2_query,
         v2::v2_query_layers,
         v2::v2_hydrate_layers,
+        v2::v2_prewarm,
         v2::v2_closure,
         v2::v2_descriptors,
         v2::v2_search_display,

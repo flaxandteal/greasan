@@ -791,6 +791,38 @@ pub fn v2_hydrate_layers(head_dirs: Vec<String>, resource_id: String, language: 
     .map_err(|e| e.to_string())
 }
 
+/// Pre-warm every per-hydrate cache for a layer set so the FIRST entry open is as
+/// fast as the rest: the app-side graph / LayeredGraph / functions-registry caches,
+/// and the duck-side reader pool + concept-label cache. Fire-and-forget from the
+/// frontend after the layer set is known; safe to run off the UI thread and
+/// idempotent (each cache no-ops once warm).
+#[cfg(feature = "v2-duck")]
+#[tauri::command]
+pub fn v2_prewarm(head_dirs: Vec<String>) -> Result<(), String> {
+    let dirs: Vec<&Path> = head_dirs.iter().map(|d| Path::new(d.as_str())).collect();
+    if let Some(base) = head_dirs.first() {
+        let base_graph = load_graph_cached(&graph_path(base))?;
+        let overlays: Vec<std::sync::Arc<StaticGraph>> = head_dirs
+            .iter()
+            .skip(1)
+            .filter_map(|d| load_graph_cached(&graph_path(d)).ok())
+            .filter(|g| g.functions_x_graphs.as_ref().is_some_and(|v| !v.is_empty()))
+            .collect();
+        let _ = cached_layered_graph(&base_graph, &overlays);
+        let _ = gramadan_registry(&dirs);
+    }
+    ros_madair_duck::prewarm(&dirs);
+    Ok(())
+}
+
+/// No-op prewarm when the duck substrate is not built (the sqlite path has no
+/// reader pool to warm), so the command exists in every feature config.
+#[cfg(not(feature = "v2-duck"))]
+#[tauri::command]
+pub fn v2_prewarm(_head_dirs: Vec<String>) -> Result<(), String> {
+    Ok(())
+}
+
 /// A layer's id is its directory basename (the layer name) - the same value a
 /// computed layer's `functions_x_graphs` config carries in `member_of`.
 #[cfg(feature = "v2-duck")]

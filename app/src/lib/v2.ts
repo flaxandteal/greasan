@@ -157,6 +157,16 @@ export async function hydrateLayers(headDirs: string[], resourceId: string): Pro
 }
 
 /**
+ * Pre-warm the hydrate caches (per-layer DuckDB reader pool, concept labels,
+ * graph/registry) for a layer set, so the FIRST entry open is as fast as the
+ * rest. Fire-and-forget at startup after the layer set is known; the native side
+ * is idempotent and safe to run in the background.
+ */
+export async function prewarmLayers(headDirs: string[]): Promise<void> {
+  await invoke<void>('v2_prewarm', { headDirs });
+}
+
+/**
  * Resolve resource UUIDs → their descriptor (spine `display_name`) across the layer
  * stack - a cheap indexed lookup, no hydration, and no need for the resource's model
  * graph. Used e.g. for external example sentences (whose descriptor IS the sentence).

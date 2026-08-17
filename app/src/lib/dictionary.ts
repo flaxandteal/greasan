@@ -7,7 +7,7 @@ import { getPagefind, resetPagefind, type PagefindInstance } from './pagefind';
 import { FAMILIES, DEFAULT_FAMILY, type FamilyConfig, type FamilyId } from './family';
 import { diagStart, diagEnd } from './diagnostics';
 import { loadEntryV2 } from './dictionary-v2';
-import { prepareOffline, descriptors, hydrateV2, citedBy, searchDisplay, searchFts } from './v2';
+import { prepareOffline, prewarmLayers, descriptors, hydrateV2, citedBy, searchDisplay, searchFts } from './v2';
 
 let activeFamilyConfig: FamilyConfig = FAMILIES[DEFAULT_FAMILY];
 
@@ -947,6 +947,10 @@ export async function initOfflineLayers(): Promise<void> {
     headDir: l.head_dir,
     pagefindBase: `http://pfzip.localhost/${encodeURIComponent(l.pagefind_index)}/`,
   }));
+  // Warm the hydrate caches (reader pool, labels, graph/registry) in the
+  // background so the first entry open is as fast as the rest. Fire-and-forget -
+  // never blocks startup, and a failure just means the first open pays the cost.
+  prewarmLayers(currentV2HeadDirs()).catch(() => {});
 }
 
 /**
