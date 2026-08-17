@@ -806,10 +806,31 @@ fn layer_id_of(dir: &str) -> String {
 /// generated `gram_features` reference the SAME concepts as attested BuNaMo forms
 /// (and therefore merge cleanly rather than duplicating).
 #[cfg(feature = "v2-duck")]
-fn gramadan_registry(dirs: &[&Path]) -> alizarin_core::FunctionsRegistry {
+fn gramadan_registry(dirs: &[&Path]) -> std::sync::Arc<alizarin_core::FunctionsRegistry> {
+    use std::sync::{Mutex, OnceLock};
+    // The vocab is resolved by reading every layer's concept_catalog.parquet - too
+    // heavy to redo per entry open, and stable for a given layer set (concept ids
+    // don't change per entry). Cache the built registry, keyed by the dir set, so
+    // it is built ONCE per installed-layer set and reused across hydrates.
+    static CACHE: OnceLock<Mutex<HashMap<String, std::sync::Arc<alizarin_core::FunctionsRegistry>>>> =
+        OnceLock::new();
+    let key = dirs
+        .iter()
+        .map(|d| d.to_string_lossy().into_owned())
+        .collect::<Vec<_>>()
+        .join("\n");
+    let mut cache = CACHE
+        .get_or_init(|| Mutex::new(HashMap::new()))
+        .lock()
+        .expect("gramadan-registry cache poisoned");
+    if let Some(r) = cache.get(&key) {
+        return r.clone();
+    }
     let mut registry = alizarin_core::default_functions_registry();
     greasan_gramadan::register(&mut registry, gramadan_vocab(dirs));
-    registry
+    let arc = std::sync::Arc::new(registry);
+    cache.insert(key, arc.clone());
+    arc
 }
 
 /// Invert the concept catalog (id -> label) for the labels the gramadan provider
