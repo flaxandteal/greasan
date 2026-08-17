@@ -252,7 +252,10 @@ export async function loadEntryV2(uri: string, headDirs: string[]): Promise<Entr
         const tag = label(feat);
         if (tag && tag !== '(pending)' && tag !== '(unresolved)') tags.push(tag);
       }
-      if (writtenRep) forms.push({ writtenRep, tags });
+      // Source code of the layer that supplied this form (e.g. 'gf' computed,
+      // 'bn' attested) - drives one paradigm tab per contributing layer.
+      const source = localStr(f?.form_source_label) || undefined;
+      if (writtenRep) forms.push({ writtenRep, tags, source });
     }
 
     // Gender (lexinfo:gender) is an inherent entry-level property - a concept

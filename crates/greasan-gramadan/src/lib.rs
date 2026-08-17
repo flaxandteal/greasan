@@ -121,6 +121,9 @@ pub struct GramadanVocab {
     pub gender_is_fem: HashMap<String, bool>,
     /// the dialect concept uuid stamped on every generated form (e.g. Irish General).
     pub dialect_concept: String,
+    /// the source tag stamped on every generated form (the computing layer's code,
+    /// e.g. "gf") so the UI can attribute forms to their layer and tab per source.
+    pub source_label: String,
 }
 
 /// The gramadan `DeriveProvider`.
@@ -223,6 +226,7 @@ impl DeriveProvider for GramadanForms {
         let wr_id = Self::node_id(graph, "written_rep").ok_or("gramadan: no written_rep node")?;
         let gf_id = Self::node_id(graph, "gram_features");
         let dial_id = Self::node_id(graph, "form_dialect");
+        let src_id = Self::node_id(graph, "form_source_label");
 
         let mut out = Vec::new();
         for (i, form) in noun_forms(&lemma, gender, class).into_iter().enumerate() {
@@ -242,6 +246,14 @@ impl DeriveProvider for GramadanForms {
             }
             if let (Some(dial), false) = (&dial_id, self.vocab.dialect_concept.is_empty()) {
                 data.insert(dial.clone(), serde_json::json!(self.vocab.dialect_concept));
+            }
+            // Source tag: attributes every generated form to the computing layer,
+            // so the UI can render one paradigm tab per contributing source.
+            if let (Some(src), false) = (&src_id, self.vocab.source_label.is_empty()) {
+                data.insert(
+                    src.clone(),
+                    serde_json::json!({ "und": { "value": self.vocab.source_label } }),
+                );
             }
             out.push(StaticTile {
                 data,

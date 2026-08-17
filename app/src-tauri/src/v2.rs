@@ -876,6 +876,10 @@ fn gramadan_vocab(dirs: &[&Path]) -> greasan_gramadan::GramadanVocab {
         tag_concepts,
         gender_is_fem,
         dialect_concept,
+        // Source code stamped on every generated form: the gramadan-forms layer's
+        // tag, so the UI attributes computed forms to it (a tab per source,
+        // distinct from an attested BuNaMo layer). Matches family.ts sourceLabels.
+        source_label: "gf".to_string(),
     }
 }
 

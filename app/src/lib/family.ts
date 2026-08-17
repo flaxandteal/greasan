@@ -73,6 +73,20 @@ export function layerSwatch(familyId: FamilyId, layerName: string): string {
 }
 
 /** Swatch colour for a `source_label` chip value, or '' when unattributable. */
+/** The display name of the layer that stamps `sourceLabel` (e.g. 'gf' → 'Gramadán',
+ *  'bn' → 'BuNaMo'), for naming a per-source paradigm tab. Falls back to the raw
+ *  code so an unknown source is still shown rather than swallowed. */
+export function sourceLabelName(familyId: FamilyId, sourceLabel: string): string {
+  const pres = FAMILIES[familyId]?.layerPresentation;
+  const needle = sourceLabel.trim().toLowerCase();
+  if (pres) {
+    for (const p of Object.values(pres)) {
+      if (p.sourceLabels?.includes(needle)) return p.label;
+    }
+  }
+  return sourceLabel;
+}
+
 export function sourceLabelSwatch(familyId: FamilyId, sourceLabel: string): string {
   const pres = FAMILIES[familyId]?.layerPresentation;
   if (!pres) return '';
@@ -144,6 +158,9 @@ export const FAMILIES: Record<FamilyId, FamilyConfig> = {
       tearma: { label: 'Téarma', swatch: 'var(--layer-te)', sourceLabels: ['té', 'te'] },
       // Morphology only - no senses, so no source chips ever carry "BN".
       bunamo: { label: 'BuNaMo', swatch: 'var(--layer-bn)', sourceLabels: ['bn'] },
+      // Computed morphology: greasan-gramadan stamps 'gf' on every generated
+      // form, so its paradigm tab is named + attributed distinctly from attested.
+      'gramadan-forms': { label: 'Gramadán', swatch: 'var(--layer-bn)', sourceLabels: ['gf'] },
       // Sense-less / infrastructural layers: named + coloured for the sheet,
       // but they emit no per-sense source chips (no sourceLabels).
       // Logainm/Tatoeba/Gaois are proper nouns (no translation). concept/person/

@@ -1,7 +1,7 @@
 <script lang="ts">
   import { currentEntry, loading, familyConfig, starredEntries, toggleStar, openMap } from '../lib/store';
   import { loadEntryFlagged, placeHeadDir, type EntryDetail } from '../lib/dictionary';
-  import { dialectCode, sourceLabelSwatch } from '../lib/family';
+  import { dialectCode, sourceLabelSwatch, sourceLabelName } from '../lib/family';
   import { t } from '../lib/i18n';
   import { buildParadigm, posKind, type FlatGroup, type FormItem } from '../lib/paradigm';
   import { generateForms } from '../lib/gramadan';
@@ -78,12 +78,6 @@
   // radical dependent stem on the BuNaMo tab (one column). Reset per entry below.
   let showDependent = $state(false);
 
-  let attestedParadigm = $derived.by(() => {
-    const attested = (entry?.forms ?? []) as FormItem[];
-    if (!entry || !attested.length) return null;
-    const scoped = scopeForms(attested);
-    return scoped.length ? buildParadigm(scoped, entry.pos) : null;
-  });
   let generatedParadigm = $derived.by(() => {
     if (!entry || !generated?.length) return null;
     const scoped = scopeForms(generated);
@@ -91,10 +85,40 @@
   });
 
   type GramTab = { label: string; paradigm: ReturnType<typeof buildParadigm>; generated: boolean };
+
+  // One paradigm tab PER contributing layer: forms carry a `source` code (e.g.
+  // 'bn' attested BuNaMo, 'gf' computed Gramadán), so both compose as separate
+  // tabs when installed together. Forms without a source (Wiktionary lenited/
+  // eclipsed variants) are ambient - they ride in every source tab's "other"
+  // bucket rather than forming a tab of their own.
+  let sourcedTabs = $derived.by<GramTab[]>(() => {
+    const all = (entry?.forms ?? []) as FormItem[];
+    if (!entry || !all.length) return [];
+    const ambient = all.filter((f) => !f.source);
+    const sources = [...new Set(all.map((f) => f.source).filter(Boolean))] as string[];
+    if (!sources.length) {
+      const scoped = scopeForms(all);
+      return scoped.length ? [{ label: '', paradigm: buildParadigm(scoped, entry.pos), generated: false }] : [];
+    }
+    const tabs: GramTab[] = [];
+    for (const s of sources) {
+      const scoped = scopeForms([...all.filter((f) => f.source === s), ...ambient]);
+      if (scoped.length) {
+        tabs.push({ label: sourceLabelName($familyConfig.id, s), paradigm: buildParadigm(scoped, entry.pos), generated: false });
+      }
+    }
+    return tabs;
+  });
+
   let gramTabs = $derived.by<GramTab[]>(() => {
-    const t: GramTab[] = [];
-    if (attestedParadigm) t.push({ label: 'BuNaMo', paradigm: attestedParadigm, generated: false });
-    if (generatedParadigm) t.push({ label: 'Gramadán', paradigm: generatedParadigm, generated: true });
+    const t = [...sourcedTabs];
+    // The JS `generateForms` paradigm is a FALLBACK: show it only when no native
+    // computed ('gf') forms already cover the entry, so we never render two
+    // "Gramadán" tabs (native compute supersedes the client-side generation).
+    const hasComputed = ((entry?.forms ?? []) as FormItem[]).some((f) => f.source === 'gf');
+    if (!hasComputed && generatedParadigm) {
+      t.push({ label: 'Gramadán', paradigm: generatedParadigm, generated: true });
+    }
     return t;
   });
   let activeGramTab = $state(0);

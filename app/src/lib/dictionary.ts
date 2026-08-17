@@ -64,7 +64,7 @@ export interface EntryDetail {
    *  the class badge. */
   grammarClassConfidence?: string;
   senses: Array<{ gloss: string; examples: string[]; sourceLabel?: string; dialect?: string }>;
-  forms: Array<{ writtenRep: string; tags: string[] }>;
+  forms: Array<{ writtenRep: string; tags: string[]; source?: string }>;
   ipa: string[];
   etymologies: Array<{ text: string; sourceLabel?: string }>;
   cognates: Array<{ headword: string; language: string; entryId?: string }>;

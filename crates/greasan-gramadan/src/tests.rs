@@ -97,7 +97,8 @@ fn fixture_graph() -> StaticGraph {
             {"nodeid": "n-gen", "name": "Gender", "datatype": "concept", "graph_id": "le", "alias": "gender"},
             {"nodeid": "n-wr", "name": "Written", "datatype": "string", "graph_id": "le", "alias": "written_rep", "nodegroup_id": "forms-ng"},
             {"nodeid": "n-gf", "name": "Features", "datatype": "concept-list", "graph_id": "le", "alias": "gram_features", "nodegroup_id": "forms-ng"},
-            {"nodeid": "n-dl", "name": "Dialect", "datatype": "concept", "graph_id": "le", "alias": "form_dialect", "nodegroup_id": "forms-ng"}
+            {"nodeid": "n-dl", "name": "Dialect", "datatype": "concept", "graph_id": "le", "alias": "form_dialect", "nodegroup_id": "forms-ng"},
+            {"nodeid": "n-src", "name": "Source", "datatype": "string", "graph_id": "le", "alias": "form_source_label", "nodegroup_id": "forms-ng"}
         ],
         "edges": [], "nodegroups": [], "cards": [], "cards_x_nodes_x_widgets": [],
         "functions_x_graphs": []
@@ -121,6 +122,7 @@ fn vocab() -> GramadanVocab {
         tag_concepts,
         gender_is_fem: [("gender-fem".to_string(), true)].into_iter().collect(),
         dialect_concept: "dialect-irish".to_string(),
+        source_label: "gf".to_string(),
     }
 }
 
@@ -181,6 +183,8 @@ fn provider_reads_the_entry_and_emits_forms_tiles() {
             assert!(id.as_str().unwrap().starts_with("c-"), "concept id, not a label: {id}");
         }
         assert_eq!(t.data["n-dl"].as_str(), Some("dialect-irish"));
+        // Every generated form is tagged with the computing layer's source code.
+        assert_eq!(t.data["n-src"]["und"]["value"].as_str(), Some("gf"));
     }
 
     // The nominative singular tile carries the headword.
