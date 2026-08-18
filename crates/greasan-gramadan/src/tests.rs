@@ -187,6 +187,14 @@ fn provider_reads_the_entry_and_emits_forms_tiles() {
         assert_eq!(t.data["n-src"]["und"]["value"].as_str(), Some("gf"));
     }
 
+    // Each form tile must have a DISTINCT tileid, or the cardinality-n merge
+    // collapses the whole paradigm into the first cell (the on-device bug where
+    // every noun rendered only its nominative singular, repeated).
+    let ids: Vec<&str> = out.iter().filter_map(|t| t.tileid.as_deref()).collect();
+    assert_eq!(ids.len(), out.len(), "every form tile carries a tileid");
+    let distinct: std::collections::HashSet<&&str> = ids.iter().collect();
+    assert_eq!(distinct.len(), ids.len(), "form tile ids are all distinct");
+
     // The nominative singular tile carries the headword.
     let nom_sg_written: Vec<_> = out
         .iter()

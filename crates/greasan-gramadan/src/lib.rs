@@ -259,7 +259,12 @@ impl DeriveProvider for GramadanForms {
                 data,
                 nodegroup_id: config.nodegroup.clone(),
                 resourceinstance_id: resource_id.to_string(),
-                tileid: None,
+                // A DISTINCT tile id per generated form. Without it every form
+                // tile shares `None`, and the cardinality-n merge collapses them
+                // all into the first (the paradigm renders as one repeated cell).
+                // Deterministic (resource + nodegroup + index) so repeat hydrations
+                // are stable and de-dupe cleanly.
+                tileid: Some(format!("{resource_id}:{}:gf:{i}", config.nodegroup)),
                 parenttile_id: None,
                 provisionaledits: None,
                 sortorder: Some(i as i32),
