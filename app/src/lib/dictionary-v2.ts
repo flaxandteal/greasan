@@ -287,22 +287,28 @@ export async function loadEntryV2(uri: string, headDirs: string[]): Promise<Entr
     // Best-effort: a citedBy failure (e.g. an unresolved node path) must not sink
     // the whole entry, so it degrades to the un-enriched detail.
     try {
-      const citers = await citedBy(headDirs, uri, 'cognate_entry_id');
+      const citers = (await citedBy(headDirs, uri, 'cognate_entry_id')).filter(
+        (c) => c && c !== tree.resourceinstanceid,
+      );
+      // SAME-LEXEME gate, applied BEFORE hydration. `cited_by` returns every entry
+      // that lists this word as a `cognate_entry_id`, but only a citer whose
+      // headword is graphically identical (up to acute↔grave) is the same lexeme
+      // and folds (MacBain "bàs" citing Irish "bás" folds; MacBain "X" citing
+      // Irish "Y" does not - else unrelated etymologies leak in). Resolve the
+      // citers' headwords with ONE batched `descriptors` call (spine display_name
+      // = <Headword>, no hydration) and hydrate ONLY the matches - instead of a
+      // full FFI hydration + tree serialization per citer just to read and discard
+      // its headword. (Matches the external-examples path below.)
+      const citerHeads = citers.length ? await descriptors(headDirs, citers) : {};
+      const sameLexeme = citers.filter(
+        (c) => normHead(citerHeads[c] ?? '') === normHead(headword),
+      );
       const citerTrees = await Promise.all(
-        citers
-          .filter((c) => c && c !== tree.resourceinstanceid)
-          .map((c) => hydrateLayers(headDirs, c).catch(() => null)),
+        sameLexeme.map((c) => hydrateLayers(headDirs, c).catch(() => null)),
       );
       for (const ct of citerTrees) {
         if (!ct || typeof ct !== 'object') continue;
         const citer = ct as Record<string, any>;
-        // SAME-LEXEME gate: only fold a citer whose headword is graphically
-        // identical to this entry (up to acute↔grave). `cited_by` returns every
-        // entry that lists this word as a `cognate_entry_id` - but a cognate is a
-        // related, differently-spelled word (MacBain "bàs" citing Irish "bás" IS
-        // the same lexeme and folds; MacBain "X" citing Irish "Y" is not and must
-        // not). Without this, unrelated MacBain etymologies leak onto Irish entries.
-        if (normHead(localStr(citer.headword)) !== normHead(headword)) continue;
         mergeEtymologies(etymologies, extractEtymologies(citer));
         mergeCognates(cognates, extractCognates(citer));
       }
