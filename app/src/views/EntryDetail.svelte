@@ -414,28 +414,39 @@
                          tab the realised an/ar + ní/níor shapes (the engine bakes
                          each verb's irregular particle + mutation); on the BuNaMo
                          tab the attested radical dependent stem, as stored. -->
+                    <!-- Independent | Dependent as a segmented toggle-pair. When a
+                         tense has the realised an/ar + ní/níor shapes, the table is
+                         ALWAYS two value columns: dependent shows an/ar | ní/níor,
+                         independent MERGES them (base spans both) - so the column
+                         layout never shifts between the two modes. -->
                     <table class="ge-para ge-verb-shapes">
                       <thead>
                         <tr>
                           <th class="ge-para-corner"></th>
-                          <th
-                            class="dep-toggle-cell"
-                            colspan={showDependent && paradigm.hasShapes ? 2 : 1}
-                          >
-                            <button
-                              class="dep-toggle"
-                              class:on={showDependent}
-                              aria-pressed={showDependent}
-                              onclick={() => (showDependent = !showDependent)}
-                              title={showDependent ? $t('forms.dependent') : $t('forms.independent')}
-                            >{showDependent ? $t('forms.dependent') : $t('forms.independent')}</button>
+                          <th class="dep-toggle-cell" colspan={paradigm.hasShapes ? 2 : 1}>
+                            <div class="dep-toggle-pair" role="tablist">
+                              <button
+                                class="dep-seg"
+                                class:on={!showDependent}
+                                role="tab"
+                                aria-selected={!showDependent}
+                                onclick={() => (showDependent = false)}
+                              >{$t('forms.independent')}</button>
+                              <button
+                                class="dep-seg"
+                                class:on={showDependent}
+                                role="tab"
+                                aria-selected={showDependent}
+                                onclick={() => (showDependent = true)}
+                              >{$t('forms.dependent')}</button>
+                            </div>
                           </th>
                         </tr>
-                        {#if showDependent && paradigm.hasShapes}
+                        {#if paradigm.hasShapes}
                           <tr class="ge-shape-subhead">
                             <th class="ge-para-corner"></th>
-                            <th title={$t('forms.interrogative')}>an/ar</th>
-                            <th title={$t('forms.negativeParticle')}>ní/níor</th>
+                            <th title={$t('forms.interrogative')}>{showDependent ? 'an/ar' : ''}</th>
+                            <th title={$t('forms.negativeParticle')}>{showDependent ? 'ní/níor' : ''}</th>
                           </tr>
                         {/if}
                       </thead>
@@ -443,13 +454,15 @@
                         {#each tsec.rows as r}
                           <tr>
                             <th class="ge-para-axis">{personLabel(r.person)}</th>
-                            {#if showDependent && paradigm.hasShapes}
-                              <td>{r.a.map((c) => c.text).join(', ')}</td>
-                              <td>{r.n.map((c) => c.text).join(', ')}</td>
-                            {:else if showDependent}
-                              <td>{r.dep.map((c) => c.text).join(', ')}</td>
+                            {#if paradigm.hasShapes}
+                              {#if showDependent}
+                                <td>{r.a.map((c) => c.text).join(', ')}</td>
+                                <td>{r.n.map((c) => c.text).join(', ')}</td>
+                              {:else}
+                                <td colspan="2">{r.base.map((c) => c.text).join(', ')}</td>
+                              {/if}
                             {:else}
-                              <td>{r.base.map((c) => c.text).join(', ')}</td>
+                              <td>{showDependent ? r.dep.map((c) => c.text).join(', ') : r.base.map((c) => c.text).join(', ')}</td>
                             {/if}
                           </tr>
                         {/each}
@@ -624,14 +637,17 @@
   .ge-verb-shapes th[title] { font-weight: 600; color: var(--fg-soft); cursor: help; }
   .ge-verb-shapes td { white-space: nowrap; }
   .dep-toggle-cell { padding: 0 6px 4px !important; text-align: left; }
-  .dep-toggle {
-    font: italic 12px/1 inherit; padding: 3px 12px; border-radius: 999px; cursor: pointer;
+  .dep-toggle-pair {
+    display: inline-flex; border-radius: 999px; overflow: hidden;
     border: 1px solid color-mix(in srgb, var(--fg-soft) 35%, transparent);
+  }
+  .dep-seg {
+    font: italic 12px/1 inherit; padding: 3px 12px; cursor: pointer; border: 0;
     background: transparent; color: var(--fg-soft); transition: all 0.12s;
   }
-  .dep-toggle.on {
+  .dep-seg + .dep-seg { border-left: 1px solid color-mix(in srgb, var(--fg-soft) 25%, transparent); }
+  .dep-seg.on {
     color: var(--fg-default); background: color-mix(in srgb, var(--accent, #4a7a63) 16%, transparent);
-    border-color: color-mix(in srgb, var(--accent, #4a7a63) 45%, transparent);
   }
   .ge-shape-subhead th { font-size: 12px; }
 
