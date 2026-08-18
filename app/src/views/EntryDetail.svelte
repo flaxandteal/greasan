@@ -635,7 +635,13 @@
   /* Verb table: independent (base) by default; a toggle above the value column
      swaps to the dependent view (an/ar + ní/níor, or the BuNaMo radical). */
   .ge-verb-shapes th[title] { font-weight: 600; color: var(--fg-soft); cursor: help; }
-  .ge-verb-shapes td { white-space: nowrap; }
+  /* Fixed layout: column widths come from the layout, not cell content, so
+     toggling Independent/Dependent (which changes the value cells) never reflows
+     the person column or the table width. Person column pinned; the value
+     column(s) split the remainder equally. */
+  .ge-verb-shapes { table-layout: fixed; }
+  .ge-verb-shapes th.ge-para-corner, .ge-verb-shapes th.ge-para-axis { width: 5em; }
+  .ge-verb-shapes td { white-space: normal; overflow-wrap: anywhere; }
   .dep-toggle-cell { padding: 0 6px 4px !important; text-align: left; }
   .dep-toggle-pair {
     display: inline-flex; border-radius: 999px; overflow: hidden;
