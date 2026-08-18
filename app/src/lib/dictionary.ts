@@ -6,7 +6,10 @@ import { ready } from './wasm';
 import { getPagefind, resetPagefind, type PagefindInstance } from './pagefind';
 import { FAMILIES, DEFAULT_FAMILY, type FamilyConfig, type FamilyId } from './family';
 import { diagStart, diagEnd } from './diagnostics';
-import { loadEntryV2 } from './dictionary-v2';
+import { loadEntryV2, enrichEntryV2 } from './dictionary-v2';
+// Live binding (store <-> dictionary is a lazy cycle: `currentEntry` is only read
+// at runtime inside loadEntryFlagged, never at module init, so it resolves).
+import { currentEntry } from './store';
 import { prepareOffline, prewarmLayers, descriptors, hydrateV2, citedBy, searchDisplay, searchFts } from './v2';
 
 let activeFamilyConfig: FamilyConfig = FAMILIES[DEFAULT_FAMILY];
@@ -1003,8 +1006,21 @@ export function removeV2Layer(name: string): void {
 }
 
 /** Load an entry's detail via the v2 cross-layer hydrate. */
-export function loadEntryFlagged(uri: string, _knownHeadword?: string): Promise<EntryDetail | null> {
-  return loadEntryV2(uri, currentV2HeadDirs());
+export async function loadEntryFlagged(uri: string, _knownHeadword?: string): Promise<EntryDetail | null> {
+  const headDirs = currentV2HeadDirs();
+  const base = await loadEntryV2(uri, headDirs);
+  if (base) {
+    // Deferred cross-ref enrichment (reverse-cognate fold, external examples,
+    // placenames - ~5 FFI round-trips): the base entry is returned + rendered now;
+    // fold the extras into the displayed entry when they resolve. uri-guarded so a
+    // slower enrichment for a previously-open entry never overwrites the current.
+    enrichEntryV2(uri, headDirs, base)
+      .then((enrich) => {
+        currentEntry.update((e: any) => (e && e.uri === uri ? { ...e, ...enrich } : e));
+      })
+      .catch(() => {});
+  }
+  return base;
 }
 
 /** Unwrap a v2 localized-string value `{<lang>:{value}}` (or a bare string). */

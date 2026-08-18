@@ -279,101 +279,10 @@ export async function loadEntryV2(uri: string, headDirs: string[]): Promise<Entr
     const cognates: EntryDetail['cognates'] = [];
     mergeCognates(cognates, extractCognates(tree));
 
-    // Reverse-cognate continuum (v1 parity): the entries that CITE this one via
-    // their `cognate_entry_id` link - e.g. the MacBain "fear" lists the Irish
-    // "fear" as a cognate, so opening the Irish entry must surface MacBain's
-    // etymology/cognates. `citedBy` returns those citer UUIDs across the layer
-    // stack; hydrate each and FOLD its etymology + cognates in (dedup as above).
-    // Best-effort: a citedBy failure (e.g. an unresolved node path) must not sink
-    // the whole entry, so it degrades to the un-enriched detail.
-    try {
-      const citers = (await citedBy(headDirs, uri, 'cognate_entry_id')).filter(
-        (c) => c && c !== tree.resourceinstanceid,
-      );
-      // SAME-LEXEME gate, applied BEFORE hydration. `cited_by` returns every entry
-      // that lists this word as a `cognate_entry_id`, but only a citer whose
-      // headword is graphically identical (up to acute↔grave) is the same lexeme
-      // and folds (MacBain "bàs" citing Irish "bás" folds; MacBain "X" citing
-      // Irish "Y" does not - else unrelated etymologies leak in). Resolve the
-      // citers' headwords with ONE batched `descriptors` call (spine display_name
-      // = <Headword>, no hydration) and hydrate ONLY the matches - instead of a
-      // full FFI hydration + tree serialization per citer just to read and discard
-      // its headword. (Matches the external-examples path below.)
-      const citerHeads = citers.length ? await descriptors(headDirs, citers) : {};
-      const sameLexeme = citers.filter(
-        (c) => normHead(citerHeads[c] ?? '') === normHead(headword),
-      );
-      const citerTrees = await Promise.all(
-        sameLexeme.map((c) => hydrateLayers(headDirs, c).catch(() => null)),
-      );
-      for (const ct of citerTrees) {
-        if (!ct || typeof ct !== 'object') continue;
-        const citer = ct as Record<string, any>;
-        mergeEtymologies(etymologies, extractEtymologies(citer));
-        mergeCognates(cognates, extractCognates(citer));
-      }
-    } catch (err) {
-      console.warn('[dictionary-v2] cited_by enrichment skipped:', err);
-    }
-
-    // External example sentences. `external_examples` hydrates as a list-of-LISTS of
-    // refs into the ExternalExample model - whose graph is NOT shipped with this head,
-    // so those resources cannot be hydrated (they come back empty). But their
-    // descriptor (spine `display_name`) IS the sentence, so resolve them cheaply via
-    // `descriptors` - ONE indexed batch, no hydration, no N+1. Full detail
-    // (translation/source/highlights) is deferred to on-interaction. Best-effort.
-    // Examples illustrating this headword - the reverse of the example layers'
-    // `illustrates.headword_entry` link (mirror of placenames). Two heads, so we
-    // query each and tag its source. `headword_entry` is an example-graph node, so
-    // run it example-authoritative (per head), like place's `element_entry`.
-    const externalExamples: EntryDetail['externalExamples'] = [];
-    for (const head of headDirs.filter((d) => d.includes('/example-'))) {
-      const src: 'tatoeba' | 'gaois' | 'udt' =
-        head.includes('tatoeba') ? 'tatoeba' : head.includes('udt') ? 'udt' : 'gaois';
-      try {
-        const ids = await citedBy([head], uri, 'headword_entry');
-        if (!ids.length) continue;
-        const sentences = await descriptors([head], ids);
-        for (const id of ids) {
-          const ga = sentences[id];
-          if (ga) externalExamples.push({ resourceId: id, ga, en: '', src, hl: [] });
-        }
-      } catch (err) {
-        console.warn(`[dictionary-v2] examples (${src}) skipped:`, err);
-      }
-    }
-
-    // Placenames: resources in the `place` layer whose name is constituted by this
-    // word - the reverse of `name_elements.element_entry`. A DIFFERENT node path
-    // from `cognate_entry_id`, so placenames stay cleanly separate from etymological
-    // cognates. `citedBy` returns only UUIDs (indexed reverse_links, no hydration);
-    // we keep the full count and resolve display names for a small sample via
-    // `descriptors` (one indexed batch). Best-effort. Place detail is on-interaction.
-    let placenames: EntryDetail['placenames'];
-    try {
-      // `element_entry` is a node in the PLACE graph, not the lexical_entry graph
-      // that heads the composed stack - so `cited_by` (which resolves the node
-      // alias against the authoritative graph = headDirs[0] = wiktionary) throws
-      // "unknown alias 'element_entry'" if run over the full stack. Run it
-      // place-authoritative instead: against the place head alone (the stack
-      // member whose dir is the `place-v2` head). Verified on-device: this returns
-      // 8,875 for baile where the full-stack call errors.
-      const placeHead = headDirs.find((d) => d.includes('place-v2'));
-      if (placeHead) {
-        const placeIds = await citedBy([placeHead], uri, 'element_entry');
-        if (placeIds.length) {
-          const sampleIds = placeIds.slice(0, 24);
-          const names = await descriptors([placeHead], sampleIds);
-          const sample = sampleIds
-            .map((id) => ({ resourceId: id, name: names[id] || '' }))
-            .filter((p) => p.name);
-          placenames = { count: placeIds.length, sample };
-        }
-      }
-    } catch (err) {
-      console.warn('[dictionary-v2] placenames skipped:', err);
-    }
-
+    // The cross-reference enrichment (reverse-cognate fold, external examples,
+    // placenames) is DEFERRED to `enrichEntryV2` so the base entry renders without
+    // waiting on ~5 more FFI round-trips. The caller (loadEntryFlagged) fires the
+    // enrichment and folds it into the displayed entry when it resolves.
     return {
       uri,
       headword,
@@ -387,11 +296,97 @@ export async function loadEntryV2(uri: string, headDirs: string[]): Promise<Entr
       ipa,
       etymologies,
       cognates,
-      externalExamples,
-      placenames,
+      externalExamples: [],
+      placenames: undefined,
     };
   } catch (err) {
     console.warn('[dictionary-v2] loadEntryV2 failed:', err);
     return null;
   }
+}
+
+/**
+ * The DEFERRED cross-reference enrichment for an already-loaded base entry: the
+ * reverse-cognate fold, external examples, and placenames - each a batch of FFI
+ * round-trips that must not block the base entry render. Returns only the fields
+ * to merge over the base (`etymologies`/`cognates` are the base's, now folded).
+ * Best-effort per section; a failure just leaves that section un-enriched.
+ */
+export async function enrichEntryV2(
+  uri: string,
+  headDirs: string[],
+  base: EntryDetail,
+): Promise<Partial<EntryDetail>> {
+  const headword = base.headword;
+  const etymologies = base.etymologies.map((e) => ({ ...e }));
+  const cognates = base.cognates.map((c) => ({ ...c }));
+
+  // Reverse-cognate continuum: entries that CITE this one via `cognate_entry_id`
+  // (e.g. MacBain "fear" citing Irish "fear") surface their etymology/cognates.
+  // SAME-LEXEME gate applied BEFORE hydration via one batched `descriptors`
+  // (display_name = <Headword>, no hydration); hydrate ONLY the matches.
+  try {
+    const citers = (await citedBy(headDirs, uri, 'cognate_entry_id')).filter(
+      (c) => c && c !== uri,
+    );
+    const citerHeads = citers.length ? await descriptors(headDirs, citers) : {};
+    const sameLexeme = citers.filter(
+      (c) => normHead(citerHeads[c] ?? '') === normHead(headword),
+    );
+    const citerTrees = await Promise.all(
+      sameLexeme.map((c) => hydrateLayers(headDirs, c).catch(() => null)),
+    );
+    for (const ct of citerTrees) {
+      if (!ct || typeof ct !== 'object') continue;
+      const citer = ct as Record<string, any>;
+      mergeEtymologies(etymologies, extractEtymologies(citer));
+      mergeCognates(cognates, extractCognates(citer));
+    }
+  } catch (err) {
+    console.warn('[dictionary-v2] cited_by enrichment skipped:', err);
+  }
+
+  // External example sentences: the ExternalExample graph is not shipped, so
+  // resolve the sentence cheaply from the spine descriptor (ONE indexed batch, no
+  // hydration). Full detail is deferred to on-interaction.
+  const externalExamples: EntryDetail['externalExamples'] = [];
+  for (const head of headDirs.filter((d) => d.includes('/example-'))) {
+    const src: 'tatoeba' | 'gaois' | 'udt' =
+      head.includes('tatoeba') ? 'tatoeba' : head.includes('udt') ? 'udt' : 'gaois';
+    try {
+      const ids = await citedBy([head], uri, 'headword_entry');
+      if (!ids.length) continue;
+      const sentences = await descriptors([head], ids);
+      for (const id of ids) {
+        const ga = sentences[id];
+        if (ga) externalExamples.push({ resourceId: id, ga, en: '', src, hl: [] });
+      }
+    } catch (err) {
+      console.warn(`[dictionary-v2] examples (${src}) skipped:`, err);
+    }
+  }
+
+  // Placenames: resources in the `place` layer whose name is constituted by this
+  // word (reverse of `name_elements.element_entry`). `element_entry` lives in the
+  // place graph, so run it place-authoritative (against the place head alone).
+  // Keep the full count; resolve display names for a small sample via descriptors.
+  let placenames: EntryDetail['placenames'];
+  try {
+    const placeHead = headDirs.find((d) => d.includes('place-v2'));
+    if (placeHead) {
+      const placeIds = await citedBy([placeHead], uri, 'element_entry');
+      if (placeIds.length) {
+        const sampleIds = placeIds.slice(0, 24);
+        const names = await descriptors([placeHead], sampleIds);
+        const sample = sampleIds
+          .map((id) => ({ resourceId: id, name: names[id] || '' }))
+          .filter((p) => p.name);
+        placenames = { count: placeIds.length, sample };
+      }
+    }
+  } catch (err) {
+    console.warn('[dictionary-v2] placenames skipped:', err);
+  }
+
+  return { etymologies, cognates, externalExamples, placenames };
 }
