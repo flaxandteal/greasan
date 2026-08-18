@@ -51,12 +51,19 @@
 
   let searchInput: HTMLInputElement;
   let debounceTimer: ReturnType<typeof setTimeout>;
+  // Monotonic query id: async searches can resolve OUT OF ORDER (a broader
+  // earlier query - e.g. "fea", which matches many inflected forms - can finish
+  // AFTER a later "fear"), so only the latest query is allowed to write results.
+  // Without this, a stale result set overwrites the current one until the user
+  // retypes the last character.
+  let searchSeq = 0;
 
   async function doSearch(value: string, lang: SearchLang) {
     if (!value.trim()) {
       searchResults.set([]);
       return;
     }
+    const seq = ++searchSeq;
     loading.set(true);
     try {
       const results = await search(value, lang, get(visibleDialects), {
@@ -64,9 +71,9 @@
         pos: get(posFilter),
         bunamoOnly: get(bunamoOnly),
       });
-      searchResults.set(results);
+      if (seq === searchSeq) searchResults.set(results); // drop superseded results
     } finally {
-      loading.set(false);
+      if (seq === searchSeq) loading.set(false);
     }
   }
 
