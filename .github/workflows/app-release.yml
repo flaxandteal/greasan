@@ -1,0 +1,156 @@
+name: App release (data-bundled)
+
+# Builds the FULL, data-bundled, signed APK on a version tag and attaches it to a
+# GitHub Release. Unlike the per-push smoke build, this fetches a PINNED corpus
+# from greasan-data (bundle-pin.json) rather than regenerating anything - the
+# corpus and the app move on separate lifecycles.
+#
+# Flow: fetch pinned bundle -> reconstruct data/ -> build-apk.sh --release --duck
+# (packages heads + pagefind + basemap, omits nav-server, alpha-signs, asserts the
+# exact head set) -> publish APK.
+#
+# PREREQUISITES (repo secrets):
+#   DEPS_PAT                     PAT: read on private submodule repos + read on
+#                                greasan-data (to download the pinned bundle).
+#   ANDROID_ALPHA_KEYSTORE_B64   base64 of greasan-alpha.jks. The signing pass is
+#                                the committed alpha pass in build-apk.sh (alpha
+#                                identity only; regenerate before any Play upload).
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: "Release tag to build/publish"
+        required: true
+        default: "v0.0.0-manual"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: app-release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    env:
+      NDK_VERSION: "27.0.11902837"
+      # build-apk.sh looks here for zipalign/apksigner; setup-android sets
+      # ANDROID_SDK_ROOT, so mirror it into ANDROID_HOME.
+      RELEASE_TAG: ${{ github.ref_type == 'tag' && github.ref_name || inputs.release_tag }}
+    steps:
+      - name: Free up disk
+        uses: jlumbroso/free-disk-space@main
+        with:
+          android: false
+          large-packages: true
+          docker-images: true
+          tool-cache: false
+
+      - name: Checkout (with submodules)
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          token: ${{ secrets.DEPS_PAT }}
+
+      - name: Reconstruct sibling layout
+        run: bash scripts/ci/link-siblings.sh
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Rust toolchain (+ Android + wasm targets)
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-linux-android,wasm32-unknown-unknown
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: |
+            app/src-tauri
+            .deps/RosMadair
+
+      - name: Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Android SDK + NDK + build-tools
+        uses: android-actions/setup-android@v3
+      - name: Install NDK + build-tools
+        run: |
+          sdkmanager "ndk;${NDK_VERSION}" "build-tools;34.0.0"
+          echo "NDK_HOME=$ANDROID_SDK_ROOT/ndk/${NDK_VERSION}" >> "$GITHUB_ENV"
+          echo "ANDROID_HOME=$ANDROID_SDK_ROOT" >> "$GITHUB_ENV"
+
+      - name: wasm-pack
+        run: curl https://rustwasm.github.io/wasm-pack/installer/init.sh -sSf | sh
+
+      - name: Tauri CLI
+        run: npm i -g @tauri-apps/cli@^2
+
+      - name: Build ros-madair-alizarin (combined wasm)
+        working-directory: .deps/RosMadair
+        run: |
+          npm ci
+          npm run build:combined
+
+      - name: npm ci (app)
+        working-directory: app
+        run: npm ci
+
+      # --- Fetch the PINNED corpus (no regeneration) ----------------------
+      - name: Fetch pinned data bundle
+        env:
+          # greasan-data is a separate repo; DEPS_PAT has read there.
+          GH_TOKEN: ${{ secrets.DEPS_PAT }}
+        run: |
+          echo "Pin:"; cat bundle-pin.json
+          scripts/fetch-bundle.sh
+
+      # --- Regenerate Android project + overlay ---------------------------
+      - name: tauri android init
+        working-directory: app
+        run: npm run tauri android init -- --skip-targets-install
+
+      - name: Apply foreground-service overlay
+        run: bash scripts/ci/apply-android-overlay.sh app/src-tauri
+
+      # --- Restore the alpha signing keystore -----------------------------
+      - name: Restore alpha keystore
+        run: |
+          mkdir -p "$HOME/.android"
+          echo "${{ secrets.ANDROID_ALPHA_KEYSTORE_B64 }}" | base64 -d > "$HOME/.android/greasan-alpha.jks"
+
+      # --- Build the full, signed, data-bundled APK -----------------------
+      # build-apk.sh --release omits nav-server, alpha-signs, and asserts the
+      # exact head set (fails on a missing OR stale head).
+      - name: Build signed release APK
+        run: scripts/build-apk.sh --release --duck
+
+      - name: Name the artifact
+        id: apk
+        run: |
+          out="greasan-${RELEASE_TAG}.apk"
+          cp -f data/bundle/greasan-signed.apk "$out"
+          echo "path=$out" >> "$GITHUB_OUTPUT"
+          ls -la "$out"
+
+      # --- Publish (draft: a human promotes it) ---------------------------
+      - name: Publish to GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ env.RELEASE_TAG }}
+          name: Gréasán ${{ env.RELEASE_TAG }} (Android)
+          draft: true
+          prerelease: true
+          files: ${{ steps.apk.outputs.path }}
+          body: |
+            Gréasán Android build ${{ env.RELEASE_TAG }}.
+            Corpus: pinned data bundle (see bundle-pin.json).
+            Install: enable "Install unknown apps" for your browser/files app, then open the APK.

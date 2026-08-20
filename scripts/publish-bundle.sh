@@ -1,14 +1,22 @@
 #!/usr/bin/env bash
 #
-# Publish the pre-built parquet head bundles as a versioned release on the
-# greasan-data repo, so app builds can fetch a pinned corpus instead of
-# regenerating ~1 GB of data on every build.
+# Publish the pre-built data bundle as a versioned release on the greasan-data
+# repo, so app builds can fetch a pinned corpus instead of regenerating ~1 GB of
+# data on every build.
 #
-# The heads themselves are built separately (scripts/build-parquet-layers.mjs);
-# this script only packages + uploads what already exists in
-# data/bundle/parquet-heads/. Each head is its own release asset, plus a
-# heads-versions.json manifest ({ head: snapshot_id }) so a later refresh can
-# re-upload only the heads that changed.
+# The heads/pagefind/basemap are built separately (build-parquet-layers.mjs,
+# build-*-layer.mjs, build-basemap.sh); this script only packages + uploads what
+# already exists on disk. A bundle carries everything a FULL APK needs:
+#
+#   <head>.zip                       11 parquet heads  -> data/bundle/parquet-heads/<head>.zip
+#   pf__<index>__<file>.zip          10 pagefind zips  -> data/<index>/<file>
+#   basemap.pmtiles                  map tiles         -> app/src-tauri/basemap/goidelic.pmtiles
+#   heads-versions.json              manifest { head: snapshot_id }
+#
+# The pagefind + basemap set is derived from tauri.full.conf.json, so this stays
+# in sync with what the full build actually bundles. Each item is its own asset,
+# so a corpus refresh re-uploads only what changed. scripts/fetch-bundle.sh is
+# the inverse (used by app-release CI).
 #
 # Usage:
 #   scripts/publish-bundle.sh                     # tag bundle-<YYYY-MM-DD>, publish
@@ -31,7 +39,7 @@ while [ $# -gt 0 ]; do
     --tag)     TAG="${2:?--tag needs a value}"; shift ;;
     --repo)    REPO="${2:?--repo needs a value}"; shift ;;
     --dry-run) DRY=1 ;;
-    -h|--help) sed -n '2,22p' "$0"; exit 0 ;;
+    -h|--help) sed -n '2,30p' "$0"; exit 0 ;;
     *) echo "unknown arg: $1" >&2; exit 2 ;;
   esac
   shift
@@ -39,45 +47,67 @@ done
 # date is fine in a shell script (unlike a workflow JS runtime).
 [ -n "$TAG" ] || TAG="bundle-$(date -u +%Y-%m-%d)"
 
-SRC="$ROOT/data/bundle/parquet-heads"
 STAGE="$(mktemp -d)"
 trap 'rm -rf "$STAGE"' EXIT
 
-# --- 1. Collect the heads + build the manifest from each head's snapshot_id ---
-echo "[bundle] staging heads for $TAG"
-python3 - "$SRC" "$STAGE" "${HEADS[@]}" <<'PY'
+# --- Stage every asset + build the manifest from each head's snapshot_id ---
+echo "[bundle] staging $TAG"
+python3 - "$ROOT" "$STAGE" "${HEADS[@]}" <<'PY'
 import json, pathlib, sys, shutil, subprocess
-src = pathlib.Path(sys.argv[1]); stage = pathlib.Path(sys.argv[2]); heads = sys.argv[3:]
-vers = {}
+root = pathlib.Path(sys.argv[1]); stage = pathlib.Path(sys.argv[2]); heads = sys.argv[3:]
 missing = []
+
+# 1. Heads (parquet) + manifest, from data/bundle/parquet-heads/.
+src = root / "data" / "bundle" / "parquet-heads"
+vers = {}
 for h in heads:
     zp = src / f"{h}.zip"
     if not zp.exists():
-        missing.append(h); continue
+        missing.append(str(zp)); continue
     shutil.copy2(zp, stage / f"{h}.zip")
     raw = subprocess.run(["unzip", "-p", str(zp), "manifest.json"],
                          capture_output=True, text=True).stdout
     if raw.strip():
         vers[h] = json.loads(raw).get("snapshot_id", "")
+
+# 2. Pagefind + basemap, derived from tauri.full.conf.json so we stage exactly
+#    what a full build bundles. pagefind -> pf__<index>__<file>; basemap flat.
+cfg = json.loads((root / "app" / "src-tauri" / "tauri.full.conf.json").read_text())
+for rel, dest in cfg["bundle"]["resources"].items():
+    p = (root / "app" / "src-tauri" / rel).resolve()
+    if dest.startswith("pagefind/"):
+        # dest = pagefind/<index>/<file>; source path mirrors data/<index>/<file>
+        parts = dest.split("/", 1)[1]                 # <index>/<file>
+        asset = "pf__" + parts.replace("/", "__")
+        (stage / asset).write_bytes(p.read_bytes()) if p.exists() else missing.append(str(p))
+    elif dest.startswith("basemap/"):
+        if p.exists() and p.stat().st_size > 0:
+            shutil.copy2(p, stage / "basemap.pmtiles")
+        else:
+            print(f"[bundle] basemap absent/placeholder at {p} - NOT bundling", file=sys.stderr)
+
 if missing:
-    print("!! missing heads (run build-parquet-layers.mjs first): " + ", ".join(missing), file=sys.stderr)
+    print("!! missing bundle inputs (build the layers first):", file=sys.stderr)
+    for m in missing: print("   " + m, file=sys.stderr)
     sys.exit(1)
+
 (stage / "heads-versions.json").write_text(json.dumps(vers, indent=2))
-print(f"[bundle] {len(vers)} heads staged; manifest written")
+print(f"[bundle] staged {len(heads)} heads + pagefind + basemap; manifest written")
 PY
 
 echo "[bundle] assets:"
-ls -la "$STAGE"
+( cd "$STAGE" && ls -la )
 
-# --- 2. Publish ---
-NOTES="Pre-built open-data layer bundle for Gréasán (CC BY-SA 4.0).
+# --- Publish ---
+NOTES="Pre-built open-data bundle for Gréasán (CC BY-SA 4.0).
 
-Per-head parquet zips + heads-versions.json (head -> snapshot_id). Consumed by
-the app-release CI via a pinned tag. Tearma is not included (local-only)."
+Everything a full APK needs: 11 parquet heads, pagefind indices (pf__*), basemap
+tiles, and heads-versions.json (head -> snapshot_id). Consumed by app-release CI
+via a pinned tag (see bundle-pin.json). Tearma is not included (local-only)."
 
 if [ $DRY -eq 1 ]; then
-  echo "[dry-run] would: gh release create $TAG --repo $REPO --prerelease --title 'Gréasán data bundle $TAG'"
-  echo "[dry-run] would upload: $(ls "$STAGE" | tr '\n' ' ')"
+  echo "[dry-run] would: gh release create $TAG --repo $REPO --prerelease"
+  echo "[dry-run] assets: $(cd "$STAGE" && ls | tr '\n' ' ')"
   exit 0
 fi
 
@@ -89,4 +119,4 @@ else
     --title "Gréasán data bundle $TAG" --notes "$NOTES" "$STAGE"/*
 fi
 echo "[bundle] published: https://github.com/$REPO/releases/tag/$TAG"
-echo "[bundle] pin it for app releases by setting this tag in data/bundle-pin.json"
+echo "[bundle] pin it for app releases by setting this tag in bundle-pin.json"
