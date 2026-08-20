@@ -341,7 +341,20 @@ pub fn v2_prepare_offline<R: Runtime>(app: AppHandle<R>) -> Result<Vec<OfflineLa
         fs::create_dir_all(&head_dest)
             .map_err(|e| format!("mkdir {}: {e}", head_dest.display()))?;
         let head_rel = format!("heads/{}.zip", c.head);
-        let head_bytes = read_resource_bytes(&app, &head_rel)?;
+        // A head whose zip is not bundled (e.g. a base-only build that ships core
+        // metadata + basemap and installs layers at runtime) is simply skipped -
+        // the app boots to the zero-layers empty state. This is presence, not
+        // content: a stale/wrong head is still caught by the snapshot_id check
+        // above, so tolerance here does not weaken that guard. Full builds assert
+        // head presence at package time (build-apk.sh), so a forgotten head in a
+        // data-bundled release still fails loudly rather than silently here.
+        let head_bytes = match read_resource_bytes(&app, &head_rel) {
+            Ok(b) => b,
+            Err(e) => {
+                eprintln!("[offline] head {} not bundled ({e}); skipping", c.head);
+                continue;
+            }
+        };
         eprintln!(
             "[offline] extracting {} ({} bytes) -> {}",
             head_rel,

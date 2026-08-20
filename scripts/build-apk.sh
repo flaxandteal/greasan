@@ -13,6 +13,9 @@
 #   scripts/build-apk.sh --no-rezip         # skip the bundle-head refresh
 #   scripts/build-apk.sh --duck             # DuckDB+Parquet substrate: ship parquet
 #                                           #   heads (v2-duck) not sqlite heads
+#   scripts/build-apk.sh --base             # BASE-ONLY: core metadata + basemap, NO
+#                                           #   heads. Boots to empty state; layers
+#                                           #   install at runtime. The CI smoke build.
 #
 # It ALWAYS bakes in `--features v2` (forgetting it ships a v2-less APK where
 # `v2_prepare_offline` is missing) and, unless --no-rezip, refreshes each bundled
@@ -32,7 +35,7 @@ PKG="org.flaxandteal.greasan"
 # (licensing), so it is built on-device (tbx-v2 → FTS5 sidecar) instead.
 HEADS=(wiktionary-v2-full macbain-v2 gramadan-forms-v2 place-v2 concept-v2 example-tatoeba-v2 example-gaois-v2 example-udt-v2 person-v2 note-v2 layer-v2)
 
-INSTALL=0; LAUNCH=0; DEBUG=0; REZIP=1; RELEASE=0; DUCK=0; DEVICE=""
+INSTALL=0; LAUNCH=0; DEBUG=0; REZIP=1; RELEASE=0; DUCK=0; BASE_ONLY=0; DEVICE=""
 while [ $# -gt 0 ]; do
   case "$1" in
     --install)  INSTALL=1 ;;
@@ -40,13 +43,16 @@ while [ $# -gt 0 ]; do
     --debug)    DEBUG=1 ;;
     --release)  RELEASE=1 ;;
     --duck)     DUCK=1 ;;
+    --base)     BASE_ONLY=1 ;;
     --no-rezip) REZIP=0 ;;
     --device)   DEVICE="${2:?--device needs a serial}"; shift ;;
-    -h|--help)  sed -n '2,25p' "$0"; exit 0 ;;
+    -h|--help)  sed -n '2,28p' "$0"; exit 0 ;;
     *) echo "unknown arg: $1" >&2; exit 2 ;;
   esac
   shift
 done
+# Base-only ships no head zips, so there is nothing to rezip.
+[ $BASE_ONLY -eq 1 ] && REZIP=0
 adbc() { adb ${DEVICE:+-s "$DEVICE"} "$@"; }
 
 # --- 1. Refresh bundled head zips from head dirs (flat, deflate, NO pagefind) ---
@@ -84,6 +90,10 @@ fi
 # on an update, not all ~400MB. Regenerated every build (also under --no-rezip).
 # --duck reads snapshot_id from inside the parquet-head zip (unzip -p manifest.json);
 # the default reads data/<h>/manifest.json. ---
+if [ $BASE_ONLY -eq 1 ]; then
+  mkdir -p "$ROOT/data/bundle"; printf '{}' > "$ROOT/data/bundle/heads-versions.json"
+  echo "[bundle] base-only: empty heads-versions.json (no bundled heads)"
+else
 python3 - "$ROOT" "$DUCK" "${HEADS[@]}" <<'PY'
 import json, pathlib, sys, subprocess
 root = pathlib.Path(sys.argv[1]); duck = sys.argv[2] == "1"; heads = sys.argv[3:]
@@ -103,6 +113,7 @@ for h in heads:
 (root / "data" / "bundle" / "heads-versions.json").write_text(json.dumps(vers))
 print(f"[bundle] heads-versions.json: {len(vers)} layers")
 PY
+fi
 
 # --- 1b. Basemap: guarantee the bundled file exists so tauri resource bundling
 # succeeds. Real tiles come from scripts/build-basemap.sh; without them a 0-byte
@@ -127,6 +138,21 @@ FEATURES="$BASE,nav-server"
 [ $RELEASE -eq 1 ] && FEATURES="$BASE"
 BUILD_ARGS=(--apk --features "$FEATURES" --target aarch64)
 [ $DEBUG -eq 1 ] && BUILD_ARGS+=(--debug)
+# Base config (tauri.conf.json) ships only core metadata + basemap. The full data
+# set (11 heads + pagefind) lives in tauri.full.conf.json and is overlaid in for
+# any non-base build. tauri deep-merges the resources map, so the overlay adds the
+# heads on top of the base entries. --config path is relative to the app/ cwd.
+[ $BASE_ONLY -eq 0 ] && BUILD_ARGS+=(--config src-tauri/tauri.full.conf.json)
+# Tauri copies bundle.resources into the android asset dir but NEVER removes
+# files that dropped out of the config, so a swapped-out head (bunamo -> gramadan
+# -forms) or a base build over a prior full build would otherwise ship stale
+# heads. Clear every staged heads/ + pagefind/ asset dir so only the currently
+# configured resources are packaged. Harmless when gen/android does not exist yet.
+GEN="$ROOT/app/src-tauri/gen/android"
+if [ -d "$GEN" ]; then
+  find "$GEN" -type d -path '*assets*' \( -name heads -o -name pagefind \) -prune -exec rm -rf {} + 2>/dev/null || true
+  echo "[apk] cleared stale staged head/pagefind assets"
+fi
 echo "[apk] tauri android build ${BUILD_ARGS[*]}"
 ( cd "$ROOT/app" && npx tauri android build "${BUILD_ARGS[@]}" )
 
@@ -155,6 +181,26 @@ else
   "${BT}apksigner" verify "$SIGNED" >/dev/null && echo "[sign] verified"
 fi
 echo "[apk] $SIGNED ($(du -h "$SIGNED" | cut -f1))"
+
+# --- 3a. Head-set assertion (full builds only) ---
+# offline.rs tolerates a missing head at runtime (so base-only boots clean), which
+# means a full build that silently dropped OR carried a stale head would not fail
+# on device. Assert the exact set here: the APK's heads must equal HEADS - no
+# missing (forgotten head) and no extra (stale head left in the asset dir, e.g. a
+# bunamo-v2 lingering after the gramadan-forms swap).
+if [ $BASE_ONLY -eq 0 ] && [ $DEBUG -eq 0 ]; then
+  expected="$(printf '%s\n' "${HEADS[@]}" | sort -u)"
+  # grep reads the full stream (no early exit), so no SIGPIPE under pipefail.
+  actual="$(unzip -Z1 "$SIGNED" 2>/dev/null | grep -oE 'assets/heads/[^/]+\.zip' | sed 's#assets/heads/##; s#\.zip$##' | sort -u)"
+  if ! diff <(printf '%s\n' "$expected") <(printf '%s\n' "$actual") >/dev/null; then
+    echo "[assert] FAILED: APK head set != expected (< expected, > actual):"
+    diff <(printf '%s\n' "$expected") <(printf '%s\n' "$actual") | sed 's/^/    /'
+    exit 1
+  fi
+  echo "[assert] exactly ${#HEADS[@]} heads present, none stale"
+else
+  echo "[assert] base-only build: no heads expected"
+fi
 
 # --- 4. Install / launch ---
 if [ $INSTALL -eq 1 ]; then
