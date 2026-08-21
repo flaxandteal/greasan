@@ -16,13 +16,15 @@ set -euo pipefail
 WS="${GITHUB_WORKSPACE:-$(git rev-parse --show-toplevel)}"
 PARENT="$(dirname "$WS")"
 
-# submodule-under-.deps  ->  path relative to $PARENT
+# submodule-under-.deps  ->  path relative to $PARENT.
+# These MUST match the out-of-tree path deps in app/src-tauri/Cargo.toml and
+# app/package.json (verify with: grep -E 'path *= *"\.\.' app/src-tauri/Cargo.toml).
 declare -A LINKS=(
-  [RosMadair]="magic/RosMadair"
-  [RosMadair-sandbox]="magic/RosMadair-sandbox"
-  [alizarin-sandbox]="magic/alizarin-sandbox"
-  [malazan-experiment]="svg/malazan-experiment"
-  [Gramadan]="Gramadan"
+  [RosMadair]="magic/RosMadair"                              # flaxandteal/ros-madair (ros-madair-core, pkg-alizarin)
+  [RosMadair-sandbox-parquet]="magic/RosMadair-sandbox-parquet"  # ros-madair-{read,format,handlers,query,emit,duck}
+  [alizarin-sandbox]="magic/alizarin-sandbox"               # alizarin-core + alizarin npm pkg
+  [malazan-experiment]="svg/malazan-experiment"             # patched pagefind fork
+  [Gramadan]="Gramadan"                                     # philtweir/Gramadan (gramadan-rs)
 )
 
 for sub in "${!LINKS[@]}"; do
