@@ -31,7 +31,7 @@ ros-madair-core = { path = "../../../magic/RosMadair/crates/ros-madair-core" }
 # collision in the lockfile"), so the whole app was dragged onto the sandbox
 # core. Upstream bumped the sandbox core to .121, so the two are now
 # distinguishable and cargo locks both.
-alizarin-core = { path = "../../../magic/alizarin-sandbox/crates/alizarin-core" }
+alizarin-core = { path = "../../../magic/alizarin/crates/alizarin-core" }
 reqwest = { version = "0.12", features = ["rustls-tls"], default-features = false }
 quick-xml = "0.37"
 uuid = { version = "1", features = ["v4"] }
@@ -137,7 +137,7 @@ tao = { version = "0.35", default-features = false }
 # real local core the app uses, so v1 types match. The sandbox core is NOT
 # patched in here - the v2 crates reach it by path, which is exactly what lets
 # the two versions coexist.
-alizarin-core = { path = "../../../magic/alizarin-sandbox/crates/alizarin-core" }
+alizarin-core = { path = "../../../magic/alizarin/crates/alizarin-core" }
 
 [[example]]
 name = "hydrate-probe"

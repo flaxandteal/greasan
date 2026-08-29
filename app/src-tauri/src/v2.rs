@@ -116,7 +116,7 @@ fn cached_layered_graph(
     if let Some(lg) = cache.get(&key) {
         return lg.clone();
     }
-    let lg = std::sync::Arc::new(alizarin_core::LayeredGraph::over(
+    let lg = std::sync::Arc::new(alizarin_core::LayeredGraph::new(
         base.clone(),
         overlays.to_vec(),
     ));

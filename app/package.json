@@ -38,7 +38,7 @@
     "@tauri-apps/api": "^2",
     "@tauri-apps/plugin-dialog": "^2.7.1",
     "@tauri-apps/plugin-fs": "^2.5.1",
-    "alizarin": "file:../../magic/alizarin-sandbox",
+    "alizarin": "file:../../magic/alizarin",
     "konsta": "^5.0.9",
     "maplibre-gl": "^6.0.0",
     "pmtiles": "^4.4.1",

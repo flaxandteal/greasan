@@ -10,5 +10,5 @@ description = "Gréasán Derive provider: gramadan-rs paradigm forms as a graph-
 gramadan = { path = "../../../Gramadan/gramadan-rs", default-features = false }
 # The functions-registry contract (DeriveProvider / StaticTile / StaticGraph /
 # ComputeTilesConfig / FunctionsRegistry). Same alizarin-core the app links.
-alizarin-core = { path = "../../../magic/alizarin-sandbox/crates/alizarin-core" }
+alizarin-core = { path = "../../../magic/alizarin/crates/alizarin-core" }
 serde_json = "1"
