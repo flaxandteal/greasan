@@ -41,7 +41,6 @@ tar = "0.4"
 zip = { version = "2", default-features = false, features = ["deflate"] }
 percent-encoding = "2"
 unicode-normalization = "0.1"
-pagefind = { path = "../../../svg/malazan-experiment/pagefind/pagefind", default-features = false }
 
 # --- v2 static-assets pilot (optional; see src/v2.rs) -----------------------
 # NOTE: alizarin-core-v2 alias removed - line 30 `alizarin-core` now points at

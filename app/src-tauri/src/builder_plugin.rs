@@ -1,4 +1,4 @@
-use std::collections::{BTreeMap, HashMap};
+use std::collections::HashMap;
 use std::io::Read;
 use std::path::{Path, PathBuf};
 
@@ -9,8 +9,6 @@ use alizarin_core::{
     build_resources_from_business_csv_with_context, BusinessDataCsvOptions,
 };
 use flate2::read::GzDecoder;
-use pagefind::api::PagefindIndex;
-use pagefind::options::PagefindServiceConfig;
 use ros_madair_core::{build_to_memory, SkosCollection, StaticGraph, StaticResource};
 use serde::{Deserialize, Serialize};
 use tauri::{command, AppHandle, Emitter, Manager, Runtime};
@@ -946,10 +944,14 @@ pub async fn build_layer<R: Runtime>(
                 }
             }
 
-            // 8. Build pagefind search indices
+            // 8. Build the FTS5 search sidecar (search.sqlite). Replaces the
+            // on-device pagefind indexing on this path: seconds not ~40 min, no
+            // OOM, a fraction of the size. Same Headword/Gloss descriptors, and
+            // the same FTS5 the tbx-v2 path emits - so the app searches it
+            // identically (see fts::v2_search_fts). Off-device (bundled) layers
+            // keep their pre-built pagefind indices; only on-device build moves.
             update_status(&app, &id_clone, "indexing", 0.85);
 
-            // Set descriptor templates so we can extract headword + gloss
             let mut desc_graph = graph.clone();
             if let Err(e) = desc_graph.set_descriptor_template("name", "<Headword>") {
                 eprintln!("[builder] warning: set name template failed: {e}");
@@ -957,23 +959,9 @@ pub async fn build_layer<R: Runtime>(
             if let Err(e) = desc_graph.set_descriptor_template("description", "<Gloss>") {
                 eprintln!("[builder] warning: set description template failed: {e}");
             }
-            // `IndexedGraph` was removed from alizarin-core (sandbox
-            // 2.0.0-alpha.122+): `StaticGraph` now indexes itself lazily and
-            // owns `build_descriptors`, so we pass the graph directly.
-            let indexed_graph = desc_graph;
-
-            // Pagefind futures are !Send (lol_html uses Rc), so run in a
-            // blocking task with a dedicated single-threaded runtime.
-            let pf_output = output_dir_clone.clone();
-            let pf_result = tokio::task::spawn_blocking(move || {
-                build_pagefind_indices_sync(&indexed_graph, &resources, &pf_output)
-            })
-            .await;
-
-            match pf_result {
-                Ok(Ok(())) => {}
-                Ok(Err(e)) => eprintln!("[builder] pagefind failed (non-fatal): {e}"),
-                Err(e) => eprintln!("[builder] pagefind task panicked: {e}"),
+            match build_fts_index(&desc_graph, &resources, &output_dir_clone) {
+                Ok(n) => eprintln!("[builder] FTS5 indexed {n} entries"),
+                Err(e) => eprintln!("[builder] FTS5 index failed (non-fatal): {e}"),
             }
 
             // 9. Complete
@@ -1478,14 +1466,6 @@ pub async fn layer_has_pagefind<R: Runtime>(
 
 // ── Pagefind index building ──────────────────────────────────────────────────
 
-/// Strip diacritics (fadas, graves) for accent-insensitive search.
-fn strip_diacritics(text: &str) -> String {
-    use unicode_normalization::UnicodeNormalization;
-    text.nfd()
-        .filter(|c| !matches!(c, '\u{0300}'..='\u{036f}'))
-        .nfc()
-        .collect()
-}
 
 /// Build pagefind-ga and pagefind-en search indices from resources.
 ///
@@ -1494,202 +1474,33 @@ fn strip_diacritics(text: &str) -> String {
 ///
 /// Runs synchronously with an internal single-threaded tokio runtime because
 /// pagefind's futures are !Send (lol_html uses Rc internally).
-fn build_pagefind_indices_sync(
+/// Build the FTS5 search sidecar (search.sqlite) for a prebuild layer from its
+/// resources' Headword/Gloss descriptors - the on-device text index that
+/// replaced pagefind on this path (seconds, not ~40 min, no OOM). Same
+/// descriptor extraction pagefind used; same sidecar the tbx-v2 path emits.
+fn build_fts_index(
     indexed_graph: &StaticGraph,
     resources: &[StaticResource],
     output_dir: &Path,
-) -> Result<(), String> {
-    let rt = tokio::runtime::Builder::new_current_thread()
-        .enable_all()
-        .build()
-        .map_err(|e| format!("pagefind runtime: {e}"))?;
-
-    rt.block_on(build_pagefind_indices_inner(indexed_graph, resources, output_dir))
-}
-
-async fn build_pagefind_indices_inner(
-    indexed_graph: &StaticGraph,
-    resources: &[StaticResource],
-    output_dir: &Path,
-) -> Result<(), String> {
-    // Create two pagefind indices: Irish headwords and English glosses
-    let ga_config = PagefindServiceConfig::builder()
-        .force_language("ga".to_string())
-        .build();
-    let en_config = PagefindServiceConfig::builder()
-        .force_language("en".to_string())
-        .build();
-
-    let mut ga_index =
-        PagefindIndex::new(Some(ga_config)).map_err(|e| format!("pagefind ga init: {e}"))?;
-    let mut en_index =
-        PagefindIndex::new(Some(en_config)).map_err(|e| format!("pagefind en init: {e}"))?;
-
-    let mut ga_count = 0u32;
-    let mut en_count = 0u32;
-
+) -> Result<usize, String> {
+    let mut fts = crate::fts::FtsBuilder::create(output_dir)?;
     for resource in resources {
         let uuid = &resource.resourceinstance.resourceinstanceid;
         let tiles = match &resource.tiles {
             Some(t) => t,
             None => continue,
         };
-
-        // Compute descriptors from tile data using templates
         let descriptors = indexed_graph.build_descriptors(tiles);
-        let headword = descriptors
-            .name
-            .as_deref()
-            .unwrap_or("")
-            .trim();
+        let headword = descriptors.name.as_deref().unwrap_or("").trim();
         if headword.is_empty() {
             continue;
         }
-
-        let gloss = descriptors
-            .description
-            .as_deref()
-            .unwrap_or("")
-            .trim()
-            .to_string();
-
-        // Dialect codes default to GA for Téarma
-        let dialect_codes = vec!["GA".to_string()];
-
-        // Headword index (ga)
-        let headword_norm = strip_diacritics(headword);
-        let content = if headword == headword_norm {
-            headword.to_string()
-        } else {
-            format!("{headword} {headword_norm}")
-        };
-
-        let mut meta = BTreeMap::new();
-        meta.insert("title".to_string(), headword.to_string());
-        meta.insert("gloss".to_string(), gloss.clone());
-        meta.insert("dialect".to_string(), "GA".to_string());
-
-        let mut filters = BTreeMap::new();
-        filters.insert("dialect".to_string(), dialect_codes.clone());
-
-        if let Err(e) = ga_index
-            .add_custom_record(
-                uuid.clone(),
-                content,
-                "ga".to_string(),
-                Some(meta),
-                Some(filters.clone()),
-                None,
-            )
-            .await
-        {
-            eprintln!("[pagefind] ga record failed for {uuid}: {e}");
-            continue;
-        }
-        ga_count += 1;
-
-        // Gloss index (en)
-        if !gloss.is_empty() {
-            let mut en_meta = BTreeMap::new();
-            en_meta.insert("title".to_string(), gloss.clone());
-            en_meta.insert("headword".to_string(), headword.to_string());
-            en_meta.insert("dialect".to_string(), "GA".to_string());
-
-            if let Err(e) = en_index
-                .add_custom_record(
-                    uuid.clone(),
-                    gloss.clone(),
-                    "en".to_string(),
-                    Some(en_meta),
-                    Some(filters),
-                    None,
-                )
-                .await
-            {
-                eprintln!("[pagefind] en record failed for {uuid}: {e}");
-            } else {
-                en_count += 1;
-            }
-        }
+        let gloss = descriptors.description.as_deref().unwrap_or("").trim();
+        fts.add(uuid, headword, gloss)?;
     }
-
-    eprintln!("[builder] pagefind records: ga={ga_count}, en={en_count}");
-
-    // Write indices to disk and zip them
-    let ga_dir = output_dir.join("pagefind-ga");
-    let en_dir = output_dir.join("pagefind-en");
-
-    ga_index
-        .write_files(Some(ga_dir.to_string_lossy().to_string()))
-        .await
-        .map_err(|e| format!("pagefind ga write: {e}"))?;
-
-    en_index
-        .write_files(Some(en_dir.to_string_lossy().to_string()))
-        .await
-        .map_err(|e| format!("pagefind en write: {e}"))?;
-
-    // Zip each pagefind directory for on-device serving via pfzip protocol
-    for dir_name in ["pagefind-ga", "pagefind-en"] {
-        let src = output_dir.join(dir_name);
-        let dest = output_dir.join(format!("{dir_name}.zip"));
-        if src.exists() {
-            zip_directory_store(&src, &dest)?;
-            // Remove extracted directory - zip is the canonical format
-            let _ = std::fs::remove_dir_all(&src);
-        }
-    }
-
-    eprintln!("[builder] pagefind indices written and zipped");
-    Ok(())
+    fts.finish()
 }
 
-/// Create a zip archive from a directory (store mode, no compression - pagefind
-/// files are already compressed internally).
-fn zip_directory_store(src_dir: &Path, dest: &Path) -> Result<(), String> {
-    let file =
-        std::fs::File::create(dest).map_err(|e| format!("create zip {}: {e}", dest.display()))?;
-    let mut zip_writer = zip::ZipWriter::new(file);
-    let options = zip::write::SimpleFileOptions::default()
-        .compression_method(zip::CompressionMethod::Stored);
-
-    fn add_dir_recursive(
-        zip_writer: &mut zip::ZipWriter<std::fs::File>,
-        base: &Path,
-        current: &Path,
-        options: zip::write::SimpleFileOptions,
-    ) -> Result<(), String> {
-        for entry in
-            std::fs::read_dir(current).map_err(|e| format!("read dir {}: {e}", current.display()))?
-        {
-            let entry = entry.map_err(|e| format!("dir entry: {e}"))?;
-            let path = entry.path();
-            let rel = path
-                .strip_prefix(base)
-                .map_err(|e| format!("strip prefix: {e}"))?;
-            let name = rel.to_string_lossy().to_string();
-
-            if path.is_dir() {
-                add_dir_recursive(zip_writer, base, &path, options)?;
-            } else {
-                let data = std::fs::read(&path)
-                    .map_err(|e| format!("read {}: {e}", path.display()))?;
-                zip_writer
-                    .start_file(&name, options)
-                    .map_err(|e| format!("zip start {name}: {e}"))?;
-                std::io::Write::write_all(zip_writer, &data)
-                    .map_err(|e| format!("zip write {name}: {e}"))?;
-            }
-        }
-        Ok(())
-    }
-
-    add_dir_recursive(&mut zip_writer, src_dir, src_dir, options)?;
-    zip_writer
-        .finish()
-        .map_err(|e| format!("zip finish: {e}"))?;
-    Ok(())
-}
 
 // ── Core bundle loading for TBX builds ──────────────────────────────────────
 
