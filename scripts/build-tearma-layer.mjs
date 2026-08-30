@@ -25,7 +25,7 @@ import {
   parseStaticGraph,
   setNapiModule,
 } from '../app/node_modules/alizarin/dist/alizarin.js';
-import * as pagefind from '../app/node_modules/pagefind/lib/index.js';
+import * as pagefind from './lib/pagefind-fork.mjs';
 import { readFileSync, writeFileSync, appendFileSync, mkdirSync, existsSync } from 'fs';
 import { execSync } from 'child_process';
 import { fileURLToPath } from 'url';

@@ -18,7 +18,7 @@
 
 import { createRequire } from 'module';
 import { initWasm, buildGraphFromModelCsvs, buildResourcesFromBusinessCsv, collectionsToSkosXml, createResourceRegistry, parseStaticGraph, setNapiModule, setBackend } from '../app/node_modules/alizarin/dist/alizarin.js';
-import * as pagefind from '../app/node_modules/pagefind/lib/index.js';
+import * as pagefind from './lib/pagefind-fork.mjs';
 import { readFileSync, writeFileSync, mkdirSync, existsSync } from 'fs';
 import { execSync } from 'child_process';
 import { fileURLToPath } from 'url';
