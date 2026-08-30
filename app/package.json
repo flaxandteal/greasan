@@ -16,7 +16,8 @@
     "tauri": "tauri",
     "tauri:dev": "tauri dev",
     "tauri:dev:desktop": "tauri dev --features v2-emit,nav-server",
-    "tauri:build": "npm run build && tauri build"
+    "tauri:build": "npm run build && tauri build",
+    "postinstall": "node scripts/install-pagefind.js"
   },
   "devDependencies": {
     "@sveltejs/vite-plugin-svelte": "^7.0.0",
@@ -24,10 +25,11 @@
     "@tauri-apps/cli": "^2",
     "@tsconfig/svelte": "^5.0.8",
     "@types/node": "^24.12.2",
-    "pagefind": "^1.3.0",
+    "pagefind": "https://github.com/flaxandteal/pagefind/releases/download/v1.3.0-map-compatibility.5/pagefind-node-wrapper-v1.3.0-map-compatibility.5.tar.gz",
     "svelte": "^5.55.4",
     "svelte-check": "^4.4.6",
     "tailwindcss": "^4.2.4",
+    "tar-stream": "^3.1.7",
     "typescript": "~6.0.2",
     "vite": "^8.0.10",
     "vite-plugin-wasm": "^3.6.0",

@@ -33,3 +33,6 @@ public/index-scots/
 *.njsproj
 *.sln
 *.sw?
+
+# pagefind_extended binary fetched by scripts/install-pagefind.js (postinstall)
+vendor/
