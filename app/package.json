@@ -43,7 +43,6 @@
     "alizarin": "file:../../magic/alizarin",
     "konsta": "^5.0.9",
     "maplibre-gl": "^6.0.0",
-    "pmtiles": "^4.4.1",
-    "ros-madair-alizarin": "file:../../magic/RosMadair/pkg-alizarin"
+    "pmtiles": "^4.4.1"
   }
 }

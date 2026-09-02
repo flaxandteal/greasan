@@ -16,15 +16,6 @@ vi.mock('alizarin', () => ({
   staticStore: { archesClient: null },
   RDM: { archesClient: null },
 }));
-vi.mock('ros-madair-alizarin', () => {
-  function SparqlStore() { this.addLayer = vi.fn(); this.loadSummary = vi.fn(); }
-  return {
-    SparqlStore,
-    connect_tile_source: vi.fn(),
-    prefetch_tiles_for_resource: vi.fn(),
-    disconnect_tile_source: vi.fn(),
-  };
-});
 vi.mock('./wasm', () => ({
   ready: Promise.resolve(),
 }));

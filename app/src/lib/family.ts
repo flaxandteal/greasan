@@ -47,7 +47,7 @@ export interface SuggestedLayer {
   name: string;
   url: string;
   label: string;
-  format: 'built' | 'prebuild' | 'prebuild-v2' | 'tbx' | 'tbx-v2';
+  format: 'built' | 'prebuild-v2' | 'tbx-v2';
 }
 
 export interface FamilyConfig {

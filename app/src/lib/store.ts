@@ -366,7 +366,7 @@ async function subscribeBuildProgress(layerId: string): Promise<() => void> {
  * Import a layer via the Tauri builder: fetch source, build index, add to store.
  * Progress is exposed via the buildProgress store.
  */
-export async function importLayer(sourceUrl: string, name: string, format = 'prebuild'): Promise<void> {
+export async function importLayer(sourceUrl: string, name: string, format = 'prebuild-v2'): Promise<void> {
   buildingLayerName.set(name);
   buildProgress.set({ state: 'pending', progress: 0, error: null, output_path: null });
 

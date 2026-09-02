@@ -749,37 +749,12 @@ writeFileSync(
 
 console.log(`[build-macbain] Prebuild written to ${prebuildDir}`);
 
-// --- Run ros-madair-build ---
-
+// --- Pagefind output dir ---
+// The v1 ros-madair-build step is retired; the shipped head is the v2 emit of
+// data/prebuild-macbain (regen-macbain-v2). This dir now only holds the pagefind
+// indices built below (also the /layer-macbain/ vite dev alias target).
 const outputDir = resolve(root, 'data/macbain-index');
 mkdirSync(outputDir, { recursive: true });
-
-const buildBin = resolve(root, 'scripts/ros-madair-build');
-if (!existsSync(buildBin)) {
-  console.error('[build-macbain] ros-madair-build binary not found at', buildBin);
-  process.exit(1);
-}
-
-const pageSize = parseInt(process.env.ROS_MADAIR_PAGE_SIZE || '200', 10);
-console.log(`[build-macbain] Running ros-madair-build (page_size=${pageSize})...`);
-try {
-  execSync(
-    `"${buildBin}" "${prebuildDir}" "${outputDir}" ${pageSize} "${namespace}"`,
-    { stdio: 'inherit' }
-  );
-} catch (e) {
-  console.error('[build-macbain] ros-madair-build failed:', e.message);
-  process.exit(1);
-}
-
-// Wrap graph JSON for alizarin
-const graphFile = resolve(outputDir, `graphs/${graphId}.json`);
-if (existsSync(graphFile)) {
-  const rawGraph = JSON.parse(readFileSync(graphFile, 'utf8'));
-  if (!rawGraph.graph) {
-    writeFileSync(graphFile, JSON.stringify({ graph: [rawGraph] }));
-  }
-}
 
 // --- Pagefind indices ---
 // Only standalone entries have headwords - matched entries are already searchable via WK pagefind.

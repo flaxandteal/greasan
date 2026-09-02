@@ -1,7 +1,4 @@
 import { client, graphManager, RDM, staticStore } from 'alizarin';
-import {
-  SparqlStore,
-} from 'ros-madair-alizarin';
 import { ready } from './wasm';
 import { getPagefind, resetPagefind, type PagefindInstance } from './pagefind';
 import { FAMILIES, DEFAULT_FAMILY, type FamilyConfig, type FamilyId } from './family';

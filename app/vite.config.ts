@@ -96,61 +96,10 @@ function v2LayerServe(): Plugin {
   };
 }
 
-// Redirect alizarin's internal WASM module import to the combined ros-madair-alizarin
-// binary.  This gives us a single WASM instance that contains both the alizarin
-// heritage viewer and the ros-madair SPARQL engine, so connect_tile_source can
-// bridge them without crossing a JS serialization boundary.
-//
-// Two transforms:
-//  1. resolveId: when alizarin/js/_wasm.ts imports "../pkg/alizarin", serve the
-//     combined binary's wasm-bindgen glue instead.
-//  2. transform: neutralise alizarin's hardcoded wasmURL so the combined binary's
-//     init() uses its own default URL (which points at the correct .wasm file).
-function combinedWasmPlugin(): Plugin {
-  const combinedPkg = resolve(
-    __dirname,
-    '../../magic/RosMadair/pkg-alizarin/ros_madair_alizarin.js',
-  );
-  return {
-    name: 'combined-wasm-redirect',
-    enforce: 'pre',
-    resolveId(source, importer) {
-      if (
-        source === '../pkg/alizarin' &&
-        importer &&
-        /alizarin[\\/]js[\\/]/.test(importer)
-      ) {
-        return combinedPkg;
-      }
-    },
-    transform(code, id) {
-      // _wasm.ts computes a URL for alizarin_bg.wasm and passes it to init().
-      // Since we've redirected the ../pkg/alizarin import to the combined binary,
-      // we need init() to use its own default URL (ros_madair_alizarin_bg.wasm).
-      // Set wasmURL to a sentinel (bypasses the empty-URL guard) and call init()
-      // with no arguments so wasm-bindgen uses its built-in default URL.
-      if (/alizarin[\\/]js[\\/]_wasm/.test(id)) {
-        // Replace the wasmURL IIFE with a sentinel value
-        code = code.replace(
-          /let wasmURL: string = \(\(\) => \{[\s\S]*?\}\)\(\);/,
-          'let wasmURL: string = "combined-binary";',
-        );
-        // Call init() with no arguments - combined binary knows its own WASM URL
-        code = code.replace(
-          /await init\(\{ module_or_path: wasmURL \}\);/,
-          'await init();',
-        );
-        return code;
-      }
-    },
-  };
-}
-
 export default defineConfig({
   plugins: [
     pagefindServe(),
     v2LayerServe(),
-    combinedWasmPlugin(),
     svelte(),
     tailwindcss(),
     wasm(),
@@ -164,17 +113,18 @@ export default defineConfig({
     emptyOutDir: false,
   },
   resolve: {
-    // Point alizarin imports to TypeScript source so Vite compiles it and our
-    // combinedWasmPlugin can intercept the internal ../pkg/alizarin import.
-    // The pre-built dist/ bundle has the WASM glue baked in and can't be redirected.
+    // Point alizarin imports at its TypeScript source so Vite compiles it and
+    // its own `../pkg/alizarin` wasm-bindgen glue loads alizarin_bg.wasm. (The
+    // v1 combined ros-madair-alizarin binary that used to intercept this import
+    // is retired; alizarin now loads its own WASM.)
     alias: {
       'alizarin': resolve(__dirname, '../../magic/alizarin/js/main.ts'),
     },
     // Ensure @alizarin/clm's peer dep and direct imports resolve to the same instance.
-    dedupe: ['alizarin', 'ros-madair-alizarin'],
+    dedupe: ['alizarin'],
   },
   optimizeDeps: {
-    exclude: ['alizarin', 'ros-madair-alizarin'],
+    exclude: ['alizarin'],
   },
   server: {
     port: parseInt(process.env.PORT || '5173'),

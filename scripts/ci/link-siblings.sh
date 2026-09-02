@@ -20,7 +20,6 @@ PARENT="$(dirname "$WS")"
 # These MUST match the out-of-tree path deps in app/src-tauri/Cargo.toml and
 # app/package.json (verify with: grep -E 'path *= *"\.\.' app/src-tauri/Cargo.toml).
 declare -A LINKS=(
-  [RosMadair]="magic/RosMadair"                              # flaxandteal/ros-madair (ros-madair-core, pkg-alizarin)
   [RosMadair-sandbox-parquet]="magic/RosMadair-sandbox-parquet"  # ros-madair-{read,format,handlers,query,emit,duck}
   [alizarin-sandbox]="magic/alizarin-sandbox"               # alizarin-core + alizarin npm pkg
   [malazan-experiment]="svg/malazan-experiment"             # patched pagefind fork

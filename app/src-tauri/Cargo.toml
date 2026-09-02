@@ -21,16 +21,6 @@ serde_json = "1"
 # (the on-device counterpart of the Python tbx.py pipeline). `default-features`
 # off so the optional PyO3 `python` feature is NOT pulled into the app build.
 gramadan = { path = "../../../Gramadan/gramadan-rs", default-features = false }
-ros-madair-core = { path = "../../../magic/RosMadair/crates/ros-madair-core" }
-# v1 and the shipping app build against the REAL core (2.0.0-alpha.120). The v2
-# pilot links a *second* copy - the sandbox core, 2.0.0-alpha.121 - under the
-# `alizarin-core-v2` alias below.
-#
-# That used to be impossible: both cores were 2.0.0-alpha.120, and a lockfile
-# cannot hold two same-name/same-version packages from different paths ("package
-# collision in the lockfile"), so the whole app was dragged onto the sandbox
-# core. Upstream bumped the sandbox core to .121, so the two are now
-# distinguishable and cargo locks both.
 alizarin-core = { path = "../../../magic/alizarin/crates/alizarin-core" }
 reqwest = { version = "0.12", features = ["rustls-tls"], default-features = false }
 quick-xml = "0.37"
@@ -76,6 +66,10 @@ duckdb = { version = "1", features = ["bundled", "json", "parquet"], optional = 
 greasan-gramadan = { path = "../../crates/greasan-gramadan", optional = true }
 
 [features]
+# v2-emit is the shipping build now that the v1 ros-madair-core path is retired:
+# it pulls in the v2 read stack (`v2`) + the emitter. v2-duck (DuckDB+Parquet)
+# stays opt-in for the full APK; nav-server is never in a public release.
+default = ["v2-emit"]
 v2 = [
     "dep:ros-madair-read",
     "dep:ros-madair-format",
@@ -132,10 +126,9 @@ ndk-sys = "0.6"
 tao = { version = "0.35", default-features = false }
 
 [patch.crates-io]
-# ros-madair-core (v1) asks crates.io for alizarin-core; point it at the same
-# real local core the app uses, so v1 types match. The sandbox core is NOT
-# patched in here - the v2 crates reach it by path, which is exactly what lets
-# the two versions coexist.
+# Transitive deps (the published ros-madair-* / alizarin-* crates) request
+# alizarin-core from crates.io by version; redirect that to the single local
+# core the whole app builds against, so there is one copy in the graph.
 alizarin-core = { path = "../../../magic/alizarin/crates/alizarin-core" }
 
 [[example]]

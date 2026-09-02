@@ -10,7 +10,8 @@
  * Process:
  *   1. alizarin: model CSVs + business CSV → graphs + resources
  *   2. populateCaches for descriptors
- *   3. ros-madair-build: prebuild → binary index
+ *   3. write data/prebuild-tearma (the v2 emit input; regen-tearma-v2 turns it
+ *      into the tearma-v2 head)
  *   4. Pagefind indices for headword + gloss search
  *   5. tar.gz the result
  */
@@ -219,37 +220,13 @@ writeFileSync(
 
 console.log(`[build-tearma] Prebuild written to ${prebuildDir}`);
 
-// --- Run ros-madair-build ---
-
+// --- Pagefind output dir ---
+// The v1 ros-madair-build step is retired. Téarma installs on-device as tbx-v2
+// (raw TBX -> FTS5), and the v2 head comes from the emit of data/prebuild-tearma
+// (regen-tearma-v2). This dir now only holds the pagefind indices built below
+// (also the /layer-tearma/ vite dev alias target).
 const outputDir = resolve(root, 'data/tearma-index');
 mkdirSync(outputDir, { recursive: true });
-
-const buildBin = resolve(root, 'scripts/ros-madair-build');
-if (!existsSync(buildBin)) {
-  console.error('[build-tearma] ros-madair-build binary not found at', buildBin);
-  process.exit(1);
-}
-
-const pageSize = parseInt(process.env.ROS_MADAIR_PAGE_SIZE || '200', 10);
-console.log(`[build-tearma] Running ros-madair-build (page_size=${pageSize})...`);
-try {
-  execSync(
-    `"${buildBin}" "${prebuildDir}" "${outputDir}" ${pageSize} "${namespace}"`,
-    { stdio: 'inherit' }
-  );
-} catch (e) {
-  console.error('[build-tearma] ros-madair-build failed:', e.message);
-  process.exit(1);
-}
-
-// Wrap graph JSON for alizarin
-const graphFile = resolve(outputDir, `graphs/${graphId}.json`);
-if (existsSync(graphFile)) {
-  const rawGraph = JSON.parse(readFileSync(graphFile, 'utf8'));
-  if (!rawGraph.graph) {
-    writeFileSync(graphFile, JSON.stringify({ graph: [rawGraph] }));
-  }
-}
 
 // --- Pagefind indices ---
 

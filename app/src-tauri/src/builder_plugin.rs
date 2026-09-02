@@ -5,11 +5,10 @@ use std::path::{Path, PathBuf};
 use alizarin_core::label_resolution::ConceptLookup;
 use alizarin_core::rdm_cache::RdmCache;
 use alizarin_core::type_serialization::SerializationContext;
-use alizarin_core::{
-    build_resources_from_business_csv_with_context, BusinessDataCsvOptions,
-};
+use alizarin_core::graph::{StaticGraph, StaticResource};
+use alizarin_core::skos::SkosCollection;
+use alizarin_core::{build_resources_from_business_csv_with_context, BusinessDataCsvOptions};
 use flate2::read::GzDecoder;
-use ros_madair_core::{build_to_memory, SkosCollection, StaticGraph, StaticResource};
 use serde::{Deserialize, Serialize};
 use tauri::{command, AppHandle, Emitter, Manager, Runtime};
 
@@ -111,17 +110,6 @@ pub struct LayerInfo {
     pub layer_id: String,
     pub output_path: String,
     pub has_pagefind: bool,
-}
-
-/// Manifest optionally included in prebuild archives.
-#[derive(Debug, Deserialize)]
-struct PrebuildManifest {
-    #[serde(default = "default_base_uri")]
-    base_uri: String,
-}
-
-fn default_base_uri() -> String {
-    "https://flaxandteal.org/ontology/goidelic#".to_string()
 }
 
 /// Human-readable notification line for a build state (shown in the shade).
@@ -587,133 +575,6 @@ fn stream_tbx_v2_build(
     Ok(total)
 }
 
-/// Parse a prebuild tar.gz archive into graphs, resources, and collections.
-///
-/// Expected archive structure:
-/// - `graphs/{id}.json` - StaticGraph JSON
-/// - `business_data/{id}.json` - StaticResource JSON (single or array)
-/// - `collections/{id}.json` - SkosCollection JSON
-/// - `manifest.json` (optional) - { base_uri: "..." }
-fn parse_prebuild_archive(
-    bytes: &[u8],
-) -> Result<
-    (
-        String,
-        HashMap<String, StaticGraph>,
-        Vec<StaticResource>,
-        Vec<SkosCollection>,
-        HashMap<String, Vec<u8>>,
-    ),
-    String,
-> {
-    let decoder = GzDecoder::new(bytes);
-    let mut archive = tar::Archive::new(decoder);
-
-    let mut graphs: HashMap<String, StaticGraph> = HashMap::new();
-    let mut resources: Vec<StaticResource> = Vec::new();
-    let mut collections: Vec<SkosCollection> = Vec::new();
-    let mut passthrough_files: HashMap<String, Vec<u8>> = HashMap::new();
-    let mut base_uri = default_base_uri();
-
-    for entry_result in archive.entries().map_err(|e| format!("tar read error: {e}"))? {
-        let mut entry = entry_result.map_err(|e| format!("tar entry error: {e}"))?;
-        let path = entry
-            .path()
-            .map_err(|e| format!("tar path error: {e}"))?
-            .to_path_buf();
-
-        let path_str = path.to_string_lossy();
-
-        // Strip leading ./ or top-level directory prefix
-        let normalised = path_str
-            .trim_start_matches("./")
-            .trim_start_matches(|c: char| c != '/' && c != '.')
-            .trim_start_matches('/');
-        // Also try the raw path for flat archives
-        let candidates = [normalised, path_str.as_ref()];
-
-        let mut content = String::new();
-
-        for candidate in &candidates {
-            if candidate.ends_with("manifest.json") || *candidate == "manifest.json" {
-                entry
-                    .read_to_string(&mut content)
-                    .map_err(|e| format!("read manifest.json: {e}"))?;
-                if let Ok(m) = serde_json::from_str::<PrebuildManifest>(&content) {
-                    base_uri = m.base_uri;
-                }
-                break;
-            }
-
-            if (candidate.starts_with("graphs/") || candidate.contains("/graphs/"))
-                && candidate.ends_with(".json")
-            {
-                entry
-                    .read_to_string(&mut content)
-                    .map_err(|e| format!("read graph json: {e}"))?;
-                let graph: StaticGraph =
-                    serde_json::from_str(&content).map_err(|e| format!("parse graph: {e}"))?;
-                graphs.insert(graph.graphid.clone(), graph);
-                break;
-            }
-
-            if (candidate.starts_with("business_data/") || candidate.contains("/business_data/"))
-                && candidate.ends_with(".json")
-            {
-                entry
-                    .read_to_string(&mut content)
-                    .map_err(|e| format!("read resource json: {e}"))?;
-                // Try as array first, then single
-                if let Ok(arr) = serde_json::from_str::<Vec<StaticResource>>(&content) {
-                    resources.extend(arr);
-                } else {
-                    let r: StaticResource = serde_json::from_str(&content)
-                        .map_err(|e| format!("parse resource: {e}"))?;
-                    resources.push(r);
-                }
-                break;
-            }
-
-            if (candidate.starts_with("collections/") || candidate.contains("/collections/"))
-                && candidate.ends_with(".json")
-            {
-                entry
-                    .read_to_string(&mut content)
-                    .map_err(|e| format!("read collection json: {e}"))?;
-                let c: SkosCollection =
-                    serde_json::from_str(&content).map_err(|e| format!("parse collection: {e}"))?;
-                collections.push(c);
-                break;
-            }
-
-            // Pass through pagefind zip files (pagefind-ga.zip, pagefind-en.zip, etc.)
-            if candidate.contains("pagefind-") && candidate.ends_with(".zip") {
-                let mut file_content = Vec::new();
-                entry
-                    .read_to_end(&mut file_content)
-                    .map_err(|e| format!("read pagefind zip: {e}"))?;
-                // Extract just the filename
-                let filename = candidate
-                    .rsplit('/')
-                    .next()
-                    .unwrap_or(candidate)
-                    .to_string();
-                passthrough_files.insert(filename, file_content);
-                break;
-            }
-        }
-    }
-
-    if graphs.is_empty() {
-        return Err("prebuild archive contains no graph JSON files in graphs/".into());
-    }
-    if resources.is_empty() {
-        return Err("prebuild archive contains no resource JSON files in business_data/".into());
-    }
-
-    Ok((base_uri, graphs, resources, collections, passthrough_files))
-}
-
 /// Initiate an index build from a remote source.
 ///
 /// Returns immediately with a layer_id; poll `get_layer_status` for progress.
@@ -725,12 +586,9 @@ pub async fn build_layer<R: Runtime>(
     format: String,
     layer_name: String,
 ) -> Result<BuildLayerResult, String> {
-    if !matches!(
-        format.as_str(),
-        "prebuild" | "prebuild-v2" | "built" | "tbx" | "tbx-v2"
-    ) {
+    if !matches!(format.as_str(), "prebuild-v2" | "built" | "tbx-v2") {
         return Err(format!(
-            "unsupported format \"{format}\" - only \"prebuild\", \"prebuild-v2\", \"built\", \"tbx\", and \"tbx-v2\" are supported"
+            "unsupported format \"{format}\" - only \"prebuild-v2\", \"built\", and \"tbx-v2\" are supported"
         ));
     }
 
@@ -825,146 +683,6 @@ pub async fn build_layer<R: Runtime>(
                 return;
             }
 
-            let output_path = output_dir_clone.to_string_lossy().to_string();
-            update_status_complete(&app, &id_clone, output_path);
-        } else if format_clone == "tbx" {
-            // "tbx" format: parse TBX XML → CSV → build resources → build index
-            // Used for Téarma data that must be built on-device.
-
-            // 2. Parse TBX XML into term records
-            update_status(&app, &id_clone, "parsing", 0.2);
-            let mut records = match tbx_parser::parse_tbx(&bytes) {
-                Ok(r) => r,
-                Err(e) => {
-                    update_status_failed(&app, &id_clone, format!("TBX parse failed: {e}"));
-                    return;
-                }
-            };
-
-            eprintln!("[builder] parsed {} TBX records", records.len());
-
-            // 2b. Declension enrichment (gramadan): fill classless noun/verb
-            // classes + stamp confidence, matching the Python pipeline.
-            tbx_parser::enrich_records(&mut records);
-
-            // 3. Generate business-data CSV
-            let csv_data = match tbx_parser::records_to_csv(&records, "TÉ") {
-                Ok(c) => c,
-                Err(e) => {
-                    update_status_failed(&app, &id_clone, format!("CSV generation failed: {e}"));
-                    return;
-                }
-            };
-
-            // 4. Load graph model and collections from the core bundle
-            update_status(&app, &id_clone, "building", 0.4);
-
-            let graph = match load_core_graph(&app, LEXICAL_ENTRY_GRAPH_ID) {
-                Ok(g) => g,
-                Err(e) => {
-                    update_status_failed(&app, &id_clone, format!("load graph failed: {e}"));
-                    return;
-                }
-            };
-
-            let collections = match load_core_collections(&app) {
-                Ok(c) => c,
-                Err(e) => {
-                    update_status_failed(&app, &id_clone, format!("load collections failed: {e}"));
-                    return;
-                }
-            };
-
-            // 5. Build StaticResources from CSV - concept/reference labels resolve
-            // through the shared RdmCache (same identity as the head vocab).
-            let registry = ros_madair_emit::default_registry();
-            let mut rdm_cache = RdmCache::new();
-            rdm_cache.add_from_skos_collections(&collections);
-            let ser_ctx = SerializationContext {
-                concept_lookup: Some(&rdm_cache as &dyn ConceptLookup),
-                extension_registry: Some(&registry),
-                ..SerializationContext::empty()
-            };
-            let resources = match build_resources_from_business_csv_with_context(
-                &csv_data,
-                &graph,
-                &collections,
-                Some(&registry),
-                BusinessDataCsvOptions {
-                    strict_concepts: false,
-                    uuid_namespace: Some(TEARMA_UUID_NS.to_string()),
-                    ..Default::default()
-                },
-                Some(&ser_ctx),
-            ) {
-                Ok(r) => r,
-                Err(e) => {
-                    update_status_failed(
-                        &app,
-                        &id_clone,
-                        format!("build resources failed: {e}"),
-                    );
-                    return;
-                }
-            };
-
-            eprintln!("[builder] built {} resources from CSV", resources.len());
-
-            // 6. Build binary index artifacts
-            update_status(&app, &id_clone, "building", 0.6);
-            let base_uri = default_base_uri();
-            let mut graphs = HashMap::new();
-            graphs.insert(graph.graphid.clone(), graph.clone());
-
-            let artifacts =
-                match build_to_memory(&base_uri, &graphs, &resources, &collections, None) {
-                    Ok(a) => a,
-                    Err(e) => {
-                        update_status_failed(&app, &id_clone, format!("build failed: {e}"));
-                        return;
-                    }
-                };
-
-            // 7. Write artifacts to disk
-            update_status(&app, &id_clone, "writing", 0.8);
-            if let Err(e) = write_artifacts(&output_dir_clone, &artifacts).await {
-                update_status_failed(&app, &id_clone, format!("write failed: {e}"));
-                return;
-            }
-
-            // Write graph JSON
-            for (graph_id, g) in &graphs {
-                let graph_path =
-                    output_dir_clone.join("graphs").join(format!("{graph_id}.json"));
-                if let Some(parent) = graph_path.parent() {
-                    let _ = tokio::fs::create_dir_all(parent).await;
-                }
-                if let Ok(json) = serde_json::to_vec(g) {
-                    let _ = tokio::fs::write(&graph_path, json).await;
-                }
-            }
-
-            // 8. Build the FTS5 search sidecar (search.sqlite). Replaces the
-            // on-device pagefind indexing on this path: seconds not ~40 min, no
-            // OOM, a fraction of the size. Same Headword/Gloss descriptors, and
-            // the same FTS5 the tbx-v2 path emits - so the app searches it
-            // identically (see fts::v2_search_fts). Off-device (bundled) layers
-            // keep their pre-built pagefind indices; only on-device build moves.
-            update_status(&app, &id_clone, "indexing", 0.85);
-
-            let mut desc_graph = graph.clone();
-            if let Err(e) = desc_graph.set_descriptor_template("name", "<Headword>") {
-                eprintln!("[builder] warning: set name template failed: {e}");
-            }
-            if let Err(e) = desc_graph.set_descriptor_template("description", "<Gloss>") {
-                eprintln!("[builder] warning: set description template failed: {e}");
-            }
-            match build_fts_index(&desc_graph, &resources, &output_dir_clone) {
-                Ok(n) => eprintln!("[builder] FTS5 indexed {n} entries"),
-                Err(e) => eprintln!("[builder] FTS5 index failed (non-fatal): {e}"),
-            }
-
-            // 9. Complete
             let output_path = output_dir_clone.to_string_lossy().to_string();
             update_status_complete(&app, &id_clone, output_path);
         } else if format_clone == "tbx-v2" {
@@ -1164,58 +882,6 @@ pub async fn build_layer<R: Runtime>(
                 let output_path = output_dir_clone.to_string_lossy().to_string();
                 update_status_complete(&app, &id_clone, output_path);
             }
-        } else {
-            // "prebuild" format: parse, build, write
-            // 2. Parse
-            update_status(&app, &id_clone, "parsing", 0.3);
-            let (base_uri, graphs, resources, collections, passthrough_files) =
-                match parse_prebuild_archive(&bytes) {
-                    Ok(v) => v,
-                    Err(e) => {
-                        update_status_failed(&app, &id_clone, format!("parse failed: {e}"));
-                        return;
-                    }
-                };
-
-            // 3. Build
-            update_status(&app, &id_clone, "building", 0.5);
-            let artifacts =
-                match build_to_memory(&base_uri, &graphs, &resources, &collections, None) {
-                    Ok(a) => a,
-                    Err(e) => {
-                        update_status_failed(&app, &id_clone, format!("build failed: {e}"));
-                        return;
-                    }
-                };
-
-            // 4. Write
-            update_status(&app, &id_clone, "writing", 0.9);
-            if let Err(e) = write_artifacts(&output_dir_clone, &artifacts).await {
-                update_status_failed(&app, &id_clone, format!("write failed: {e}"));
-                return;
-            }
-
-            // Also write graph JSON files (not included in build_to_memory output)
-            for (graph_id, graph) in &graphs {
-                let graph_path =
-                    output_dir_clone.join("graphs").join(format!("{graph_id}.json"));
-                if let Some(parent) = graph_path.parent() {
-                    let _ = tokio::fs::create_dir_all(parent).await;
-                }
-                if let Ok(json) = serde_json::to_vec(graph) {
-                    let _ = tokio::fs::write(&graph_path, json).await;
-                }
-            }
-
-            // Write passthrough files (pagefind zips, etc.)
-            for (filename, content) in &passthrough_files {
-                let dest = output_dir_clone.join(filename);
-                let _ = tokio::fs::write(&dest, content).await;
-            }
-
-            // 5. Complete
-            let output_path = output_dir_clone.to_string_lossy().to_string();
-            update_status_complete(&app, &id_clone, output_path);
         }
     });
 
@@ -1223,24 +889,6 @@ pub async fn build_layer<R: Runtime>(
         layer_id,
         output_path: "pending".to_string(),
     })
-}
-
-async fn write_artifacts(
-    output_dir: &Path,
-    artifacts: &HashMap<String, Vec<u8>>,
-) -> Result<(), String> {
-    for (name, bytes) in artifacts {
-        let path = output_dir.join(name);
-        if let Some(parent) = path.parent() {
-            tokio::fs::create_dir_all(parent)
-                .await
-                .map_err(|e| format!("mkdir {}: {e}", parent.display()))?;
-        }
-        tokio::fs::write(&path, bytes)
-            .await
-            .map_err(|e| format!("write {}: {e}", path.display()))?;
-    }
-    Ok(())
 }
 
 /// Poll the build progress of a layer.

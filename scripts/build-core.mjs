@@ -7,9 +7,11 @@
  *   - resource_models/_all.json
  *   - graphs/{id}.json (wrapped for alizarin)
  *   - collections/{id}.json
- *   - concept_hierarchy.json, concept_tree.bin, concept_intervals.bin
- *   - Empty ros-madair binaries: summary.bin, dictionary.bin,
- *     resource_map.bin, page_meta.json (from 0-resource build)
+ *   - concept_hierarchy.json (flat collection-id index for the app)
+ *
+ * Schema-only, written entirely from Node - no v1 ros-madair-build step.
+ * The core bundle carries no tiles/pages/summary.bin (nothing consumes them);
+ * data comes from v2 layers installed via Settings.
  *
  * This is the schema-only bundle that the app loads on startup.
  * Actual data comes from layers (Wiktionary, Tearma, etc.) installed via Settings.
@@ -160,6 +162,7 @@ const coreDir = resolve(root, 'app/public/core-goidelic');
 mkdirSync(coreDir, { recursive: true });
 mkdirSync(resolve(coreDir, 'resource_models'), { recursive: true });
 mkdirSync(resolve(coreDir, 'collections'), { recursive: true });
+mkdirSync(resolve(coreDir, 'graphs'), { recursive: true });
 
 // _all.json
 writeFileSync(
@@ -178,38 +181,34 @@ for (const collection of allCollections) {
   }
 }
 
-// --- Run ros-madair-build with 0 resources -> valid empty binaries ---
-
-const buildBin = resolve(root, 'scripts/ros-madair-build');
-if (!existsSync(buildBin)) {
-  console.error('[build-core] ros-madair-build binary not found at', buildBin);
-  process.exit(1);
-}
-
-const graphIds = Object.keys(allGraphMeta);
-const pageSize = parseInt(process.env.ROS_MADAIR_PAGE_SIZE || '200', 10);
-console.log(`\n[build-core] Running ros-madair-build (0 resources, page_size=${pageSize})...`);
-try {
-  execSync(
-    `"${buildBin}" "${prebuildDir}" "${coreDir}" ${pageSize} "${namespace}"`,
-    { stdio: 'inherit' }
+// --- Graph JSON (wrapped for alizarin), written directly ---
+// The v1 ros-madair-build binary used to copy these out of the prebuild and
+// emit empty pages/tiles/summary.bin. The core bundle is schema-only and
+// nothing consumes those artifacts (load_core_graph reads graphs/{id}.json;
+// load_core_collections reads concept_hierarchy.json + collections/{id}.json),
+// so we write the graphs straight from the in-memory objects and skip the v1
+// build entirely.
+for (const [graphId, graph] of Object.entries(allGraphObjs)) {
+  writeFileSync(
+    resolve(coreDir, `graphs/${graphId}.json`),
+    JSON.stringify({ graph: [graph] })
   );
-  console.log(`[build-core] Core built at ${coreDir}`);
-} catch (e) {
-  console.error('[build-core] ros-madair-build failed:', e.message);
-  process.exit(1);
 }
 
-// Wrap graph JSON for alizarin
-for (const graphId of graphIds) {
-  const graphFile = resolve(coreDir, `graphs/${graphId}.json`);
-  if (!existsSync(graphFile)) continue;
-  const rawGraph = JSON.parse(readFileSync(graphFile, 'utf8'));
-  if (!rawGraph.graph) {
-    writeFileSync(graphFile, JSON.stringify({ graph: [rawGraph] }));
-    console.log(`[build-core] Wrapped graph ${graphId} for alizarin`);
-  }
-}
+// --- concept_hierarchy.json: the collection-id index the app reads to
+// enumerate core collections. collect_collection_ids (builder_plugin.rs)
+// harvests any bare-UUID string, so a flat id list suffices. ---
+const coreCollectionIds = [
+  ...new Set(allCollections.map((c) => c.collectionid || c.id).filter(Boolean)),
+];
+writeFileSync(
+  resolve(coreDir, 'concept_hierarchy.json'),
+  JSON.stringify(coreCollectionIds)
+);
+console.log(
+  `[build-core] Core built at ${coreDir} ` +
+    `(${Object.keys(allGraphObjs).length} graphs, ${coreCollectionIds.length} collections; v2, no ros-madair-build)`
+);
 
 console.log(`\n[build-core] Total: ${elapsed(t0)}`);
 console.log(`[build-core] Output: ${coreDir}`);
