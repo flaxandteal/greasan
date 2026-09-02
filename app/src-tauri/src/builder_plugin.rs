@@ -5,7 +5,7 @@ use std::path::{Path, PathBuf};
 use alizarin_core::label_resolution::ConceptLookup;
 use alizarin_core::rdm_cache::RdmCache;
 use alizarin_core::type_serialization::SerializationContext;
-use alizarin_core::graph::{StaticGraph, StaticResource};
+use alizarin_core::graph::StaticGraph;
 use alizarin_core::skos::SkosCollection;
 use alizarin_core::{build_resources_from_business_csv_with_context, BusinessDataCsvOptions};
 use flate2::read::GzDecoder;
@@ -207,6 +207,7 @@ fn layers_dir<R: Runtime>(app: &AppHandle<R>) -> Result<PathBuf, String> {
 /// first use, reused forever). One identity per install signs every head it
 /// builds - so a tester can tell "a head I built" from a swapped forgery.
 #[cfg(feature = "v2-emit")]
+#[allow(dead_code)] // v2-duck signing path only (unused in the v2-emit build)
 fn signing_key_path<R: Runtime>(app: &AppHandle<R>) -> Result<PathBuf, String> {
     let app_data = app
         .path()
@@ -289,64 +290,6 @@ fn copy_pagefind_indices(src: &Path, dest: &Path) {
             }
         }
     }
-}
-
-/// Write in-memory graph + resources + collections to a temp prebuild dir and run
-/// the streaming emitter → a v2 head in `out_dir` (head.sqlite + chunks +
-/// graph.json). The v2 counterpart of `build_to_memory` + `write_artifacts`, for
-/// the tbx-v2 on-device Téarma build. Base_uri is the canonical
-/// `https://example.org/` every v2 head composes under (see the prebuild-v2 note).
-#[cfg(feature = "v2-emit")]
-fn write_prebuild_and_emit_v2(
-    out_dir: &Path,
-    graph: &StaticGraph,
-    resources: &[StaticResource],
-    collections: &[SkosCollection],
-) -> Result<(), String> {
-    let src = out_dir.join(".prebuild-src");
-    let _ = std::fs::remove_dir_all(&src);
-    let gid = graph.graphid.clone();
-    let models = src.join("graphs/resource_models");
-    let bd = src.join("business_data");
-    let cols_dir = src.join("reference_data/collections");
-    for d in [&models, &bd, &cols_dir] {
-        std::fs::create_dir_all(d).map_err(|e| format!("mkdir {}: {e}", d.display()))?;
-    }
-    std::fs::write(
-        models.join(format!("{gid}.json")),
-        serde_json::to_vec(graph).map_err(|e| e.to_string())?,
-    )
-    .map_err(|e| e.to_string())?;
-    let wrapper = serde_json::json!({ "business_data": { "resources": resources } });
-    std::fs::write(
-        bd.join(format!("{gid}.json")),
-        serde_json::to_vec(&wrapper).map_err(|e| e.to_string())?,
-    )
-    .map_err(|e| e.to_string())?;
-    for col in collections {
-        std::fs::write(
-            cols_dir.join(format!("{}.json", col.id)),
-            serde_json::to_vec(col).map_err(|e| e.to_string())?,
-        )
-        .map_err(|e| e.to_string())?;
-    }
-    std::fs::write(
-        src.join("manifest.json"),
-        r#"{"base_uri":"https://example.org/"}"#,
-    )
-    .map_err(|e| e.to_string())?;
-
-    ros_madair_emit::emit(
-        src.to_str().ok_or("non-utf8 prebuild path")?,
-        out_dir.to_str().ok_or("non-utf8 out path")?,
-        "https://example.org/",
-    )
-    .map_err(|e| format!("emit: {e}"))?;
-
-    std::fs::copy(models.join(format!("{gid}.json")), out_dir.join("graph.json"))
-        .map_err(|e| format!("copy graph.json: {e}"))?;
-    let _ = std::fs::remove_dir_all(&src);
-    Ok(())
 }
 
 /// Streaming tbx-v2 build: the memory-bounded counterpart of
@@ -1112,42 +1055,6 @@ pub async fn layer_has_pagefind<R: Runtime>(
     Ok(layer_has_pagefind_check(&dir))
 }
 
-// ── Pagefind index building ──────────────────────────────────────────────────
-
-
-/// Build pagefind-ga and pagefind-en search indices from resources.
-///
-/// Mirrors the pattern in build-tearma-layer.mjs: headword index (ga) and
-/// gloss index (en), each with dialect filter codes.
-///
-/// Runs synchronously with an internal single-threaded tokio runtime because
-/// pagefind's futures are !Send (lol_html uses Rc internally).
-/// Build the FTS5 search sidecar (search.sqlite) for a prebuild layer from its
-/// resources' Headword/Gloss descriptors - the on-device text index that
-/// replaced pagefind on this path (seconds, not ~40 min, no OOM). Same
-/// descriptor extraction pagefind used; same sidecar the tbx-v2 path emits.
-fn build_fts_index(
-    indexed_graph: &StaticGraph,
-    resources: &[StaticResource],
-    output_dir: &Path,
-) -> Result<usize, String> {
-    let mut fts = crate::fts::FtsBuilder::create(output_dir)?;
-    for resource in resources {
-        let uuid = &resource.resourceinstance.resourceinstanceid;
-        let tiles = match &resource.tiles {
-            Some(t) => t,
-            None => continue,
-        };
-        let descriptors = indexed_graph.build_descriptors(tiles);
-        let headword = descriptors.name.as_deref().unwrap_or("").trim();
-        if headword.is_empty() {
-            continue;
-        }
-        let gloss = descriptors.description.as_deref().unwrap_or("").trim();
-        fts.add(uuid, headword, gloss)?;
-    }
-    fts.finish()
-}
 
 
 // ── Core bundle loading for TBX builds ──────────────────────────────────────

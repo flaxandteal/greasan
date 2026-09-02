@@ -164,6 +164,9 @@ fn registry(head_dir: &Path) -> Result<ExtensionTypeRegistry, String> {
 /// resource has. A mismatch means a chunk went missing or a resource id is
 /// duplicated across chunks, i.e. a corrupt artifact. Hard error, rather than a
 /// quietly truncated entry.
+// Used by the head-engine (v2-emit / --sqlite) read path; the v2-duck default
+// build hydrates via DuckReader, so this is unused there (but tests exercise it).
+#[allow(dead_code)]
 pub fn hydrate_resource(
     head_dir: &Path,
     resource_uuid: &str,
@@ -303,6 +306,7 @@ pub fn run_query(head_dir: &Path, ir: &Value, graph: &StaticGraph) -> Result<Val
     Ok(serde_json::json!({ "results": results }))
 }
 
+#[allow(dead_code)] // head-engine (v2-emit) query path only
 fn sql_value_to_json(v: ValueRef<'_>) -> Value {
     match v {
         ValueRef::Null => Value::Null,
@@ -400,6 +404,7 @@ pub fn logcat_error(msg: &str) {
     eprintln!("[greasan] {msg}");
 }
 
+#[allow(dead_code)] // sqlite-only (head-engine) compose path; gated off duck
 fn open_layers(head_dirs: &[String]) -> Result<Layers, String> {
     let paths: Vec<PathBuf> = head_dirs.iter().map(PathBuf::from).collect();
     let refs: Vec<&Path> = paths.iter().map(PathBuf::as_path).collect();

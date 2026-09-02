@@ -736,13 +736,6 @@ pub fn append_records_csv(
     }
 }
 
-pub fn records_to_csv(records: &[TbxRecord], source_label: &str) -> Result<String, String> {
-    let mut out = csv_header();
-    let mut seen_ids: HashMap<String, u32> = HashMap::new();
-    append_records_csv(records, source_label, &mut seen_ids, &mut out);
-    Ok(out)
-}
-
 fn csv_escape(s: &str) -> String {
     if s.contains(',') || s.contains('\n') || s.contains('"') {
         format!("\"{}\"", s.replace('"', "\"\""))
