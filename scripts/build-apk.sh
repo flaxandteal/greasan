@@ -11,8 +11,10 @@
 #   scripts/build-apk.sh --debug            # debug APK (auto-signed, all ABIs)
 #   scripts/build-apk.sh --release          # PUBLIC release: no nav-server, alpha-signed
 #   scripts/build-apk.sh --no-rezip         # skip the bundle-head refresh
-#   scripts/build-apk.sh --duck             # DuckDB+Parquet substrate: ship parquet
-#                                           #   heads (v2-duck) not sqlite heads
+#   scripts/build-apk.sh                    # DEFAULT: DuckDB+Parquet substrate
+#                                           #   (v2-duck, parquet heads)
+#   scripts/build-apk.sh --sqlite           # opt out to the v2-emit head engine
+#                                           #   (sqlite heads, no duckdb)
 #   scripts/build-apk.sh --base             # BASE-ONLY: core metadata + basemap, NO
 #                                           #   heads. Boots to empty state; layers
 #                                           #   install at runtime. The CI smoke build.
@@ -35,14 +37,15 @@ PKG="org.flaxandteal.greasan"
 # (licensing), so it is built on-device (tbx-v2 → FTS5 sidecar) instead.
 HEADS=(wiktionary-v2-full macbain-v2 gramadan-forms-v2 place-v2 concept-v2 example-tatoeba-v2 example-gaois-v2 example-udt-v2 person-v2 note-v2 layer-v2)
 
-INSTALL=0; LAUNCH=0; DEBUG=0; REZIP=1; RELEASE=0; DUCK=0; BASE_ONLY=0; DEVICE=""
+INSTALL=0; LAUNCH=0; DEBUG=0; REZIP=1; RELEASE=0; DUCK=1; BASE_ONLY=0; DEVICE=""
 while [ $# -gt 0 ]; do
   case "$1" in
     --install)  INSTALL=1 ;;
     --launch)   LAUNCH=1 ;;
     --debug)    DEBUG=1 ;;
     --release)  RELEASE=1 ;;
-    --duck)     DUCK=1 ;;
+    --duck)     DUCK=1 ;;   # accepted for back-compat; duck is now the default
+    --sqlite)   DUCK=0 ;;   # opt out to the v2-emit head engine (head.sqlite reads)
     --base)     BASE_ONLY=1 ;;
     --no-rezip) REZIP=0 ;;
     --device)   DEVICE="${2:?--device needs a serial}"; shift ;;
@@ -131,12 +134,15 @@ fi
 # nav-server is a debug-only unauthenticated localhost control port (127.0.0.1:8787)
 # - NEVER ship it in a public release. --release omits it; local/dev builds keep it
 # for the tour probe. See Cargo.toml.
-# v2-duck implies v2-emit (Cargo: v2-duck = ["v2-emit", ...]); it swaps the read
-# path onto DuckReader/Parquet. nav-server stays a debug-only add-on either way.
-BASE="v2-emit"; [ $DUCK -eq 1 ] && BASE="v2-duck"
+# v2-duck (DuckReader/Parquet read path) is the default (Cargo `default`);
+# v2-duck implies v2-emit (Cargo: v2-duck = ["v2-emit", ...]). --sqlite (DUCK=0)
+# opts back to the head engine, which needs --no-default-features to drop the
+# v2-duck default. nav-server stays a debug-only add-on either way.
+BASE="v2-duck"; [ $DUCK -eq 0 ] && BASE="v2-emit"
 FEATURES="$BASE,nav-server"
 [ $RELEASE -eq 1 ] && FEATURES="$BASE"
 BUILD_ARGS=(--apk --features "$FEATURES" --target aarch64)
+[ $DUCK -eq 0 ] && BUILD_ARGS=(--apk --no-default-features --features "$FEATURES" --target aarch64)
 [ $DEBUG -eq 1 ] && BUILD_ARGS+=(--debug)
 # Base config (tauri.conf.json) ships only core metadata + basemap. The full data
 # set (11 heads + pagefind) lives in tauri.full.conf.json and is overlaid in for

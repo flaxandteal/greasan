@@ -66,10 +66,12 @@ duckdb = { version = "1", features = ["bundled", "json", "parquet"], optional = 
 greasan-gramadan = { path = "../../crates/greasan-gramadan", optional = true }
 
 [features]
-# v2-emit is the shipping build now that the v1 ros-madair-core path is retired:
-# it pulls in the v2 read stack (`v2`) + the emitter. v2-duck (DuckDB+Parquet)
-# stays opt-in for the full APK; nav-server is never in a public release.
-default = ["v2-emit"]
+# v2-duck (DuckDB+Parquet) is the primary read path: the duck read path is
+# runtime- and device-verified, so it's the default. It pulls in v2-emit (head
+# writer) + the v2 read stack transitively. A head-engine-only build (head.sqlite
+# reads, no duckdb) is still available via `--no-default-features --features v2-emit`
+# (see build-apk.sh --sqlite). nav-server is never in a public release.
+default = ["v2-duck"]
 v2 = [
     "dep:ros-madair-read",
     "dep:ros-madair-format",
