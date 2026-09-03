@@ -206,7 +206,6 @@ fn layers_dir<R: Runtime>(app: &AppHandle<R>) -> Result<PathBuf, String> {
 /// This device's Ed25519 signing-identity path (SSH-host-key style: minted on
 /// first use, reused forever). One identity per install signs every head it
 /// builds - so a tester can tell "a head I built" from a swapped forgery.
-#[cfg(feature = "v2-emit")]
 #[allow(dead_code)] // v2-duck signing path only (unused in the v2-emit build)
 fn signing_key_path<R: Runtime>(app: &AppHandle<R>) -> Result<PathBuf, String> {
     let app_data = app
@@ -221,7 +220,6 @@ fn signing_key_path<R: Runtime>(app: &AppHandle<R>) -> Result<PathBuf, String> {
 /// (`graphs/resource_models/`, `business_data/`, `reference_data/`, `manifest.json`)
 /// back onto disk so the emitter can stream it. Unlike `extract_built_archive_sync`
 /// it has no desktop zip-unpacking side effect.
-#[cfg(feature = "v2-emit")]
 fn extract_tar_gz_verbatim(bytes: &[u8], dest: &Path) -> Result<(), String> {
     let decoder = GzDecoder::new(bytes);
     let mut archive = tar::Archive::new(decoder);
@@ -256,7 +254,6 @@ fn extract_tar_gz_verbatim(bytes: &[u8], dest: &Path) -> Result<(), String> {
 
 /// The graph id whose `business_data/<id>.json` is largest - the corpus graph
 /// shipped as the head's `graph.json`.
-#[cfg(feature = "v2-emit")]
 fn primary_graph_id(src: &Path) -> Result<String, String> {
     let bd = src.join("business_data");
     let mut best: Option<(u64, String)> = None;
@@ -279,7 +276,6 @@ fn primary_graph_id(src: &Path) -> Result<String, String> {
 
 /// Copy any `pagefind-*.zip` indices bundled beside the prebuild into the head
 /// dir. (Absent for a bare prebuild; present if the packager bundled search.)
-#[cfg(feature = "v2-emit")]
 fn copy_pagefind_indices(src: &Path, dest: &Path) {
     if let Ok(entries) = std::fs::read_dir(src) {
         for e in entries.flatten() {
@@ -303,7 +299,6 @@ fn copy_pagefind_indices(src: &Path, dest: &Path) {
 /// the finished JSON file. Output is byte-identical to the monolithic path:
 /// `append_records_csv` threads the ResourceID dedup across batches, so RIDs
 /// (and thus UUIDs) and resource order match exactly.
-#[cfg(feature = "v2-emit")]
 fn stream_tbx_v2_build(
     out_dir: &Path,
     graph: &StaticGraph,
@@ -452,7 +447,6 @@ fn stream_tbx_v2_build(
         // create_dir_all's out_dir; it never clears it), so on-device search keeps
         // its bm25 index. emit_parquet has no fine-grained progress callback, so the
         // bar advances coarsely across this phase rather than per-tick.
-        #[cfg(feature = "v2-duck")]
         {
             let cfg_by_graph: std::collections::HashMap<String, ros_madair_emit::ClusterConfig> =
                 std::collections::HashMap::new();
@@ -485,27 +479,6 @@ fn stream_tbx_v2_build(
             // models) - no hand-crafted stub. The head is signed by the caller,
             // after this returns, so the read side can verify / warn on enable.
             report("indexing", 0.97);
-        }
-        #[cfg(not(feature = "v2-duck"))]
-        {
-            // The sqlite head emit reports ~100 Streaming{done,total} ticks; animate
-            // the bar across 0.70..0.97 instead of parking at one value.
-            let mut on_progress = |p: ros_madair_emit::EmitProgress| {
-                if let ros_madair_emit::EmitProgress::Streaming { done, total } = p {
-                    let frac = if total > 0 { done as f64 / total as f64 } else { 0.0 };
-                    report("indexing", 0.70 + 0.27 * frac);
-                }
-                std::ops::ControlFlow::Continue(())
-            };
-            ros_madair_emit::emit_with_progress(
-                src.to_str().ok_or("non-utf8 prebuild path")?,
-                out_dir.to_str().ok_or("non-utf8 out path")?,
-                "https://example.org/",
-                &ros_madair_emit::EmitOptions::default(),
-                &ros_madair_emit::default_registry(),
-                &mut on_progress,
-            )
-            .map_err(|e| format!("emit: {e}"))?;
         }
         stamp(format!("emit: {} ms", t.elapsed().as_millis()));
 
@@ -633,12 +606,6 @@ pub async fn build_layer<R: Runtime>(
             // layer), with gramadan declension enrichment - the on-device
             // counterpart of the Python pipeline. Same parse+enrich+build as
             // "tbx", but emits a v2 head instead of v1 flat artifacts.
-            #[cfg(not(feature = "v2-emit"))]
-            {
-                update_status_failed(&app, &id_clone, "tbx-v2 requires a v2-emit build".into());
-                return;
-            }
-            #[cfg(feature = "v2-emit")]
             {
                 // Per-stage timing. All lines go to logcat under tag `greasan`
                 // (via logcat_error) so a full-Téarma run can be profiled from
@@ -710,7 +677,6 @@ pub async fn build_layer<R: Runtime>(
                     // Sign the freshly-emitted head in place (L0): attestations.json
                     // beside it, keyed by this device's identity. Only the Parquet
                     // path here carries the self-describing manifest sign_head needs.
-                    #[cfg(feature = "v2-duck")]
                     {
                         report("signing", 0.98);
                         let key = signing_key_path(&app_cb)?;
@@ -741,16 +707,6 @@ pub async fn build_layer<R: Runtime>(
             // which the app loads natively via currentV2HeadDirs - NOT the v1
             // flat artifacts build_to_memory writes. Emit is memory-bounded (see
             // HANDOFF-streaming-build.md); requires the v2-emit build.
-            #[cfg(not(feature = "v2-emit"))]
-            {
-                update_status_failed(
-                    &app,
-                    &id_clone,
-                    "prebuild-v2 requires a v2-emit build".into(),
-                );
-                return;
-            }
-            #[cfg(feature = "v2-emit")]
             {
                 update_status(&app, &id_clone, "extracting", 0.25);
                 let src = output_dir_clone.join(".prebuild-src");

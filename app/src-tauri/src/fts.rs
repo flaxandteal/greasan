@@ -12,8 +12,6 @@
 //! description) the hydration path already exposes. A layer's text engine is a
 //! property of how it was built; the search orchestrator dispatches per layer.
 
-#![cfg(feature = "v2")]
-
 use std::path::Path;
 
 use rusqlite::{Connection, OpenFlags};
@@ -30,13 +28,11 @@ const FTS_SCHEMA: &str = "\
 
 /// Incremental FTS5 index writer - fed one resource at a time from the build
 /// loop (where pagefind used to be), so the full resource set is never held.
-#[cfg(feature = "v2-emit")]
 pub struct FtsBuilder {
     conn: Connection,
     n: usize,
 }
 
-#[cfg(feature = "v2-emit")]
 impl FtsBuilder {
     /// Create a fresh `search.sqlite` in `dir` with the FTS5 table + an open txn.
     pub fn create(dir: &Path) -> Result<Self, String> {
@@ -186,7 +182,7 @@ pub fn v2_search_fts(
     Ok(hits)
 }
 
-#[cfg(all(test, feature = "v2-emit"))]
+#[cfg(test)]
 mod tests {
     use super::*;
     #[test]

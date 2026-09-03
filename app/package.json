@@ -15,7 +15,7 @@
     "test:watch": "vitest",
     "tauri": "tauri",
     "tauri:dev": "tauri dev",
-    "tauri:dev:desktop": "tauri dev --features v2-emit,nav-server",
+    "tauri:dev:desktop": "tauri dev --features nav-server",
     "tauri:build": "npm run build && tauri build",
     "postinstall": "node scripts/install-pagefind.js"
   },

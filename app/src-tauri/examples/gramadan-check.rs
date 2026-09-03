@@ -84,7 +84,7 @@ fn main() {
         let g = load_graph(d);
         if g.functions_x_graphs.as_ref().is_some_and(|v| !v.is_empty()) { Some(Arc::new(g)) } else { None }
     }).collect();
-    let composed = LayeredGraph::over(base, overlays);
+    let composed = LayeredGraph::new(base, overlays);
 
     let mut registry = alizarin_core::default_functions_registry();
     greasan_gramadan::register(&mut registry, build_vocab(&dirs));

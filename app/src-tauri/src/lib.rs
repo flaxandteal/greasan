@@ -10,14 +10,12 @@ mod basemap;
 /// Debug-only localhost navigation channel (adb-driven). `nav-server` feature.
 #[cfg(feature = "nav-server")]
 mod navserver;
-/// v2 static-assets pilot (ros-madair-query + SQLite head + native tile
-/// hydration). Off by default; `--features v2`.
-#[cfg(feature = "v2")]
+/// v2 static-assets stack (ros-madair-query + DuckDB/Parquet read + native tile
+/// hydration). The only read path.
 mod v2;
 
 /// First-run offline setup: unpack bundled heads + Pagefind zips into app-data.
-/// Part of the self-contained offline build; v2-gated (only the v2 path uses it).
-#[cfg(feature = "v2")]
+/// Part of the self-contained offline build.
 mod offline;
 
 /// Android JNI context bridge - initializes `ndk_context` from tao's live
@@ -30,8 +28,7 @@ mod android_ctx;
 mod fg_service;
 
 /// SQLite FTS5 full-text sidecar for on-device-built layers (Téarma). Replaces
-/// pagefind on the tbx-v2 path - seconds, not ~40 min. v2-gated (needs rusqlite).
-#[cfg(feature = "v2")]
+/// pagefind on the tbx-v2 path - seconds, not ~40 min.
 mod fts;
 
 use std::collections::HashMap;
@@ -53,7 +50,6 @@ pub fn run() {
             navserver::start(_app.handle().clone());
             // DEBUG: on-device emit memory measurement, gated by a pushed marker
             // file; inert in production. See HANDOFF-streaming-build.md.
-            #[cfg(feature = "v2")]
             v2::maybe_run_emit_measurement(_app.handle().clone());
             Ok(())
         })
@@ -66,21 +62,6 @@ pub fn run() {
         .register_uri_scheme_protocol("pfzip", pagefind_zip::handle_request)
         .register_uri_scheme_protocol("rmindex", index_files::handle_request);
 
-    // `generate_handler!` takes a plain path list (no cfg attrs inside), so the
-    // two handler sets are spelled out; the non-v2 list is unchanged.
-    #[cfg(not(feature = "v2"))]
-    let builder = builder.invoke_handler(tauri::generate_handler![
-        builder_plugin::build_layer,
-        builder_plugin::get_layer_status,
-        builder_plugin::list_layers,
-        builder_plugin::list_v2_layers,
-        builder_plugin::check_local_index,
-        builder_plugin::remove_layer_files,
-        builder_plugin::layer_has_pagefind,
-        basemap::basemap_range,
-        basemap::basemap_available,
-    ]);
-    #[cfg(feature = "v2")]
     let builder = builder.invoke_handler(tauri::generate_handler![
         builder_plugin::build_layer,
         builder_plugin::get_layer_status,

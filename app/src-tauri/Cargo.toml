@@ -39,78 +39,57 @@ unicode-normalization = "0.1"
 # The native read path: hydration, tile recovery, manifest loading. Replaces the
 # hand-rolled dict/spine/fragment_dir/chunks join and the msgpack read loop that
 # used to live in v2.rs.
-ros-madair-read = { path = "../../../magic/RosMadair-sandbox-parquet/crates/ros-madair-read", optional = true }
+ros-madair-read = { path = "../../../magic/RosMadair-sandbox-parquet/crates/ros-madair-read" }
 # The artifact format types - notably `Manifest.handlers`, which is what makes
 # the registry below derivable instead of guessable.
-ros-madair-format = { path = "../../../magic/RosMadair-sandbox-parquet/crates/ros-madair-format", optional = true }
+ros-madair-format = { path = "../../../magic/RosMadair-sandbox-parquet/crates/ros-madair-format" }
 # The single source of the extension-type registry. We no longer hand-build one
 # from alizarin-clm-core: the registry is rebuilt from the handler set the
 # *manifest declares*, so an emit/query registry mismatch fails loudly instead of
 # silently returning zero rows.
-ros-madair-handlers = { path = "../../../magic/RosMadair-sandbox-parquet/crates/ros-madair-handlers", optional = true }
-ros-madair-query = { path = "../../../magic/RosMadair-sandbox-parquet/crates/ros-madair-query", optional = true }
-rusqlite = { version = "0.32", features = ["bundled"], optional = true }
+ros-madair-handlers = { path = "../../../magic/RosMadair-sandbox-parquet/crates/ros-madair-handlers" }
+ros-madair-query = { path = "../../../magic/RosMadair-sandbox-parquet/crates/ros-madair-query" }
+rusqlite = { version = "0.32", features = ["bundled"] }
 # Regeneration only (`v2-emit`) - see examples/regen-macbain-v2.rs. Emitting from
 # *this* workspace keeps us off the sandbox's target/ lock and Cargo.lock, which
 # `cargo run -p ros-madair-emit --manifest-path <sandbox>` would take.
-ros-madair-emit = { path = "../../../magic/RosMadair-sandbox-parquet/crates/ros-madair-emit", optional = true }
+ros-madair-emit = { path = "../../../magic/RosMadair-sandbox-parquet/crates/ros-madair-emit" }
 # --- DuckDB+Parquet substrate (migration, see HANDOFF-substrate-migration-and-mobile.md) ---
 # ros-madair-duck compiles the ros-madair-query IR to DuckDB SQL over tile-row
 # Parquet. `duckdb` is the native binding; bundled+json+parquet static-link the
 # amalgamation + the parquet reader so read_parquet works OFFLINE (no INSTALL).
-ros-madair-duck = { path = "../../../magic/RosMadair-sandbox-parquet/crates/ros-madair-duck", optional = true }
-duckdb = { version = "1", features = ["bundled", "json", "parquet"], optional = true }
+ros-madair-duck = { path = "../../../magic/RosMadair-sandbox-parquet/crates/ros-madair-duck" }
+duckdb = { version = "1", features = ["bundled", "json", "parquet"] }
 # The gramadan Derive provider: generates the `forms` nodegroup on demand from
 # gramadan-rs. Registered into the FunctionsRegistry the duck hydrate path runs,
 # so a computed layer's presence spine materialises paradigm forms JIT.
-greasan-gramadan = { path = "../../crates/greasan-gramadan", optional = true }
+greasan-gramadan = { path = "../../crates/greasan-gramadan" }
 
 [features]
-# v2-duck (DuckDB+Parquet) is the primary read path: the duck read path is
-# runtime- and device-verified, so it's the default. It pulls in v2-emit (head
-# writer) + the v2 read stack transitively. A head-engine-only build (head.sqlite
-# reads, no duckdb) is still available via `--no-default-features --features v2-emit`
-# (see build-apk.sh --sqlite). nav-server is never in a public release.
-default = ["v2-duck"]
-v2 = [
-    "dep:ros-madair-read",
-    "dep:ros-madair-format",
-    "dep:ros-madair-handlers",
-    "dep:ros-madair-query",
-    "dep:rusqlite",
-]
-# The DuckDB+Parquet read path (migration in progress). Builds on v2-emit (the
-# real app feature set) so it also exercises the app's emit calls against the
-# parquet emit crate; adds the native duckdb build + ros-madair-duck alongside.
-v2-duck = ["v2-emit", "dep:ros-madair-duck", "dep:duckdb", "dep:greasan-gramadan"]
-v2-emit = ["v2", "dep:ros-madair-emit"]
+# The DuckDB+Parquet read path is the ONLY read path now (the sqlite head engine
+# was removed). Its whole stack - ros-madair-read/format/handlers/query/emit/duck,
+# duckdb, greasan-gramadan, rusqlite (FTS sidecar) - is a non-optional dependency,
+# so there are no v2/v2-emit/v2-duck feature toggles left to gate it.
+default = []
 # Debug-only localhost navigation channel for deterministic driving (see
 # src/navserver.rs). Never enable for a public release.
 nav-server = []
 
 [[example]]
 name = "regen-macbain-v2"
-required-features = ["v2-emit"]
 
 [[example]]
 name = "regen-layer-v2"
-required-features = ["v2-emit"]
 
 [[example]]
 name = "regen-parquet-v2"
-required-features = ["v2-emit"]
 
 [[example]]
 name = "duck-probe"
-required-features = ["v2-duck"]
 
 [[example]]
 name = "geo-probe"
-required-features = ["v2-duck"]
 
-[[example]]
-name = "verify-bunamo-compose"
-required-features = ["v2"]
 
 [target.'cfg(target_os = "android")'.dependencies]
 jni = "0.21"
@@ -135,8 +114,4 @@ alizarin-core = { path = "../../../magic/alizarin/crates/alizarin-core" }
 
 [[example]]
 name = "hydrate-probe"
-required-features = ["v2-duck"]
 
-[[example]]
-name = "compose-probe"
-required-features = ["v2-duck"]

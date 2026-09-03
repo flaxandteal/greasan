@@ -21,7 +21,7 @@ step "STEP 2/6: build wiktionary package (writes data/prebuild-wiktionary, no fo
 node scripts/build-wiktionary-layer.mjs
 
 step "STEP 3/6: regen bundled wiktionary-v2-full head from the prebuild"
-cargo run --release --example regen-layer-v2 --features v2-emit \
+cargo run --release --example regen-layer-v2 \
   --manifest-path app/src-tauri/Cargo.toml -- \
   data/prebuild-wiktionary data/wiktionary-v2-full
 
