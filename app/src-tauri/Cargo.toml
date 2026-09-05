@@ -36,10 +36,6 @@ unicode-normalization = "0.1"
 # NOTE: alizarin-core-v2 alias removed - line 30 `alizarin-core` now points at
 # the sandbox core directly, so the app and v2 stack share ONE core (.122).
 # v2.rs uses `alizarin_core` (not the old `alizarin_core_v2` alias).
-# The native read path: hydration, tile recovery, manifest loading. Replaces the
-# hand-rolled dict/spine/fragment_dir/chunks join and the msgpack read loop that
-# used to live in v2.rs.
-ros-madair-read = { path = "../../../magic/RosMadair-sandbox-parquet/crates/ros-madair-read" }
 # The artifact format types - notably `Manifest.handlers`, which is what makes
 # the registry below derivable instead of guessable.
 ros-madair-format = { path = "../../../magic/RosMadair-sandbox-parquet/crates/ros-madair-format" }

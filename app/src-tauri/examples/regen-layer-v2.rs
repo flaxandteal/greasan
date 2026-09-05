@@ -49,27 +49,30 @@ fn main() {
     std::fs::remove_dir_all(&out_dir).ok();
     std::fs::create_dir_all(&out_dir).expect("create out dir");
 
-    let summary = ros_madair_emit::emit(
+    let cfg: std::collections::HashMap<String, ros_madair_emit::ClusterConfig> =
+        std::collections::HashMap::new();
+    let summary = ros_madair_emit::emit_parquet(
         data_dir.to_str().expect("utf-8 data dir"),
         out_dir.to_str().expect("utf-8 out dir"),
-        // Same base_uri as regen-macbain-v2: the layers must agree on it or
-        // `Layers::open` refuses to compose them.
+        // Same base_uri as regen-macbain-v2: the layers must agree on it to compose.
         "https://example.org/",
+        &ros_madair_emit::default_registry(),
+        &cfg,
     )
     .expect("emit");
 
     std::fs::copy(&graph_src, out_dir.join("graph.json")).expect("copy graph.json");
 
+    let resources: usize = summary.iter().map(|m| m.resources).sum();
+    let tiles: usize = summary.iter().map(|m| m.tiles).sum();
+    let edges: usize = summary.iter().map(|m| m.edges).sum();
     println!(
-        "v2 head written to {} - snapshot {}, {} models, {} resources, {} tiles, {} chunks, \
-         head.sqlite {} bytes; graph.json = {}",
+        "v2 parquet head written to {} - {} models, {} resources, {} tiles, {} edges; graph.json = {}",
         out_dir.display(),
-        summary.snapshot_id,
-        summary.models,
-        summary.resources,
-        summary.tiles,
-        summary.chunks,
-        summary.head_db_bytes,
+        summary.len(),
+        resources,
+        tiles,
+        edges,
         graph_id,
     );
 }

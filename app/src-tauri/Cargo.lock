@@ -2007,7 +2007,6 @@ dependencies = [
  "ros-madair-format",
  "ros-madair-handlers",
  "ros-madair-query",
- "ros-madair-read",
  "rusqlite",
  "serde",
  "serde_json",
@@ -4063,8 +4062,9 @@ version = "0.1.0-alpha.15"
 dependencies = [
  "alizarin-core",
  "duckdb",
+ "ros-madair-format",
+ "ros-madair-handlers",
  "ros-madair-query",
- "ros-madair-read",
  "serde_json",
 ]
 
@@ -4080,11 +4080,8 @@ dependencies = [
  "geojson",
  "getrandom 0.2.17",
  "parquet",
- "rmp-serde",
  "ros-madair-format",
  "ros-madair-handlers",
- "ros-madair-query",
- "rusqlite",
  "serde",
  "serde_json",
  "sha2",
@@ -4094,15 +4091,14 @@ dependencies = [
 name = "ros-madair-format"
 version = "0.1.0-alpha.15"
 dependencies = [
- "alizarin-core",
  "base64 0.22.1",
  "bs58",
  "ed25519-dalek",
  "getrandom 0.2.17",
- "rmp-serde",
  "ros-madair-handlers",
  "serde",
  "serde_json",
+ "sha2",
 ]
 
 [[package]]
@@ -4122,19 +4118,6 @@ dependencies = [
  "alizarin-core",
  "getrandom 0.2.17",
  "serde",
- "serde_json",
-]
-
-[[package]]
-name = "ros-madair-read"
-version = "0.1.0-alpha.15"
-dependencies = [
- "alizarin-core",
- "rmp-serde",
- "ros-madair-format",
- "ros-madair-handlers",
- "ros-madair-query",
- "rusqlite",
  "serde_json",
 ]
 

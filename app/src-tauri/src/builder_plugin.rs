@@ -740,9 +740,19 @@ pub async fn build_layer<R: Runtime>(
                 // Emit is CPU-heavy + blocking (~seconds for a small layer, tens
                 // of minutes for tearma); keep it off the async worker thread.
                 let emit_res = tokio::task::spawn_blocking(move || {
-                    // Stringify the error inside the closure: emit's
-                    // Box<dyn Error> is not Send and can't cross spawn_blocking.
-                    ros_madair_emit::emit(&src_s, &out_s, &base_uri).map_err(|e| e.to_string())
+                    // Stringify the error inside the closure: the emit error is
+                    // not Send and can't cross spawn_blocking. Parquet head (duck
+                    // read path) - the sqlite `emit` was retired with the head engine.
+                    let cfg: std::collections::HashMap<String, ros_madair_emit::ClusterConfig> =
+                        std::collections::HashMap::new();
+                    ros_madair_emit::emit_parquet(
+                        &src_s,
+                        &out_s,
+                        &base_uri,
+                        &ros_madair_emit::default_registry(),
+                        &cfg,
+                    )
+                    .map_err(|e| e.to_string())
                 })
                 .await;
                 match emit_res {

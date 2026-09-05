@@ -133,7 +133,18 @@ fn cached_layered_graph(
 /// `registry_from_declarations` errors loudly if the artifact declares a handler
 /// this build cannot provide. That failure is the feature.
 fn registry(head_dir: &Path) -> Result<ExtensionTypeRegistry, String> {
-    let manifest = ros_madair_read::load_manifest(head_dir).map_err(|e| e.to_string())?;
+    // Load `<head_dir>/manifest.json` (the format crate's layout/compatibility
+    // contract). Absent is legal - see the fallback arm below. (This inlines what
+    // the retired ros-madair-read::load_manifest did; the read crate folded into
+    // ros-madair-duck and the app reads the manifest directly now.)
+    let manifest_path = head_dir.join("manifest.json");
+    let manifest: Option<ros_madair_format::Manifest> = match std::fs::read(&manifest_path) {
+        Ok(bytes) => {
+            Some(serde_json::from_slice(&bytes).map_err(|e| format!("parse manifest: {e}"))?)
+        }
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => None,
+        Err(e) => return Err(format!("read manifest {}: {e}", manifest_path.display())),
+    };
     match manifest {
         Some(m) if !m.handlers.is_empty() => {
             ros_madair_handlers::registry_from_declarations(&m.handlers)
@@ -631,7 +642,10 @@ pub fn v2_cited_by(
         .map(|n| n.nodeid.clone())
         .ok_or_else(|| format!("v2_cited_by: unknown alias '{node_path}'"))?;
     let dirs: Vec<&Path> = head_dirs.iter().map(|d| Path::new(d.as_str())).collect();
-    ros_madair_duck::cited_by(&dirs, &node_id, &uri).map_err(|e| e.to_string())
+    // `cited_by` is now a DuckReader method (the free fn was retired when
+    // ros-madair-read folded into ros-madair-duck). Open the layer set and query.
+    let duck = ros_madair_duck::DuckReader::open_layers(&dirs).map_err(|e| e.to_string())?;
+    duck.cited_by(&node_id, &uri).map_err(|e| e.to_string())
 }
 
 // ---------------------------------------------------------------------------
@@ -885,14 +899,18 @@ pub fn maybe_run_emit_measurement(app: tauri::AppHandle) {
         let _ = std::fs::remove_file(base.join("RUN")); // one-shot
         let prebuild_s = prebuild.to_string_lossy();
         let out_s = out.to_string_lossy();
+        let cfg_by_graph: std::collections::HashMap<String, ros_madair_emit::ClusterConfig> =
+            std::collections::HashMap::new();
         let mut on_progress =
             |_p: ros_madair_emit::EmitProgress| std::ops::ControlFlow::Continue(());
-        let summary = match ros_madair_emit::emit_with_progress(
+        // Parquet emit (duck read path); the sqlite emit_with_progress/EmitOptions
+        // were retired with the head engine.
+        let summary = match ros_madair_emit::emit_parquet_with_progress(
             &prebuild_s,
             &out_s,
             "https://example.org/",
-            &ros_madair_emit::EmitOptions::default(),
             &ros_madair_emit::default_registry(),
+            &cfg_by_graph,
             &mut on_progress,
         ) {
             Ok(s) => serde_json::to_string(&s)
