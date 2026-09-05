@@ -216,6 +216,31 @@ fn graph_path(head_dir: &str) -> PathBuf {
     Path::new(head_dir).join("graph.json")
 }
 
+/// Keep only head dirs that actually carry parquet tiles. A layer can be
+/// registered (offline.rs lists every corpus unconditionally) yet have no data
+/// on disk - mid-install, or an on-device-only layer like Téarma that was never
+/// built in this checkout. The duck reader errors hard on a `tiles_*.parquet`
+/// glob that matches nothing, which would fail EVERY composed read; skip such a
+/// layer (with a log) so the rest of the stack still resolves and hydrates.
+fn present_layer_dirs(head_dirs: Vec<String>) -> Vec<String> {
+    head_dirs
+        .into_iter()
+        .filter(|d| {
+            let has_tiles = std::fs::read_dir(d).ok().is_some_and(|rd| {
+                rd.flatten().any(|e| {
+                    let n = e.file_name();
+                    let n = n.to_string_lossy();
+                    n.starts_with("tiles_") && n.ends_with(".parquet")
+                })
+            });
+            if !has_tiles {
+                logcat_error(&format!("[v2] skipping layer with no parquet tiles: {d}"));
+            }
+            has_tiles
+        })
+        .collect()
+}
+
 /// Parquet path (v2-duck): tiles from the `data` column via DuckReader::hydrate,
 /// reusing the storage-agnostic tile→tree half. No spatial needed.
 #[tauri::command]
@@ -321,6 +346,7 @@ pub fn v2_query_layers(_head_dirs: Vec<String>, _ir: Value) -> Result<Value, Str
 /// `closure.json` era so the TS wrapper and `loadEntryV2` need no edits.
 #[tauri::command]
 pub fn v2_closure(head_dirs: Vec<String>) -> Result<HashMap<String, String>, String> {
+    let head_dirs = present_layer_dirs(head_dirs);
     use ros_madair_duck::{DuckReader, SpatialSource};
     let mut map: HashMap<String, String> = HashMap::new();
     for dir in &head_dirs {
@@ -354,6 +380,7 @@ pub fn v2_descriptors(
     head_dirs: Vec<String>,
     uris: Vec<String>,
 ) -> Result<HashMap<String, String>, String> {
+    let head_dirs = present_layer_dirs(head_dirs);
     use ros_madair_duck::{DuckReader, SpatialSource};
     let mut out: HashMap<String, String> = HashMap::new();
     for dir in &head_dirs {
@@ -391,6 +418,7 @@ pub fn v2_search_display(
     pos_node: String,
     dialect_node: String,
 ) -> Result<HashMap<String, SearchDisplay>, String> {
+    let head_dirs = present_layer_dirs(head_dirs);
     use ros_madair_duck::{DuckReader, SpatialSource};
     let mut out: HashMap<String, SearchDisplay> = HashMap::new();
     for dir in &head_dirs {
@@ -430,6 +458,10 @@ pub fn v2_search_display(
 /// the `data` column. (Needs each dataset dir to carry graph.json; slice 6.)
 #[tauri::command]
 pub fn v2_hydrate_layers(head_dirs: Vec<String>, resource_id: String, language: Option<String>) -> Result<Value, String> {
+    // Drop registered-but-dataless layers (e.g. an on-device-only Téarma not
+    // built here) before composing - hydrate_layers opens every dir's parquet
+    // and errors hard on one with no tiles, which would fail the whole entry.
+    let head_dirs = present_layer_dirs(head_dirs);
     let Some(base) = head_dirs.first() else {
         return Err("v2_hydrate_layers: no layers given".to_string());
     };
@@ -483,6 +515,7 @@ pub fn v2_hydrate_layers(head_dirs: Vec<String>, resource_id: String, language: 
 /// idempotent (each cache no-ops once warm).
 #[tauri::command]
 pub fn v2_prewarm(head_dirs: Vec<String>) -> Result<(), String> {
+    let head_dirs = present_layer_dirs(head_dirs);
     let dirs: Vec<&Path> = head_dirs.iter().map(|d| Path::new(d.as_str())).collect();
     if let Some(base) = head_dirs.first() {
         let base_graph = load_graph_cached(&graph_path(base))?;
