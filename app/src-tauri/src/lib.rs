@@ -1,3 +1,15 @@
+// Perf instrumentation gated on the `cmdperf` cargo feature. When the feature is
+// OFF the macro expands to nothing, so its arguments (including any `__t` timer
+// reads) are never compiled - zero cost, no unused bindings. Pair each call with a
+// `#[cfg(feature = "cmdperf")] let __t = std::time::Instant::now();` at the top of
+// the scope. Enable with `tauri dev --features cmdperf` (npm: `tauri:dev:perf`).
+#[cfg(feature = "cmdperf")]
+#[macro_export]
+macro_rules! cmdperf { ($($arg:tt)*) => { eprintln!($($arg)*) }; }
+#[cfg(not(feature = "cmdperf"))]
+#[macro_export]
+macro_rules! cmdperf { ($($arg:tt)*) => {}; }
+
 mod builder_plugin;
 mod index_files;
 mod pagefind_zip;
@@ -79,7 +91,6 @@ pub fn run() {
         v2::v2_prewarm,
         v2::v2_closure,
         v2::v2_descriptors,
-        v2::v2_search_display,
         fts::v2_search_fts,
         v2::v2_cited_by,
         v2::v2_geo_points,

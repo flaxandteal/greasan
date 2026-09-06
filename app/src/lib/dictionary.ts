@@ -4,10 +4,11 @@ import { getPagefind, resetPagefind, type PagefindInstance } from './pagefind';
 import { FAMILIES, DEFAULT_FAMILY, type FamilyConfig, type FamilyId } from './family';
 import { diagStart, diagEnd } from './diagnostics';
 import { loadEntryV2, enrichEntryV2 } from './dictionary-v2';
+export { warmClosure } from './dictionary-v2';
 // Live binding (store <-> dictionary is a lazy cycle: `currentEntry` is only read
 // at runtime inside loadEntryFlagged, never at module init, so it resolves).
 import { currentEntry } from './store';
-import { prepareOffline, prewarmLayers, descriptors, hydrateV2, citedBy, searchDisplay, searchFts } from './v2';
+import { prepareOffline, prewarmLayers, descriptors, hydrateV2, citedBy, searchFts } from './v2';
 
 let activeFamilyConfig: FamilyConfig = FAMILIES[DEFAULT_FAMILY];
 
@@ -494,7 +495,6 @@ export async function search(
       // The FTS index carries no dialect column, but every FTS-built layer is
       // Téarma, which is uniformly Irish → tag GA (matches the Pagefind builder's
       // hardcoded GA, and keeps Téarma headwords from being dimmed as non-GA).
-      // headword/POS get canonicalised from the head by searchDisplay below.
       resultSets.push(
         ftsHits.map(h => ({
           uri: h.uri,
@@ -539,29 +539,38 @@ export async function search(
       merged.push(r);
     }
 
-    // Canonical display from the COMPOSED heads - headword/POS/dialect come from
-    // the richest layer that owns each slug, not whichever Pagefind record won
-    // the per-layer cap + dedup. Fixes bare/duplicate rows leaking from the
-    // forms-only BuNaMo layer (no POS, dialect shown as raw "Irish"). Gloss is a
-    // tile, so it stays from Pagefind. Best-effort: falls through on error.
-    try {
-      const disp = await searchDisplay(currentV2HeadDirs(), merged.map((r) => r.uri));
-      for (const r of merged) {
-        const d = disp[r.uri];
-        if (!d) continue;
-        if (d.headword) r.headword = d.headword;
-        if (d.pos) r.pos = d.pos;
-        const code = dialectsToCode(d.dialects);
-        if (code) r.dialect = code;
-      }
-    } catch (err) {
-      console.warn('[dictionary] searchDisplay failed:', err);
-    }
+    // Rank machinery: a row's rank is how well its headword (ga) / gloss (en) matches
+    // the query, with a Gaeilge-first branch tiebreak (used for the final sort below).
+    // DISPLAY fields (headword / POS / dialect) come straight from the Pagefind index
+    // meta - search does NOT hit parquet, which is reserved for entry open (hydrate).
+    // The one bit of cross-layer canonicalisation that mattered, the shared-slug "G"
+    // dialect breadth, is already unioned above (branchesByUri), so no backend call.
+    const q = query.toLowerCase();
+    const qNorm = normQuery.toLowerCase();
+    const esc = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const wordReQ = new RegExp(`(^|[\\s-])${esc(q)}($|[\\s-])`);
+    const wordReNorm = new RegExp(`(^|[\\s-])${esc(qNorm)}($|[\\s-])`);
+    const wholeWord = (t: string): boolean =>
+      wordReQ.test(t) || wordReNorm.test(stripDiacritics(t));
+    const textTier = (r: EntrySummary): number => {
+      const t = (lang === 'en' ? r.gloss || '' : r.headword).toLowerCase();
+      if (t === q) return 0;
+      if (stripDiacritics(t) === qNorm) return 1;
+      if (demutMatchUris.has(r.uri) || r._formHit) return 2;
+      if (t.startsWith(q)) return 3;
+      if (stripDiacritics(t).startsWith(qNorm)) return 4;
+      if (wholeWord(t)) return 5;
+      return 6;
+    };
+    const branchPenalty = (r: EntrySummary): number => {
+      const branch = (r.dialect || '').split('.')[0].toUpperCase();
+      return branch === 'GA' || branch === 'G' ? 0 : 1;
+    };
+    const rank = (r: EntrySummary): number => textTier(r) * 2 + branchPenalty(r);
 
     // Normalise any residual raw language label to its branch code. Form-index
-    // (BuNaMo) hits carry a plain "Irish" in their Pagefind meta; if searchDisplay
-    // didn't canonicalise it, without this it would be dimmed as non-GA and badged
-    // "Irish" rather than shown as a Gaeilge (GA) result.
+    // (BuNaMo) hits carry a plain "Irish" in their Pagefind meta; without this it
+    // would be dimmed as non-GA and badged "Irish" rather than shown as a GA result.
     for (const r of merged) {
       if (r.dialect && !/^G/.test(r.dialect)) {
         r.dialect = dialectsToCode([r.dialect]) || r.dialect;
@@ -597,47 +606,6 @@ export async function search(
       bestByKey.set(key, keep);
     }
     merged = [...bestByKey.values()];
-
-    const q = query.toLowerCase();
-    const qNorm = normQuery.toLowerCase();
-    // Whole-word match: the query as a complete token in a multi-word / compound
-    // headword ("mór" in "cnoc mór"), accent-insensitive. Regexes built once, word
-    // boundaries = start/end/space/hyphen.
-    const esc = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    const wordReQ = new RegExp(`(^|[\\s-])${esc(q)}($|[\\s-])`);
-    const wordReNorm = new RegExp(`(^|[\\s-])${esc(qNorm)}($|[\\s-])`);
-    // Tier order: exact-with-accent > exact-up-to-accent > mutation-exact >
-    // prefix/compound-with-accent > prefix-up-to-accent > whole-word-in-headword >
-    // everything else (substring, gloss, inflected). exact-up-to-accent sits ABOVE
-    // the prefix tiers so a whole headword ("bó" searched as "bo") outranks a
-    // compound/prefix ("bo-…"). mutation-exact sits just below exact: if the user
-    // typed an inflected/mutated surface form ("tháinig") the lemma that owns it
-    // ("tar") is what they want, so lift it above prefix/substring/gloss noise.
-    const wholeWord = (t: string): boolean =>
-      wordReQ.test(t) || wordReNorm.test(stripDiacritics(t));
-    const textTier = (r: EntrySummary): number => {
-      const t = (lang === 'en' ? r.gloss || '' : r.headword).toLowerCase();
-      if (t === q) return 0;
-      if (stripDiacritics(t) === qNorm) return 1;
-      // Exact surface form the user typed - a stripped initial mutation
-      // ("tháinig") or an inflected form ("tiocfaidh") - resolves to its lemma.
-      // Lift it above prefix/substring/gloss noise.
-      if (demutMatchUris.has(r.uri) || r._formHit) return 2;
-      if (t.startsWith(q)) return 3;
-      if (stripDiacritics(t).startsWith(qNorm)) return 4;
-      if (wholeWord(t)) return 5;
-      return 6;
-    };
-    // Branch demotion: this is a Gaeilge-first dictionary, so within any text tier
-    // Scottish Gaelic / Manx-only entries sink below Irish. GA* (incl. GA.MUN /
-    // GA.ULS) and G (a slug spanning both branches, so Irish-carrying) stay up;
-    // GD / GV / uncoded drop. Keeps a Gaidhlig-only "fear" pronoun from topping
-    // the Irish noun. Subordinate to the text tier (a better match still wins).
-    const branchPenalty = (r: EntrySummary): number => {
-      const branch = (r.dialect || '').split('.')[0].toUpperCase();
-      return branch === 'GA' || branch === 'G' ? 0 : 1;
-    };
-    const rank = (r: EntrySummary): number => textTier(r) * 2 + branchPenalty(r);
 
     // Facet filters (drawer), applied BEFORE the 50-cap so hidden rows don't eat
     // slots. Phrase-hide is headword-search only (the user browses phrases via

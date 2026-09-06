@@ -44,6 +44,19 @@ export function resetV2Closure(): void {
   closureCache.clear();
 }
 
+/**
+ * Warm the closure cache for a head-dir stack in the background, so the FIRST
+ * entry open does not pay for it on the critical path. `v2_closure` opens a fresh
+ * cold DuckReader per layer dir and reads each concept catalog (~260ms/dir cold,
+ * ~2s across the full stack) - and `loadEntryV2` awaits it in a `Promise.all`
+ * alongside the hydrate, so until it is cached the visible entry is blocked on it.
+ * Fire-and-forget from bootstrap (idempotent; getClosure de-dupes by key). This is
+ * the closure-side sibling of the duck reader-pool prewarm.
+ */
+export function warmClosure(headDirs: string[]): void {
+  void getClosure(headDirs);
+}
+
 /** Unwrap a localized-string value `{<lang>:{value}}` (or a bare string) to text. */
 function localStr(v: unknown): string {
   if (v == null) return '';

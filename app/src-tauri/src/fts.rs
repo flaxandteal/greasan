@@ -133,6 +133,8 @@ pub fn v2_search_fts(
     field: String,
     limit: usize,
 ) -> Result<Vec<FtsHit>, String> {
+    #[cfg(feature = "cmdperf")]
+    let __t = std::time::Instant::now();
     let Some(match_expr) = build_fts_match(&query, &field) else {
         return Ok(Vec::new());
     };
@@ -179,6 +181,8 @@ pub fn v2_search_fts(
     let mut seen = std::collections::HashSet::new();
     hits.retain(|h| seen.insert(h.uri.clone()));
     hits.truncate(limit);
+    crate::cmdperf!("[cmdperf] v2_search_fts dirs={} field={field} q={:?} hits={} {}ms",
+        fts_dirs.len(), query, hits.len(), __t.elapsed().as_millis());
     Ok(hits)
 }
 

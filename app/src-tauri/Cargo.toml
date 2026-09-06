@@ -70,6 +70,10 @@ default = []
 # Debug-only localhost navigation channel for deterministic driving (see
 # src/navserver.rs). Never enable for a public release.
 nav-server = []
+# Per-command perf tracing: gates the `cmdperf!` macro + its `__t` timers (see
+# lib.rs). Off = zero overhead (macro expands to nothing). Enable for profiling
+# with `tauri dev --features cmdperf`.
+cmdperf = []
 
 [[example]]
 name = "regen-macbain-v2"

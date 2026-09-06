@@ -346,22 +346,15 @@ pub fn v2_query_layers(_head_dirs: Vec<String>, _ir: Value) -> Result<Value, Str
 /// `closure.json` era so the TS wrapper and `loadEntryV2` need no edits.
 #[tauri::command]
 pub fn v2_closure(head_dirs: Vec<String>) -> Result<HashMap<String, String>, String> {
+    #[cfg(feature = "cmdperf")]
+    let __t = std::time::Instant::now();
     let head_dirs = present_layer_dirs(head_dirs);
-    use ros_madair_duck::{DuckReader, SpatialSource};
-    let mut map: HashMap<String, String> = HashMap::new();
-    for dir in &head_dirs {
-        let catalog = Path::new(dir).join("concept_catalog.parquet");
-        if !catalog.is_file() {
-            continue;
-        }
-        let glob = format!("{dir}/tiles_*.parquet");
-        let duck = DuckReader::open_with(&glob, SpatialSource::None)
-            .map_err(|e| e.to_string())?
-            .with_catalog(&catalog.to_string_lossy())
-            .map_err(|e| e.to_string())?;
-        // Later dirs override earlier, matching the sqlite insert.
-        map.extend(duck.concept_labels().map_err(|e| e.to_string())?);
-    }
+    // Pooled + cached: hits the same reader pool + label cache `prewarm` warms, so
+    // after startup this is a cache hit rather than a fresh per-layer catalog read
+    // (which was ~2s cold across the full stack). Later dirs override earlier.
+    let dirs: Vec<&Path> = head_dirs.iter().map(|d| Path::new(d.as_str())).collect();
+    let map = ros_madair_duck::concept_labels(&dirs).map_err(|e| e.to_string())?;
+    crate::cmdperf!("[cmdperf] v2_closure dirs={} labels={} {}ms", head_dirs.len(), map.len(), __t.elapsed().as_millis());
     Ok(map)
 }
 
@@ -380,73 +373,15 @@ pub fn v2_descriptors(
     head_dirs: Vec<String>,
     uris: Vec<String>,
 ) -> Result<HashMap<String, String>, String> {
+    #[cfg(feature = "cmdperf")]
+    let __t = std::time::Instant::now();
+    #[cfg(feature = "cmdperf")]
+    let __nuris = uris.len();
     let head_dirs = present_layer_dirs(head_dirs);
-    use ros_madair_duck::{DuckReader, SpatialSource};
-    let mut out: HashMap<String, String> = HashMap::new();
-    for dir in &head_dirs {
-        let glob = format!("{dir}/tiles_*.parquet");
-        let duck = DuckReader::open_with(&glob, SpatialSource::None).map_err(|e| e.to_string())?;
-        for (uri, name) in duck.descriptors(&uris).map_err(|e| e.to_string())? {
-            out.entry(uri).or_insert(name);
-        }
-    }
-    Ok(out)
-}
-
-/// Canonical search-result display for a set of URIs, resolved from the COMPOSED
-/// head stack instead of trusting whichever layer's Pagefind meta happened to win
-/// the merge. headword = spine.display_name; part_of_speech + the entry-level
-/// dialect come from concept_tags -> vocab (both are references). Fixes bare /
-/// duplicate rows that leak from a forms-only layer (BuNaMo) when the rich layer's
-/// exact match is crowded past the per-layer result cap. Gloss is a tile, so it
-/// stays from Pagefind. First head (composition order) that has the resource wins,
-/// so the richest layer (wiktionary first) provides the display for shared slugs.
-#[derive(serde::Serialize, Default)]
-pub struct SearchDisplay {
-    pub headword: String,
-    pub pos: String,
-    pub dialects: Vec<String>,
-}
-
-/// Parquet path (v2-duck): headword from `descriptor_name`, POS + dialect labels
-/// from the per-nodegroup `concept_id` ⨝ concept catalog (DuckReader::search_display).
-/// First head (composition order) with a headword for a uri wins, as in sqlite.
-#[tauri::command]
-pub fn v2_search_display(
-    head_dirs: Vec<String>,
-    uris: Vec<String>,
-    pos_node: String,
-    dialect_node: String,
-) -> Result<HashMap<String, SearchDisplay>, String> {
-    let head_dirs = present_layer_dirs(head_dirs);
-    use ros_madair_duck::{DuckReader, SpatialSource};
-    let mut out: HashMap<String, SearchDisplay> = HashMap::new();
-    for dir in &head_dirs {
-        if uris.iter().all(|u| out.contains_key(u)) {
-            break;
-        }
-        let glob = format!("{dir}/tiles_*.parquet");
-        let mut duck = DuckReader::open_with(&glob, SpatialSource::None).map_err(|e| e.to_string())?;
-        let catalog = Path::new(dir).join("concept_catalog.parquet");
-        if catalog.is_file() {
-            duck = duck
-                .with_catalog(&catalog.to_string_lossy())
-                .map_err(|e| e.to_string())?;
-        }
-        let rows = duck
-            .search_display(&uris, &pos_node, &dialect_node)
-            .map_err(|e| e.to_string())?;
-        for (uri, row) in rows {
-            // Require a headword (matches the sqlite spine-hit contract); first
-            // head with the resource wins.
-            let Some(headword) = row.headword else { continue };
-            out.entry(uri).or_insert(SearchDisplay {
-                headword,
-                pos: row.pos.unwrap_or_default(),
-                dialects: row.dialects,
-            });
-        }
-    }
+    // Pooled reader reuse (warm after `prewarm`), first-wins per uri as before.
+    let dirs: Vec<&Path> = head_dirs.iter().map(|d| Path::new(d.as_str())).collect();
+    let out = ros_madair_duck::descriptors(&dirs, &uris).map_err(|e| e.to_string())?;
+    crate::cmdperf!("[cmdperf] v2_descriptors dirs={} uris={} {}ms", head_dirs.len(), __nuris, __t.elapsed().as_millis());
     Ok(out)
 }
 
@@ -461,6 +396,8 @@ pub fn v2_hydrate_layers(head_dirs: Vec<String>, resource_id: String, language: 
     // Drop registered-but-dataless layers (e.g. an on-device-only Téarma not
     // built here) before composing - hydrate_layers opens every dir's parquet
     // and errors hard on one with no tiles, which would fail the whole entry.
+    #[cfg(feature = "cmdperf")]
+    let __t = std::time::Instant::now();
     let head_dirs = present_layer_dirs(head_dirs);
     let Some(base) = head_dirs.first() else {
         return Err("v2_hydrate_layers: no layers given".to_string());
@@ -497,7 +434,7 @@ pub fn v2_hydrate_layers(head_dirs: Vec<String>, resource_id: String, language: 
     // declares a compute-tiles function, so nothing fires).
     let functions = gramadan_registry(&dirs);
     let layer_ids: Vec<String> = head_dirs.iter().map(|d| layer_id_of(d)).collect();
-    ros_madair_duck::hydrate_layers(
+    let r = ros_madair_duck::hydrate_layers(
         &dirs,
         &resource_id,
         &composed,
@@ -505,7 +442,9 @@ pub fn v2_hydrate_layers(head_dirs: Vec<String>, resource_id: String, language: 
         Some(&layer_ids),
         &functions,
     )
-    .map_err(|e| e.to_string())
+    .map_err(|e| e.to_string());
+    crate::cmdperf!("[cmdperf] v2_hydrate_layers dirs={} uri={} {}ms", dirs.len(), resource_id, __t.elapsed().as_millis());
+    r
 }
 
 /// Pre-warm every per-hydrate cache for a layer set so the FIRST entry open is as
@@ -666,6 +605,7 @@ pub fn v2_cited_by(
     uri: String,
     node_path: String,
 ) -> Result<Vec<String>, String> {
+    let head_dirs = present_layer_dirs(head_dirs);
     let Some(base) = head_dirs.first() else {
         return Err("v2_cited_by: no layers given".to_string());
     };
@@ -675,10 +615,15 @@ pub fn v2_cited_by(
         .map(|n| n.nodeid.clone())
         .ok_or_else(|| format!("v2_cited_by: unknown alias '{node_path}'"))?;
     let dirs: Vec<&Path> = head_dirs.iter().map(|d| Path::new(d.as_str())).collect();
-    // `cited_by` is now a DuckReader method (the free fn was retired when
-    // ros-madair-read folded into ros-madair-duck). Open the layer set and query.
-    let duck = ros_madair_duck::DuckReader::open_layers(&dirs).map_err(|e| e.to_string())?;
-    duck.cited_by(&node_id, &uri).map_err(|e| e.to_string())
+    // Pooled free fn (unions per-dir over the warm reader pool `prewarm` fills),
+    // NOT `DuckReader::open_layers` - the latter cold-opens the whole stack on every
+    // call, and the enrichment path fires cited_by several times per entry open.
+    #[cfg(feature = "cmdperf")]
+    let __t = std::time::Instant::now();
+    let r = ros_madair_duck::cited_by(&dirs, &node_id, &uri).map_err(|e| e.to_string());
+    crate::cmdperf!("[cmdperf] v2_cited_by dirs={} node='{node_path}' hits={} {}ms",
+        dirs.len(), r.as_ref().map(|v| v.len()).unwrap_or(0), __t.elapsed().as_millis());
+    r
 }
 
 // ---------------------------------------------------------------------------

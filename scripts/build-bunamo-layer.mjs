@@ -265,9 +265,12 @@ execFileSync('cargo', [
     process.exit(1);
   }
 
-  // BuNaMo is Irish-only: one dialect for the whole layer.
+  // BuNaMo is Irish-only: one dialect for the whole layer. Both the filter AND the
+  // display meta carry the GA collection CODE (not the raw label "Irish") - the code
+  // is what the app renders and matches, so the index is self-describing and search
+  // never needs a backend dialect lookup. (Other layer builders emit the code too.)
   const DIALECT_CODES = ['GA'];
-  const DIALECT_DISPLAY = 'Irish';
+  const DIALECT_DISPLAY = 'GA';
 
   let gaCount = 0;
   for (const [rid, formSet] of formsByRid) {
