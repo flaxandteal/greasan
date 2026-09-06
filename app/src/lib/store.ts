@@ -2,9 +2,9 @@ import { writable, derived, readable, get, type Writable } from 'svelte/store';
 import { listen } from '@tauri-apps/api/event';
 import { ready } from './wasm';
 import { FAMILIES, DEFAULT_FAMILY, layerSwatch, type FamilyId } from './family';
-import { switchFamily, addDynamicLayer, addV2Layer, removeV2Layer, getDynamicLayers, registerV2Layers, initOfflineLayers, setHiddenLayers, search, loadEntryFlagged, type DynamicLayerInfo, type ExampleDetail } from './dictionary';
+import { switchFamily, addDynamicLayer, addV2Layer, removeV2Layer, getDynamicLayers, registerV2Layers, initOfflineLayers, setHiddenLayers, search, loadEntryFlagged, currentV2HeadDirs, type DynamicLayerInfo, type ExampleDetail } from './dictionary';
 import { buildLayer, waitForBuild, listLayers, listV2Layers, assetUrl, removeLayerFiles, type BuildLayerStatus } from './tauri-builder';
-import { verifyLayer, type LayerVerification } from './v2';
+import { verifyLayer, prewarmLayers, type LayerVerification } from './v2';
 import type { SearchLang, EntrySummary } from './dictionary';
 
 export type { DynamicLayerInfo } from './dictionary';
@@ -501,6 +501,11 @@ export async function bootstrapLayers(): Promise<void> {
   // run that base is the dev constant, not the installed one.
   setHiddenLayers(get(hiddenLayerNames));
   layers.set(getDynamicLayers());
+  // Warm the DuckDB reader pool for the active head dirs in the background, so the
+  // first entry open hits cached readers. Otherwise gather (opening ~11 parquet
+  // readers) dominates the first hydrate at ~600ms; RM_HYDRATE_PERF confirmed it
+  // is 96% of the cost. Fire-and-forget - v2_prewarm is idempotent.
+  void prewarmLayers(currentV2HeadDirs());
   void refreshLayerTrust();
   // Populate the catalogue so the tray shows layer-v2 names/swatches from the
   // first render (not the family.ts fallback). Best-effort; head must be unpacked.
