@@ -1,0 +1,70 @@
+name: App desktop (Linux)
+
+# Builds the CORE-ONLY Linux desktop app (.deb) and uploads it as an artifact.
+# Unlike the Android release, this bundles NO corpus: the user loads their own
+# Téarma TBX on-device (tbx-v2 build), so there is no pinned data bundle and no
+# signing keystore. It reuses the same native src-tauri backend as the APK.
+#
+# External source in CI (no sibling checkouts / submodules):
+#   - alizarin-core + ros-madair-*: crates.io; gramadan: Cargo `git` dep by rev
+#     (see app/src-tauri/Cargo.toml + crates/greasan-gramadan/Cargo.toml).
+#   - alizarin (frontend), @alizarin/clm, pagefind: hosted GitHub-release tarballs (npm).
+# All public, so no DEPS_PAT / secrets are required here.
+
+on:
+  workflow_dispatch:
+  push:
+    tags: ["desktop-v*"]
+
+permissions:
+  contents: write
+
+concurrency:
+  group: app-desktop-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # Tauri v2 on Linux: webkit2gtk 4.1 + gtk3 + rsvg + appindicator, plus `file`
+      # (used by the bundler to type the binary).
+      - name: Tauri Linux system deps
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libwebkit2gtk-4.1-dev \
+            libgtk-3-dev \
+            librsvg2-dev \
+            libayatana-appindicator3-dev \
+            build-essential \
+            file
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: app/src-tauri
+
+      - name: npm ci (app)
+        working-directory: app
+        run: npm ci
+
+      # Core-only: no bundled heads, no keystore. beforeBuildCommand runs the vite
+      # frontend build (which uses the committed app/src/lib/gramadan-pkg binding).
+      - name: Build core-only desktop .deb
+        run: bash scripts/build-desktop.sh --bundles deb
+
+      - name: Upload .deb artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: greasan-desktop-deb
+          path: data/bundle/*.deb
+          if-no-files-found: error

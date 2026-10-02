@@ -39,14 +39,8 @@ jobs:
           docker-images: true
           tool-cache: false
 
-      - name: Checkout (with submodules)
+      - name: Checkout
         uses: actions/checkout@v4
-        with:
-          submodules: recursive
-          token: ${{ secrets.DEPS_PAT }}
-
-      - name: Reconstruct sibling layout
-        run: bash scripts/ci/link-siblings.sh
 
       - uses: actions/setup-node@v4
         with:
@@ -61,7 +55,6 @@ jobs:
         with:
           workspaces: |
             app/src-tauri
-            .deps/RosMadair
 
       - name: Java 17
         uses: actions/setup-java@v4
@@ -81,12 +74,6 @@ jobs:
 
       - name: Tauri CLI
         run: npm i -g @tauri-apps/cli@^2
-
-      - name: Build ros-madair-alizarin (combined wasm)
-        working-directory: .deps/RosMadair
-        run: |
-          npm ci
-          npm run build:combined
 
       - name: npm ci (app)
         working-directory: app

@@ -104,27 +104,26 @@ export default defineConfig({
     tailwindcss(),
     wasm(),
   ],
-  define: {
-    // alizarin's main.ts expects this at build time (normally injected by alizarin's own vite build)
-    __ALIZARIN_VERSION__: JSON.stringify('2.0.0-alpha.95'),
-  },
   build: {
     target: 'esnext',
     emptyOutDir: false,
+    rollupOptions: {
+      // @alizarin/clm does an optional `await import('@alizarin/napi')` / '@alizarin/clm-napi'
+      // inside a try/catch to register the NAPI backend when running under Node. In the
+      // browser / Tauri webview we use the WASM backend, so keep these Node-native (.node)
+      // packages out of the bundle - the dynamic import just fails and is swallowed.
+      external: [/^@alizarin\/(napi|clm-napi)$/, /\.node$/],
+    },
   },
   resolve: {
-    // Point alizarin imports at its TypeScript source so Vite compiles it and
-    // its own `../pkg/alizarin` wasm-bindgen glue loads alizarin_bg.wasm. (The
-    // v1 combined ros-madair-alizarin binary that used to intercept this import
-    // is retired; alizarin now loads its own WASM.)
-    alias: {
-      'alizarin': resolve(__dirname, '../../magic/alizarin/js/main.ts'),
-    },
-    // Ensure @alizarin/clm's peer dep and direct imports resolve to the same instance.
+    // alizarin resolves from its published package (dist/alizarin.js + the
+    // bundled pkg/ wasm-bindgen glue that loads alizarin_bg.wasm) - no source
+    // alias / local checkout. dedupe keeps @alizarin/clm's peer dep and our
+    // direct imports on one alizarin instance.
     dedupe: ['alizarin'],
   },
   optimizeDeps: {
-    exclude: ['alizarin'],
+    exclude: ['alizarin', '@alizarin/napi', '@alizarin/clm-napi'],
   },
   server: {
     port: parseInt(process.env.PORT || '5173'),
