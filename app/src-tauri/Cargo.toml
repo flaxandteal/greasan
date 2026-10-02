@@ -20,8 +20,8 @@ serde_json = "1"
 # Irish morphology - declension/conjugation enrichment for classless TBX records
 # (the on-device counterpart of the Python tbx.py pipeline). `default-features`
 # off so the optional PyO3 `python` feature is NOT pulled into the app build.
-gramadan = { path = "../../../Gramadan/gramadan-rs", default-features = false }
-alizarin-core = { path = "../../../magic/alizarin/crates/alizarin-core" }
+gramadan = { git = "https://github.com/philtweir/Gramadan", rev = "39556e1f815dc82e2ad997388066a07b956f14e8", default-features = false }
+alizarin-core = "2.0.0-beta.9"
 reqwest = { version = "0.12", features = ["rustls-tls"], default-features = false }
 quick-xml = "0.37"
 uuid = { version = "1", features = ["v4"] }
@@ -38,23 +38,23 @@ unicode-normalization = "0.1"
 # v2.rs uses `alizarin_core` (not the old `alizarin_core_v2` alias).
 # The artifact format types - notably `Manifest.handlers`, which is what makes
 # the registry below derivable instead of guessable.
-ros-madair-format = { path = "../../../magic/RosMadair-sandbox-parquet/crates/ros-madair-format" }
+ros-madair-format = { version = "0.1.0-alpha.16" }
 # The single source of the extension-type registry. We no longer hand-build one
 # from alizarin-clm-core: the registry is rebuilt from the handler set the
 # *manifest declares*, so an emit/query registry mismatch fails loudly instead of
 # silently returning zero rows.
-ros-madair-handlers = { path = "../../../magic/RosMadair-sandbox-parquet/crates/ros-madair-handlers" }
-ros-madair-query = { path = "../../../magic/RosMadair-sandbox-parquet/crates/ros-madair-query" }
+ros-madair-handlers = { version = "0.1.0-alpha.16" }
+ros-madair-query = { version = "0.1.0-alpha.16" }
 rusqlite = { version = "0.32", features = ["bundled"] }
 # Regeneration only (`v2-emit`) - see examples/regen-macbain-v2.rs. Emitting from
 # *this* workspace keeps us off the sandbox's target/ lock and Cargo.lock, which
 # `cargo run -p ros-madair-emit --manifest-path <sandbox>` would take.
-ros-madair-emit = { path = "../../../magic/RosMadair-sandbox-parquet/crates/ros-madair-emit" }
+ros-madair-emit = { version = "0.1.0-alpha.16" }
 # --- DuckDB+Parquet substrate (migration, see HANDOFF-substrate-migration-and-mobile.md) ---
 # ros-madair-duck compiles the ros-madair-query IR to DuckDB SQL over tile-row
 # Parquet. `duckdb` is the native binding; bundled+json+parquet static-link the
 # amalgamation + the parquet reader so read_parquet works OFFLINE (no INSTALL).
-ros-madair-duck = { path = "../../../magic/RosMadair-sandbox-parquet/crates/ros-madair-duck" }
+ros-madair-duck = { version = "0.1.0-alpha.16" }
 duckdb = { version = "1", features = ["bundled", "json", "parquet"] }
 # The gramadan Derive provider: generates the `forms` nodegroup on demand from
 # gramadan-rs. Registered into the FunctionsRegistry the duck hydrate path runs,
@@ -105,12 +105,6 @@ ndk-sys = "0.6"
 # at startup. default-features=false keeps this to a feature-union no-op - the
 # version resolves to the same tao wry already pulls, so no extra deps.
 tao = { version = "0.35", default-features = false }
-
-[patch.crates-io]
-# Transitive deps (the published ros-madair-* / alizarin-* crates) request
-# alizarin-core from crates.io by version; redirect that to the single local
-# core the whole app builds against, so there is one copy in the graph.
-alizarin-core = { path = "../../../magic/alizarin/crates/alizarin-core" }
 
 [[example]]
 name = "hydrate-probe"

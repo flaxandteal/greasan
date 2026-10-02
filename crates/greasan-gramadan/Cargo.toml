@@ -7,8 +7,8 @@ description = "Gréasán Derive provider: gramadan-rs paradigm forms as a graph-
 
 [dependencies]
 # The native morphology engine (same crate the app + gramadan-wasm use).
-gramadan = { path = "../../../Gramadan/gramadan-rs", default-features = false }
+gramadan = { git = "https://github.com/philtweir/Gramadan", rev = "39556e1f815dc82e2ad997388066a07b956f14e8", default-features = false }
 # The functions-registry contract (DeriveProvider / StaticTile / StaticGraph /
 # ComputeTilesConfig / FunctionsRegistry). Same alizarin-core the app links.
-alizarin-core = { path = "../../../magic/alizarin/crates/alizarin-core" }
+alizarin-core = "2.0.0-beta.9"
 serde_json = "1"
