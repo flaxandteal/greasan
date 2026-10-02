@@ -1,0 +1,15 @@
+{
+  "name": "gramadan-wasm",
+  "type": "module",
+  "version": "0.0.0",
+  "files": [
+    "gramadan_bg.wasm",
+    "gramadan.js",
+    "gramadan.d.ts"
+  ],
+  "main": "gramadan.js",
+  "types": "gramadan.d.ts",
+  "sideEffects": [
+    "./snippets/*"
+  ]
+}
