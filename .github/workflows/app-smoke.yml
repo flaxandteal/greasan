@@ -64,6 +64,11 @@ jobs:
 
       - name: Android SDK + NDK
         uses: android-actions/setup-android@v3
+        with:
+          # Pin cmdline-tools: setup-android@v3's floating default (16.0) regressed
+          # license auto-accept ("6 of 7 SDK package licenses not accepted",
+          # sdkmanager exits 1). 11.0 accepts cleanly with accept-android-sdk-licenses.
+          cmdline-tools-version: "11076708"
       - name: Install NDK
         run: sdkmanager "ndk;${NDK_VERSION}"
       - name: Export NDK env
