@@ -52,6 +52,9 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: app/src-tauri
+          # Keep the (expensive) bundled-DuckDB build across runs even when a
+          # later step fails - otherwise every failed iteration recompiles it cold.
+          cache-on-failure: true
 
       - name: npm ci (app)
         working-directory: app

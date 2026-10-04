@@ -66,6 +66,9 @@ jobs:
         with:
           workspaces: |
             app/src-tauri
+          # Keep the (expensive) bundled-DuckDB build across runs even when a
+          # later step fails - otherwise every failed iteration recompiles it cold.
+          cache-on-failure: true
 
       - name: Java 17
         uses: actions/setup-java@v4
