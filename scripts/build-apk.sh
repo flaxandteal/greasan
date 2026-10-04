@@ -149,7 +149,10 @@ else
   if [ $RELEASE -eq 1 ]; then
     # Alpha signing identity - MUST stay stable across updates (else testers must
     # uninstall). Self-signed ALPHA key only; regenerate before any Play upload.
-    "${BT}apksigner" sign --ks "$HOME/.android/greasan-alpha.jks" \
+    # --ks-type JKS: the alpha keystore is legacy JKS; JDK 9+ defaults the store
+    # type to PKCS12, so without this apksigner fails to parse it
+    # ("java.io.IOException: Tag number over 30 is not supported").
+    "${BT}apksigner" sign --ks "$HOME/.android/greasan-alpha.jks" --ks-type JKS \
       --ks-pass pass:greasan-alpha-2026 --ks-key-alias greasan --key-pass pass:greasan-alpha-2026 \
       --out "$SIGNED" "$ALIGNED"
   else
