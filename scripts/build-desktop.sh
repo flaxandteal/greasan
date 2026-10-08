@@ -84,4 +84,22 @@ for f in "$BUNDLE_DIR"/deb/*.deb "$BUNDLE_DIR"/appimage/*.AppImage; do
   copied=$((copied+1))
 done
 [ $copied -gt 0 ] || { echo "!! no desktop artifacts under $BUNDLE_DIR - check the tauri build output" >&2; exit 1; }
+
+# Tauri derives the .deb `Package:` field from productName ("Gréasán"), lowercased
+# but NOT transliterated -> "gréasán", which dpkg rejects (package names must be
+# ASCII: a-z0-9-+._). The display name stays "Gréasán"; only the control Package
+# field + filename need sanitising. Repack each .deb with Package: greasan.
+for deb in "$OUT"/*.deb; do
+  [ -e "$deb" ] || continue
+  [ "$(dpkg-deb -f "$deb" Package)" = "greasan" ] && continue
+  tmp="$(mktemp -d)"
+  dpkg-deb -R "$deb" "$tmp"
+  sed -i 's/^Package: .*/Package: greasan/' "$tmp/DEBIAN/control"
+  ver="$(dpkg-deb -f "$deb" Version)"; arch="$(dpkg-deb -f "$deb" Architecture)"
+  ascii="$OUT/greasan_${ver}_${arch}.deb"
+  dpkg-deb --root-owner-group --build "$tmp" "$ascii" >/dev/null
+  rm -rf "$tmp"
+  [ "$ascii" != "$deb" ] && rm -f "$deb"
+  echo "[desktop] sanitised deb Package -> greasan ($(basename "$ascii"))"
+done
 echo "[done]"

@@ -71,3 +71,21 @@ jobs:
           name: greasan-desktop-deb
           path: data/bundle/*.deb
           if-no-files-found: error
+
+      # On a desktop-v* tag, publish the .deb as a GitHub Release so it has a
+      # durable, linkable download (artifacts expire). Prerelease, not draft, so
+      # the link works immediately; add `draft: true` if you'd rather vet first.
+      - name: Publish to GitHub Release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          name: Gréasán Desktop ${{ github.ref_name }} (Linux)
+          prerelease: true
+          files: data/bundle/*.deb
+          body: |
+            Gréasán core-only Linux desktop build.
+            Core-only: boots to an empty state; load your own Téarma TBX on-device
+            (builds locally — nothing leaves the machine).
+            Install (Ubuntu 24.04+ / webkit2gtk-4.1):
+              sudo apt install ./greasan_*.deb
