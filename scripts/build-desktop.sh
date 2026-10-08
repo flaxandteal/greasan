@@ -91,11 +91,14 @@ done
 # field + filename need sanitising. Repack each .deb with Package: greasan.
 for deb in "$OUT"/*.deb; do
   [ -e "$deb" ] || continue
-  [ "$(dpkg-deb -f "$deb" Package)" = "greasan" ] && continue
+  # Raw-extract (`-R` tolerates the invalid Package name; `dpkg-deb -f` does NOT -
+  # strict dpkg refuses to parse the control field at all, so read it from the file).
   tmp="$(mktemp -d)"
   dpkg-deb -R "$deb" "$tmp"
+  if grep -q '^Package: greasan$' "$tmp/DEBIAN/control"; then rm -rf "$tmp"; continue; fi
+  ver="$(sed -n 's/^Version: *//p' "$tmp/DEBIAN/control")"
+  arch="$(sed -n 's/^Architecture: *//p' "$tmp/DEBIAN/control")"
   sed -i 's/^Package: .*/Package: greasan/' "$tmp/DEBIAN/control"
-  ver="$(dpkg-deb -f "$deb" Version)"; arch="$(dpkg-deb -f "$deb" Architecture)"
   ascii="$OUT/greasan_${ver}_${arch}.deb"
   dpkg-deb --root-owner-group --build "$tmp" "$ascii" >/dev/null
   rm -rf "$tmp"
