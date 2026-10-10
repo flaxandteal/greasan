@@ -7,6 +7,45 @@ Round-trip proven: a core-only build ships the 24 KB skeleton `layer-v2`; the La
 3. post-extract check required v1 `summary.bin` → validate `has_parquet_tiles` (v2).
 4. `installPackage` finalized via v1 `addDynamicLayer` (hangs on a v2 head) → `addV2Layer`.
 
+## PHASE 2 — per-package Layer resource (chosen approach: BAKE into greasan-data heads)
+Goal: an installed layer's OWN `layer-<slug>` resource (real resource_count + metadata)
+overrides+supplements the skeleton's placeholder entry, via the store's cross-layer
+tile merge. Decision (user): bake the resource into each head (truest to design;
+needs a greasan-data re-publish). Verify cheaply by rebuilding just `macbain-v2` +
+`gh release upload` that one asset.
+
+Load-bearing findings:
+- `emit_parquet` (regen-parquet-v2) emits ALL models in a prebuild → a corpus head
+  CAN carry `tiles_layer.parquet` (the `layer-<slug>` resource) next to its corpus
+  tiles. BUT `graph.json` ships only the PRIMARY model (most tiles, or 3rd-arg
+  override) - so the corpus head's graph.json stays the corpus graph; the Layer
+  GRAPH is NOT shipped in the corpus head, only the Layer TILES.
+- Therefore the layered read composes the **Layer graph from the SKELETON `layer`
+  head** + merges `tiles_layer` across [skeleton layer head, ...installed heads]
+  (installed topmost wins per nodegroup). Resource-URI identity: the baked resource
+  MUST mint the same `layer-<slug>` ResourceID (default alizarin namespace); tile ids
+  use the per-layer namespace (`uuidv5('layer/catalogue', ALIZARIN_NS)` in
+  build-layer-catalogue - a baked single-layer fragment must reuse the SAME tile
+  namespace so tiles dedupe/merge, OR a distinct one if we want supplement-not-replace).
+
+Steps:
+1. Extract build-layer-catalogue's "Layer graph + buildResourcesFromBusinessCsv +
+   enrich + write-prebuild" core into a reusable fn (emit full catalogue OR a single
+   `layer-<slug>` fragment). `layers-data.mjs` already holds LAYERS + buildBusinessCsv.
+2. `build-parquet-layers.mjs`: for each head, generate its single `layer-<slug>`
+   resource (real resource_count from the just-emitted head) and MERGE its Layer
+   graph + business_data + collections INTO the head's prebuild (data/prebuild-<layer>)
+   before regen-parquet-v2, so the head emits a `tiles_layer.parquet`.
+3. `loadLayerCatalogue` (layers-catalogue.ts:121): go layered - take the Layer graph
+   from the skeleton `layer` head, hydrate each Layer id via the cross-layer merge
+   (`v2_hydrate_layers` / `hydrateLayers`) over [skeleton layer head] ++
+   currentV2HeadDirs (which now carry `tiles_layer`), installed topmost. Keep the
+   single-head path as the fallback when nothing's installed.
+4. Re-publish greasan-data heads with the baked resource (heavy: wiktionary ~25 min;
+   or just the 6 downloadable). Until then Phase 2 is inert (heads lack the resource).
+Verify: install macbain, confirm its catalogue entry shows the REAL resource_count
+(from the baked resource) overriding the skeleton's null.
+
 PREVIOUS status:
 The `offline.rs` presence gate (`resolved_layers` → `head_has_tiles`, + `v2_prepare_offline` reorder so un-bundled heads leave no empty dir) was the linchpin: `layerStack` now reflects only truly-installed layers, so the frontend's EXISTING "Add a layer · From catalogue" suggestions (catalogue entries with an `install` block, minus installed) + empty-state render the known/available layers with Install buttons — **no frontend change needed**. offline.rs compiles clean. NOT yet run on a base APK/desktop build + device (the only verification left for this slice).
 
