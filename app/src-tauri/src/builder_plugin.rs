@@ -842,11 +842,41 @@ pub async fn check_local_index<R: Runtime>(
 /// This handles the "built" format - artifacts are already compiled and just
 /// need to be written to disk. Runs synchronously (tar iteration is not Send).
 fn extract_built_archive_sync(bytes: &[u8], output_dir: &Path) -> Result<(), String> {
-    let decoder = GzDecoder::new(bytes);
-    let mut archive = tar::Archive::new(decoder);
-
     std::fs::create_dir_all(output_dir)
         .map_err(|e| format!("mkdir {}: {e}", output_dir.display()))?;
+
+    // greasan-data built heads ship as ZIP (`PK..`); older built packages are
+    // tar.gz. Sniff the magic so the catalogue "built" install handles both.
+    if bytes.starts_with(b"PK") {
+        let mut archive = zip::ZipArchive::new(std::io::Cursor::new(bytes))
+            .map_err(|e| format!("open zip: {e}"))?;
+        for i in 0..archive.len() {
+            let mut entry = archive.by_index(i).map_err(|e| format!("zip entry {i}: {e}"))?;
+            let Some(enclosed) = entry.enclosed_name() else {
+                continue;
+            };
+            let dest = output_dir.join(enclosed);
+            if entry.is_dir() {
+                std::fs::create_dir_all(&dest)
+                    .map_err(|e| format!("mkdir {}: {e}", dest.display()))?;
+                continue;
+            }
+            if let Some(parent) = dest.parent() {
+                std::fs::create_dir_all(parent)
+                    .map_err(|e| format!("mkdir {}: {e}", parent.display()))?;
+            }
+            let mut f = std::fs::File::create(&dest)
+                .map_err(|e| format!("create {}: {e}", dest.display()))?;
+            std::io::copy(&mut entry, &mut f)
+                .map_err(|e| format!("write {}: {e}", dest.display()))?;
+        }
+        #[cfg(not(any(target_os = "android", target_os = "ios")))]
+        extract_zips_for_desktop(output_dir)?;
+        return Ok(());
+    }
+
+    let decoder = GzDecoder::new(bytes);
+    let mut archive = tar::Archive::new(decoder);
 
     for entry_result in archive.entries().map_err(|e| format!("tar read error: {e}"))? {
         let mut entry = entry_result.map_err(|e| format!("tar entry error: {e}"))?;

@@ -21,13 +21,17 @@ export const ALIZARIN_NS = '1a79f1c8-9505-4bea-a18e-28a053f725ca';
 
 export const GREASAN_DATA_REPO = 'flaxandteal/greasan-data';
 
-/** Layers whose data ships as a pre-built parquet-head zip on greasan-data
- * releases, so they are DOWNLOADABLE (install) even in a core-only build where
- * nothing is bundled. Excludes: tearma (file-picker, not redistributable),
- * person/note (app-generated, internal), basemap (its own PMTiles build). */
+/** Layers whose data ships as a pre-built parquet-head `<head>.zip` on the pinned
+ * greasan-data release, so they are DOWNLOADABLE (install) even in a core-only
+ * build. MUST match the actual assets on that release - offering a slug with no
+ * asset 404s on install. Currently present on bundle-2026-08-20:
+ *   macbain, gramadan-forms, concept, example-{tatoeba,gaois,udt}.
+ * NOT in the bundle (so NOT offered): wiktionary (too large / full-APK only),
+ * bunamo (replaced by the computed gramadan-forms), place. Also excluded:
+ * tearma (file-picker, not redistributable), person/note (internal), basemap. */
 export const DOWNLOADABLE_SLUGS = new Set([
-  'wiktionary', 'macbain', 'bunamo', 'gramadan-forms', 'place',
-  'example-tatoeba', 'example-gaois', 'example-udt', 'concept',
+  'macbain', 'gramadan-forms', 'concept',
+  'example-tatoeba', 'example-gaois', 'example-udt',
 ]);
 
 /** greasan-data release asset URL for a built parquet head (`<head>.zip`). */
