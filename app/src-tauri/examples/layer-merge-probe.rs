@@ -40,5 +40,6 @@ fn main() {
     eprintln!("[merge] resourceinstanceid: {:?}", tree.get("resourceinstanceid"));
     eprintln!("[merge] name: {:?}", tree.get("name"));
     eprintln!("[merge] statistics.resource_count: {:?}", stats.and_then(|s| s.get("resource_count")));
+    eprintln!("[merge] integration.config_block: {:?}", tree.get("integration").and_then(|i| i.get("config_block")));
     println!("{}", serde_json::to_string(&stats).unwrap());
 }
