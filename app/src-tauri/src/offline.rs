@@ -255,18 +255,41 @@ fn extract_zip_bytes(bytes: Vec<u8>, dest: &std::path::Path) -> Result<(), Strin
     Ok(())
 }
 
+/// A head dir is a PRESENT (active) layer iff it carries at least one
+/// `tiles_*.parquet`. An empty `heads/<head>/` left by an un-bundled head (a base
+/// build ships only the skeleton `layer-v2`) or a partial extraction is NOT a
+/// layer. Mirrors `has_parquet_tiles` (builder_plugin.rs) / the read-side check in
+/// v2.rs.
+fn head_has_tiles(dir: &std::path::Path) -> bool {
+    fs::read_dir(dir).ok().is_some_and(|rd| {
+        rd.flatten().any(|e| {
+            let n = e.file_name();
+            let n = n.to_string_lossy();
+            n.starts_with("tiles_") && n.ends_with(".parquet")
+        })
+    })
+}
+
 /// Build the (idempotent) list of resolved layers for the given app-data dir.
+///
+/// Only CORPORA heads with actual tile data are returned as active layers. A head
+/// that isn't bundled in this build (every corpus but `layer-v2` in a core-only
+/// build) is surfaced as a KNOWN layer via the skeleton catalogue (installable),
+/// NOT listed as an installed-but-empty layer - which is what made core-only show
+/// "N layers · N on" with amber shields.
 fn resolved_layers(app_data: &std::path::Path) -> Vec<OfflineLayer> {
     CORPORA
         .iter()
-        .map(|c| OfflineLayer {
-            name: c.name.to_string(),
-            head_dir: app_data
-                .join("heads")
-                .join(c.head)
-                .to_string_lossy()
-                .to_string(),
-            pagefind_index: c.index.to_string(),
+        .filter_map(|c| {
+            let head_dir = app_data.join("heads").join(c.head);
+            if !head_has_tiles(&head_dir) {
+                return None;
+            }
+            Some(OfflineLayer {
+                name: c.name.to_string(),
+                head_dir: head_dir.to_string_lossy().to_string(),
+                pagefind_index: c.index.to_string(),
+            })
         })
         .collect()
 }
@@ -336,18 +359,17 @@ pub fn v2_prepare_offline<R: Runtime>(app: AppHandle<R>) -> Result<Vec<OfflineLa
                 continue;
             }
         }
-        // Remove any partial prior extraction, then unpack fresh.
-        let _ = fs::remove_dir_all(&head_dest);
-        fs::create_dir_all(&head_dest)
-            .map_err(|e| format!("mkdir {}: {e}", head_dest.display()))?;
         let head_rel = format!("heads/{}.zip", c.head);
         // A head whose zip is not bundled (e.g. a base-only build that ships core
-        // metadata + basemap and installs layers at runtime) is simply skipped -
-        // the app boots to the zero-layers empty state. This is presence, not
-        // content: a stale/wrong head is still caught by the snapshot_id check
-        // above, so tolerance here does not weaken that guard. Full builds assert
-        // head presence at package time (build-apk.sh), so a forgotten head in a
-        // data-bundled release still fails loudly rather than silently here.
+        // metadata + basemap + the skeleton layer-v2, and installs corpus layers at
+        // runtime) is simply skipped - the app boots to the zero-corpus state with
+        // the known-layer catalogue. This is presence, not content: a stale/wrong
+        // head is still caught by the snapshot_id check above, so tolerance here does
+        // not weaken that guard. Full builds assert head presence at package time
+        // (build-apk.sh), so a forgotten head in a data-bundled release still fails
+        // loudly rather than silently here. Read the zip BEFORE touching the dir so an
+        // un-bundled head leaves NO empty heads/<head>/ (which head_has_tiles would
+        // otherwise still have to exclude).
         let head_bytes = match read_resource_bytes(&app, &head_rel) {
             Ok(b) => b,
             Err(e) => {
@@ -355,6 +377,10 @@ pub fn v2_prepare_offline<R: Runtime>(app: AppHandle<R>) -> Result<Vec<OfflineLa
                 continue;
             }
         };
+        // Remove any partial prior extraction, then unpack fresh.
+        let _ = fs::remove_dir_all(&head_dest);
+        fs::create_dir_all(&head_dest)
+            .map_err(|e| format!("mkdir {}: {e}", head_dest.display()))?;
         eprintln!(
             "[offline] extracting {} ({} bytes) -> {}",
             head_rel,
