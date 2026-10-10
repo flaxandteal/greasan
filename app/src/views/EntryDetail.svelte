@@ -294,14 +294,14 @@
             {#if isGrouped}
               {#if grp.self}
                 <div class="ge-pos-group-header">
-                  {#if grp.pos}<span style="font-style:italic;">{grp.pos}</span>{/if}
+                  {#if grp.pos}<span class="ge-pos-group-pos">{grp.pos}</span>{/if}
                   {#if grp.badge}<span class="ge-pos-group-badge">{grp.badge}</span>{/if}
                 </div>
               {:else}
                 <button class="ge-pos-group-header ge-pos-group-link" onclick={() => selectEntry(grp.uri, entry.headword)}>
-                  {#if grp.pos}<span style="font-style:italic;">{grp.pos}</span>{/if}
+                  {#if grp.pos}<span class="ge-pos-group-pos">{grp.pos}</span>{/if}
                   {#if grp.badge}<span class="ge-pos-group-badge">{grp.badge}</span>{/if}
-                  <span style="margin-left:auto;opacity:0.45;">›</span>
+                  <span class="ge-pos-group-chevron" aria-hidden="true">›</span>
                 </button>
               {/if}
             {/if}
@@ -635,21 +635,28 @@
 {/if}
 
 <style>
-  /* Per-POS group header in the grouped headword card (noun / verb sections). */
+  /* Per-POS group header in the grouped headword card (noun / verb sections).
+     Matches the eyebrow section-title language (.ge-block-title) so a POS divider
+     reads as a quiet label, not a competing heading. */
   .ge-pos-group-header {
-    display: flex; align-items: baseline; gap: 8px; width: 100%;
-    margin: 14px 0 2px; padding: 4px 0;
-    font-size: 15px; color: var(--fg); font-weight: 600;
-    border-bottom: 1px solid color-mix(in srgb, var(--fg-soft) 22%, transparent);
+    display: flex; align-items: baseline; gap: 10px; width: 100%;
+    margin: 20px 0 6px; padding: 0;
   }
-  .ge-pos-group-header:first-child { margin-top: 2px; }
+  .ge-pos-group-header:first-child { margin-top: 6px; }
+  .ge-pos-group-pos {
+    font-size: var(--fs-eyebrow); font-weight: 600; letter-spacing: 0.14em;
+    text-transform: uppercase; color: var(--fg-muted);
+  }
   .ge-pos-group-badge {
-    font-size: 11px; font-weight: 700; font-variant: small-caps; letter-spacing: 0.02em;
-    background: color-mix(in srgb, var(--fg-soft) 16%, transparent);
-    padding: 1px 7px; border-radius: 4px;
+    font-size: var(--fs-eyebrow); font-weight: 600; letter-spacing: 0.03em;
+    color: var(--fg-soft);
+    background: color-mix(in srgb, var(--fg-soft) 12%, transparent);
+    padding: 1px 6px; border-radius: 3px;
   }
-  .ge-pos-group-link { background: none; border: 0; cursor: pointer; text-align: left; font-family: inherit; }
-  .ge-pos-group-link:hover { color: var(--accent, var(--fg)); }
+  .ge-pos-group-chevron { margin-left: auto; color: var(--fg-muted); opacity: 0.6; font-size: 16px; }
+  .ge-pos-group-link { background: none; border: 0; cursor: pointer; text-align: left; font-family: inherit; padding: 0; }
+  .ge-pos-group-link:hover .ge-pos-group-pos,
+  .ge-pos-group-link:hover .ge-pos-group-chevron { color: var(--fg); }
 
   /* Paradigm grid (nouns / adjectives) */
   .ge-para { width: 100%; border-collapse: collapse; margin: 4px 0 2px; }
