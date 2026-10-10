@@ -74,6 +74,88 @@ impl FtsBuilder {
     }
 }
 
+/// Build a `search.sqlite` FTS5 sidecar for an already-materialised head dir
+/// (its `graph.json` + `tiles_*.parquet`) - the catalogue "built"-install
+/// counterpart of the index the tbx-v2 build loop produces inline. A downloaded
+/// pre-built head carries tiles but no text index; this makes it searchable
+/// (headword = name, gloss = description) with the SAME engine, schema, and
+/// descriptor fields as the on-device path, so the existing FTS search
+/// orchestrator (`v2_search_fts` over the active head dirs) picks it up with no
+/// other change.
+///
+/// Only the head's PRIMARY model (the one in `graph.json`) is indexed: a second
+/// baked model in the same dir (e.g. the `layer-<slug>` catalogue tiles) is
+/// skipped, because `resolve_ids` is scoped to that graph id. Returns the
+/// indexed row count.
+pub fn build_for_head(head_dir: &Path) -> Result<usize, String> {
+    use alizarin_core::graph::StaticGraph;
+    use std::collections::HashSet;
+
+    // The PRIMARY (graph.json) model's nodegroups. A head may carry a second
+    // model's tiles in the same dir - notably the baked `layer-<slug>` catalogue
+    // resource, whose `descriptor_name` is the layer display name, NOT a headword
+    // - so we index only resources whose tiles sit in a primary nodegroup.
+    let graph_json = head_dir.join("graph.json");
+    let raw: serde_json::Value = serde_json::from_slice(
+        &std::fs::read(&graph_json).map_err(|e| format!("read graph.json: {e}"))?,
+    )
+    .map_err(|e| format!("parse graph.json: {e}"))?;
+    let gv = raw
+        .get("graph")
+        .and_then(|g| g.get(0))
+        .cloned()
+        .unwrap_or(raw);
+    let graph: StaticGraph =
+        serde_json::from_value(gv).map_err(|e| format!("StaticGraph: {e}"))?;
+    let primary_ngs: HashSet<String> =
+        graph.nodegroups.iter().map(|ng| ng.nodegroupid.clone()).collect();
+
+    // Headword = the emit-promoted `descriptor_name` column: the display name
+    // alizarin computed at BUILD time (with full enrichment + the model's
+    // descriptor template) and baked onto the tile rows. We read THAT rather than
+    // re-deriving via `build_descriptors` over raw tiles - the runtime
+    // re-derivation misses ~40% of entries here (and returns the literal
+    // "<Headword>" template for them), whereas `descriptor_name` is authoritative
+    // and complete. One scan over the app's own duckdb dep; first non-empty value
+    // per resource wins.
+    //
+    // Gloss is NOT promoted to a column, so the Gluais/English search over an
+    // installed layer awaits a follow-up (an emit-side `description` descriptor,
+    // which would also benefit bundled heads). The Ceannfhocail/headword path -
+    // the primary search, and the one a catalogue install needs most - works fully.
+    let glob = head_dir.join("tiles_*.parquet");
+    let conn = duckdb::Connection::open_in_memory().map_err(|e| format!("duckdb open: {e}"))?;
+    // Elide unresolved descriptor templates: a build whose descriptor couldn't
+    // resolve bakes the literal "<...>" placeholder (e.g. macbain entries with no
+    // structured headword tile carry descriptor_name = "<Headword>"). Those are
+    // not real headwords - indexing them would pollute search - so skip any value
+    // that is a bare "<...>" placeholder.
+    let sql = format!(
+        "SELECT DISTINCT resource_id, descriptor_name, nodegroup_id \
+         FROM read_parquet('{}') \
+         WHERE descriptor_name IS NOT NULL AND descriptor_name <> '' \
+           AND NOT (descriptor_name LIKE '<%>' AND descriptor_name NOT LIKE '% %')",
+        glob.to_string_lossy().replace('\'', "''"),
+    );
+    let mut stmt = conn.prepare(&sql).map_err(|e| format!("duckdb prepare: {e}"))?;
+    let mut rows = stmt.query([]).map_err(|e| format!("duckdb query: {e}"))?;
+
+    let mut fts = FtsBuilder::create(head_dir)?;
+    let mut seen: HashSet<String> = HashSet::new();
+    while let Some(row) = rows.next().map_err(|e| format!("duckdb row: {e}"))? {
+        let rid: String = row.get(0).map_err(|e| format!("col resource_id: {e}"))?;
+        let name: String = row.get(1).map_err(|e| format!("col descriptor_name: {e}"))?;
+        let ng: String = row.get(2).map_err(|e| format!("col nodegroup_id: {e}"))?;
+        if !primary_ngs.contains(&ng) {
+            continue;
+        }
+        if seen.insert(rid.clone()) {
+            fts.add(&rid, &name, "")?;
+        }
+    }
+    fts.finish()
+}
+
 /// One search hit. `score` is bm25 (lower = better in SQLite; we negate so
 /// higher = better, matching the rest of the search pipeline).
 #[derive(Debug, Serialize)]
@@ -189,6 +271,27 @@ pub fn v2_search_fts(
 #[cfg(test)]
 mod tests {
     use super::*;
+    /// Timing probe for `build_for_head` on a real head dir (default
+    /// ../../data/macbain-v2; override with FTS_HEAD_DIR). Ignored by default:
+    ///   cargo test --release -p greasan fts_build_for_head_bench -- --ignored --nocapture
+    #[test]
+    #[ignore]
+    fn fts_build_for_head_bench() {
+        let dir = std::env::var("FTS_HEAD_DIR").unwrap_or_else(|_| {
+            format!("{}/../../data/macbain-v2", env!("CARGO_MANIFEST_DIR"))
+        });
+        let dir = std::path::PathBuf::from(dir);
+        let _ = std::fs::remove_file(dir.join("search.sqlite"));
+        let t = std::time::Instant::now();
+        let n = super::build_for_head(&dir).expect("build_for_head");
+        let ms = t.elapsed().as_millis();
+        eprintln!("[fts-bench] {} entries in {ms} ms ({:.1}/s)", n, n as f64 / (ms as f64 / 1000.0));
+        // Confirm the index is usable.
+        let hits = v2_search_fts(vec![dir.to_string_lossy().to_string()], "fear".into(), "headword".into(), 5).unwrap();
+        eprintln!("[fts-bench] 'fear' headword hits: {}", hits.len());
+        assert!(n > 0, "indexed nothing");
+    }
+
     #[test]
     fn fts_build_and_search() {
         let dir = std::env::temp_dir().join(format!("fts-test-{}", std::process::id()));

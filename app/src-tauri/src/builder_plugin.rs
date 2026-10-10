@@ -601,6 +601,23 @@ pub async fn build_layer<R: Runtime>(
                 return;
             }
 
+            // Pre-built heads ship tiles but no text index (bundled heads get
+            // pagefind from separate bundle assets; a catalogue install fetches
+            // none). Build the FTS5 `search.sqlite` sidecar from the extracted
+            // tiles so the installed layer is searchable - the same on-device
+            // engine the tbx-v2 path uses. Non-fatal: the layer is still
+            // installed + hydratable if indexing fails (search just stays empty).
+            update_status(&app, &id_clone, "indexing", 0.85);
+            match crate::fts::build_for_head(&output_dir_clone) {
+                Ok(n) => crate::v2::logcat_error(&format!(
+                    "[built] fts: indexed {n} entries -> {}",
+                    output_dir_clone.display()
+                )),
+                Err(e) => crate::v2::logcat_error(&format!(
+                    "[built] fts index build failed (layer installed, search disabled): {e}"
+                )),
+            }
+
             let output_path = output_dir_clone.to_string_lossy().to_string();
             update_status_complete(&app, &id_clone, output_path);
         } else if format_clone == "tbx-v2" {
