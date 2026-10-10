@@ -429,19 +429,11 @@ export async function installPackage(url: string, name: string): Promise<void> {
   }
 
   const outputPath = finalStatus.output_path!;
-  const baseUrl = layerBaseUrl(name, outputPath);
-
-  // Check if layer has pagefind indices
-  let pagefindBase: string | undefined;
-  try {
-    const existing = await listLayers();
-    const info = existing.find(l => l.output_path === outputPath);
-    if (info?.has_pagefind) {
-      pagefindBase = layerPfBase(name) ?? baseUrl;
-    }
-  } catch { /* no pagefind */ }
-
-  await addDynamicLayer(baseUrl, name, pagefindBase);
+  // A 'built' greasan-data head is a v2 parquet head - register it into the native
+  // v2 head-dir set (hydrate/query), exactly like prebuild-v2/tbx-v2. The old v1
+  // addDynamicLayer (SparqlStore over HTTP) hangs on a v2 head (no summary.bin / v1
+  // artifacts), which left the UI stuck at 'BUILDING' after a successful extract.
+  addV2Layer(outputPath, name);
   layers.set(getDynamicLayers());
   void refreshLayerTrust();
 
