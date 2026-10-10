@@ -258,6 +258,7 @@ console.log('[build-place] Building goi lookup...');
 // MacBain's unique gd-<head>-etym entries are a last-resort fallback.
 const gaLookup = new Map();   // normalised headword -> goi ResourceID[]
 const gdFallback = new Map(); // normalised headword -> gd- ResourceID (MacBain, Scottish-only)
+const headwordLabel = new Map(); // normalised headword -> original spelling (concept label)
 function loadLexicalCsv(relPath) {
   const path = resolve(root, relPath);
   if (!existsSync(path)) { console.warn(`[build-place]   skip (missing): ${relPath}`); return; }
@@ -273,6 +274,7 @@ function loadLexicalCsv(relPath) {
     if (!hw) continue;
     const key = normalizeHead(hw);
     if (rid.startsWith('goi-')) {
+      if (!headwordLabel.has(key)) headwordLabel.set(key, hw);
       if (!gaLookup.has(key)) gaLookup.set(key, []);
       const arr = gaLookup.get(key);
       if (!arr.includes(rid)) arr.push(rid);
@@ -534,6 +536,31 @@ for (const el of glossary) {
   };
   conceptRows.push(CONCEPT_COLUMNS.map(c => csvEscape(row[c] || '')).join(','));
 }
+
+// --- Headword LexicalConcepts: group every headword's per-POS goi entries under a
+// shared `goi-<nhead>-concept` (concept_headword list), so MacBain can attach its
+// POS-independent etymology to the SAME concept id (unioned in from the macbain head)
+// and the entry view can render a grouped card. The grouping comes from gaLookup
+// (all lexical sources, every POS); concept-v2 is the LexicalConcept-model head, so
+// it supplies the base graph a secondary-model concept tile in macbain can't. ---
+// Only HOMOGRAPH headwords (>1 per-POS goi entry) get a grouping concept - a
+// single-POS headword's "group" is itself, so a concept adds no value and the
+// full headword set is ~217k (a needless head). The grouped card + the MacBain
+// POS-independent etymology both only matter where there is more than one POS.
+let headwordConceptCount = 0;
+for (const [key, rids] of gaLookup) {
+  if (rids.length < 2) continue;
+  const cid = `goi-${key}-concept`;
+  const label = headwordLabel.get(key) || key;
+  const uuids = rids.map(goiUuid);
+  for (let i = 0; i < uuids.length; i++) {
+    const row = { ResourceID: cid, label: i === 0 ? label : '', concept_headword: uuids[i] };
+    conceptRows.push(CONCEPT_COLUMNS.map(c => csvEscape(row[c] || '')).join(','));
+  }
+  headwordConceptCount++;
+}
+console.log(`[build-place] Headword concepts: ${headwordConceptCount} (homographs only; >1 POS entry)`);
+
 const conceptCsv = conceptRows.join('\n') + '\n';
 const conceptResourcesRaw = buildResourcesFromBusinessCsv(conceptCsv, conceptGraph, [], 'en', false, LAYER_NAMESPACE)
   ?.business_data?.resources || [];
@@ -583,14 +610,23 @@ function ensureResourceStubs() {
 
 // --- Run regen-layer-v2 -> data/place-v2 (pass the PLACE graph_id) ---
 const outDir = resolve(root, 'data/place-v2');
+// NOTE: regen-layer-v2 (--features v2-emit) is the retired sqlite emitter removed
+// in the DuckDB+Parquet cutover; the shipped heads are now produced by
+// build-parquet-layers.mjs (regen-parquet-v2) from these prebuilds. Keep the call
+// as a best-effort legacy step but DO NOT let its absence abort the build - the
+// concept prebuild below must still be written.
 console.log('[build-place] Running regen-layer-v2 (cargo, v2-emit)...');
 const srcTauri = resolve(root, 'app/src-tauri');
 ensureResourceStubs();
-execFileSync('cargo', [
-  'run', '--release', '--example', 'regen-layer-v2', '--features', 'v2-emit',
-  '--manifest-path', resolve(srcTauri, 'Cargo.toml'),
-  '--', 'data/prebuild-place', 'data/place-v2', graphId,
-], { stdio: 'inherit' });
+try {
+  execFileSync('cargo', [
+    'run', '--release', '--example', 'regen-layer-v2', '--features', 'v2-emit',
+    '--manifest-path', resolve(srcTauri, 'Cargo.toml'),
+    '--', 'data/prebuild-place', 'data/place-v2', graphId,
+  ], { stdio: 'inherit' });
+} catch (e) {
+  console.warn(`[build-place] regen-layer-v2 (place) skipped - use build-parquet-layers for the head: ${e.message?.split('\n')[0]}`);
+}
 
 // --- Concepts get their OWN head (concept-v2) so they are full-hydratable:
 // a head ships one graph.json, and full concept-detail hydration needs the
@@ -609,11 +645,15 @@ writeFileSync(resolve(conceptPrebuildDir, 'manifest.json'), JSON.stringify({
 }));
 console.log('[build-place] Running regen-layer-v2 for concepts -> data/concept-v2...');
 ensureResourceStubs(); // place emit above deleted data/place-v2/pagefind-ga.zip
-execFileSync('cargo', [
-  'run', '--release', '--example', 'regen-layer-v2', '--features', 'v2-emit',
-  '--manifest-path', resolve(srcTauri, 'Cargo.toml'),
-  '--', 'data/prebuild-concept', 'data/concept-v2', conceptGraphId,
-], { stdio: 'inherit' });
+try {
+  execFileSync('cargo', [
+    'run', '--release', '--example', 'regen-layer-v2', '--features', 'v2-emit',
+    '--manifest-path', resolve(srcTauri, 'Cargo.toml'),
+    '--', 'data/prebuild-concept', 'data/concept-v2', conceptGraphId,
+  ], { stdio: 'inherit' });
+} catch (e) {
+  console.warn(`[build-place] regen-layer-v2 (concept) skipped - use build-parquet-layers for the head: ${e.message?.split('\n')[0]}`);
+}
 
 // ============================================================================
 // STAGE G: Pagefind (one ga record per place; empty en/sampla for base parity)

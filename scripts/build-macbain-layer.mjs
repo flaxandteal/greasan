@@ -25,6 +25,7 @@ import {
   setNapiModule,
 } from '../app/node_modules/alizarin/dist/alizarin.js';
 import * as pagefind from './lib/pagefind-fork.mjs';
+import { emitConceptsIntoPrebuild, conceptResourceId } from './lib/concept-emit.mjs';
 import { readFileSync, writeFileSync, mkdirSync, existsSync } from 'fs';
 import { execSync } from 'child_process';
 import { fileURLToPath } from 'url';
@@ -512,6 +513,52 @@ function addRows(rid, rows) {
   rowsByRid.get(rid).push(...rows);
 }
 
+// MacBain's whole-headword etymology/cognates go on the shared LexicalConcept
+// (goi-<nhead>-concept), NOT fanned onto each per-POS entry - that fan-out put a
+// noun gloss on the verb homograph. concept-v2 mints the SAME concept id (the
+// grouping); this unions MacBain's etymology in. Accumulated per concept id so
+// multiple MacBain entries that fold to one headword merge.
+const conceptByRid = new Map();
+function addConceptContribution(headword, headwordUuids, etymologyText, resolvedCognates) {
+  const rid = conceptResourceId(headword);
+  let s = conceptByRid.get(rid);
+  if (!s) s = conceptByRid.set(rid, { resourceId: rid, label: headword, headwordUuids: new Set(), etymology: null, cognates: [], cogSeen: new Set() }).get(rid);
+  for (const u of headwordUuids) s.headwordUuids.add(u);
+  if (!s.etymology && etymologyText) s.etymology = { text: etymologyText, source: MACBAIN_TAG };
+  for (const c of resolvedCognates) {
+    const k = `${c.language}:${c.headword}`;
+    if (s.cogSeen.has(k)) continue;
+    s.cogSeen.add(k);
+    s.cognates.push({ headword: c.headword, language: c.language, entryId: c.entryId ? resourceIdToUuid(c.entryId) : null });
+  }
+}
+
+// Full MacBain entry rows (headword + gloss + etymology + cognates), for the
+// cases with NO POS ambiguity (a single-POS match, or a standalone word): there
+// is exactly one entry, so MacBain's content belongs on it. Homographs route
+// through the concept instead (addConceptContribution).
+function macbainEntryRows(rid, entry, resolvedCognates, dialect) {
+  const maxRows = Math.max(1, resolvedCognates.length);
+  const rows = [];
+  for (let i = 0; i < maxRows; i++) {
+    const row = { ResourceID: rid };
+    if (i === 0) {
+      row.headword = entry.primaryHeadword;
+      if (dialect) row.dialect = dialect;
+      if (entry.gloss) { row.gloss = entry.gloss; row.source_label = MACBAIN_TAG; }
+      row.etymology_text = entry.etymologyText;
+      row.etymology_source = MACBAIN_TAG;
+    }
+    if (i < resolvedCognates.length) {
+      row.cognate_headword = resolvedCognates[i].headword;
+      row.cognate_language = resolvedCognates[i].language;
+      if (resolvedCognates[i].entryId) row.cognate_entry_id = resourceIdToUuid(resolvedCognates[i].entryId);
+    }
+    rows.push(row);
+  }
+  return rows;
+}
+
 for (const entry of allEntries) {
   const normHw = normalizeHead(entry.primaryHeadword);
   const wkIds = wkLookup.get(normHw) || [];
@@ -529,84 +576,34 @@ for (const entry of allEntries) {
     return { ...c, entryId: formRid || null };
   });
 
-  if (wkIds.length > 0) {
-    // Matched: emit etymology + cognate rows for each WK ResourceID
+  if (wkIds.length > 1) {
+    // HOMOGRAPH match: the word is POS-distinct in WK (goi-<hw>-noun, -verb, ...).
+    // MacBain is POS-blind, so its gloss/etymology can't go on one homograph (that
+    // put a noun gloss on the verb). Carry only the HEADWORD on each entry (keeps
+    // them named when MacBain is installed without WK); etymology/cognates go to the
+    // shared concept (goi-<nhead>-concept), which groups the homographs.
     matchedCount++;
     for (const rid of wkIds) {
-      const maxRows = Math.max(1, resolvedCognates.length);
-      const rows = [];
-
-      for (let i = 0; i < maxRows; i++) {
-        const row = { ResourceID: rid };
-        if (i === 0) {
-          // Carry MacBain's own headword + gloss even on a matched entry, so the
-          // layer is self-sufficient when installed WITHOUT the layer it matched
-          // (e.g. core + MacBain, no Wiktionary). Otherwise these entries have no
-          // Headword tile (bake descriptor_name = "<Headword>": unnamed +
-          // unsearchable) AND no sense, so the entry view renders blank.
-          //
-          // With both layers installed this does NOT clobber the matched layer:
-          // the headword is cardinality-one + identical, so the merge unifies it
-          // to the same value; senses are cardinality-N, so MacBain's gloss
-          // interleaves as an extra MB-attributed sense rather than replacing the
-          // richer ones. Dialect is left to the matched layer (a goi- lemma may be
-          // Irish, not Scottish Gaelic - we must not force a dialect on it).
-          row.headword = entry.primaryHeadword;
-          if (entry.gloss) {
-            row.gloss = entry.gloss;
-            row.source_label = MACBAIN_TAG;
-          }
-          row.etymology_text = entry.etymologyText;
-          row.etymology_source = MACBAIN_TAG;
-        }
-        if (i < resolvedCognates.length) {
-          row.cognate_headword = resolvedCognates[i].headword;
-          row.cognate_language = resolvedCognates[i].language;
-          if (resolvedCognates[i].entryId) {
-            row.cognate_entry_id = resourceIdToUuid(resolvedCognates[i].entryId);
-          }
-        }
-        rows.push(row);
-      }
-      addRows(rid, rows);
+      addRows(rid, [{ ResourceID: rid, headword: entry.primaryHeadword }]);
     }
+    addConceptContribution(entry.primaryHeadword, wkIds.map(resourceIdToUuid), entry.etymologyText, resolvedCognates);
+  } else if (wkIds.length === 1) {
+    // SINGLE-POS match: exactly one WK entry, so no ambiguity - MacBain's gloss +
+    // etymology belong on that entry (no concept needed). Dialect left to WK.
+    matchedCount++;
+    addRows(wkIds[0], macbainEntryRows(wkIds[0], entry, resolvedCognates, null));
   } else {
-    // Unmatched: standalone entry
+    // Unmatched: standalone entry - a word only MacBain has, one POS, no ambiguity.
+    // Dialect-neutral slug (goi-, not gd-): language lives on the tile (row.dialect),
+    // not the ID. "-etym" is a POS bucket no other source emits, so goi-<slug>-etym
+    // cannot collide with a real-POS entry.
     standaloneCount++;
-    // Dialect-neutral slug (goi-, not gd-): language lives on the tile
-    // (row.dialect below), not the ID. A Scottish-only MacBain entry has no Irish
-    // match to compose with, and "-etym" is a POS bucket no other source emits, so
-    // goi-<slug>-etym cannot collide with a real-POS entry. Finishes the v2
-    // dialect-neutral migration (the last language-prefixed slugs).
     const slug = slugify(entry.primaryHeadword);
     let rid = `goi-${slug}-etym`;
     let suffix = 2;
     while (usedResourceIds.has(rid)) rid = `goi-${slug}-etym-${suffix++}`;
     usedResourceIds.add(rid);
-
-    const maxRows = Math.max(1, resolvedCognates.length);
-    const rows = [];
-
-    for (let i = 0; i < maxRows; i++) {
-      const row = { ResourceID: rid };
-      if (i === 0) {
-        row.headword = entry.primaryHeadword;
-        row.dialect = 'Scottish Gaelic (General)';
-        row.gloss = entry.gloss;
-        row.source_label = MACBAIN_TAG;
-        row.etymology_text = entry.etymologyText;
-        row.etymology_source = MACBAIN_TAG;
-      }
-      if (i < resolvedCognates.length) {
-        row.cognate_headword = resolvedCognates[i].headword;
-        row.cognate_language = resolvedCognates[i].language;
-        if (resolvedCognates[i].entryId) {
-          row.cognate_entry_id = resourceIdToUuid(resolvedCognates[i].entryId);
-        }
-      }
-      rows.push(row);
-    }
-    addRows(rid, rows);
+    addRows(rid, macbainEntryRows(rid, entry, resolvedCognates, 'Scottish Gaelic (General)'));
   }
 }
 
@@ -765,6 +762,18 @@ writeFileSync(
 );
 
 console.log(`[build-macbain] Prebuild written to ${prebuildDir}`);
+
+// --- Headword LexicalConcepts (second model): MacBain's whole-headword etymology
+// + cognates on the shared goi-<nhead>-concept id, unioned in from the macbain head
+// over concept-v2's grouping (which supplies the LexicalConcept base graph). ---
+{
+  const specs = [...conceptByRid.values()].map((s) => ({
+    resourceId: s.resourceId, label: s.label,
+    headwordUuids: [...s.headwordUuids], etymology: s.etymology, cognates: s.cognates,
+  }));
+  const n = emitConceptsIntoPrebuild({ root, prebuildDir, specs, usingNapi, layerNamespace: LAYER_NAMESPACE });
+  console.log(`[build-macbain] Headword concepts: ${n} (etymology/cognates on the shared concept)`);
+}
 
 // --- Pagefind output dir ---
 // The v1 ros-madair-build step is retired; the shipped head is the v2 emit of
