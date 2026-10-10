@@ -24,7 +24,7 @@ import { readFileSync, writeFileSync, mkdirSync, existsSync } from 'fs';
 import { execSync, execFileSync } from 'child_process';
 import { fileURLToPath } from 'url';
 import { dirname, resolve } from 'path';
-import { LAYERS, buildBusinessCsv, uuidv5, ALIZARIN_NS } from './lib/layers-data.mjs';
+import { LAYERS, buildBusinessCsv, uuidv5, ALIZARIN_NS, readBundleTag } from './lib/layers-data.mjs';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const root = resolve(__dirname, '..');
@@ -67,7 +67,9 @@ console.log(`[build-layer] graph_id: ${graphId} (${graph.nodes.length} nodes)`);
 const typedGraph = parseStaticGraph(JSON.stringify({ graph: [graph] }));
 typedGraph.setDescriptorTemplate('name', '<Name>');
 
-const businessCsv = buildBusinessCsv(LAYERS, countResources);
+const bundleTag = readBundleTag(root);
+const businessCsv = buildBusinessCsv(LAYERS, countResources, { bundleTag });
+console.log(`[build-layer] greasan-data install URLs: ${bundleTag ? `tag ${bundleTag}` : 'none (bundle-pin.json absent)'}`);
 writeFileSync(resolve(root, 'data/layer-business.csv'), businessCsv);
 console.log(`[build-layer] business CSV: ${businessCsv.split('\n').length - 1} rows, ${LAYERS.length} layers`);
 

@@ -14,8 +14,33 @@
  * Concept labels MUST match models/layer/collections.csv.
  */
 import { createHash } from 'node:crypto';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 
 export const ALIZARIN_NS = '1a79f1c8-9505-4bea-a18e-28a053f725ca';
+
+export const GREASAN_DATA_REPO = 'flaxandteal/greasan-data';
+
+/** Layers whose data ships as a pre-built parquet-head zip on greasan-data
+ * releases, so they are DOWNLOADABLE (install) even in a core-only build where
+ * nothing is bundled. Excludes: tearma (file-picker, not redistributable),
+ * person/note (app-generated, internal), basemap (its own PMTiles build). */
+export const DOWNLOADABLE_SLUGS = new Set([
+  'wiktionary', 'macbain', 'bunamo', 'gramadan-forms', 'place',
+  'example-tatoeba', 'example-gaois', 'example-udt', 'concept',
+]);
+
+/** greasan-data release asset URL for a built parquet head (`<head>.zip`). */
+export function greasanDataAssetUrl(head, tag) {
+  return `https://github.com/${GREASAN_DATA_REPO}/releases/download/${tag}/${head}.zip`;
+}
+
+/** The pinned bundle tag from bundle-pin.json, so skeleton install URLs track the
+ * pinned greasan-data release. null if the pin is absent. */
+export function readBundleTag(root) {
+  try { return JSON.parse(readFileSync(resolve(root, 'bundle-pin.json'), 'utf8')).tag || null; }
+  catch { return null; }
+}
 
 export function uuidv5(name, ns) {
   const nsb = Buffer.from(ns.replace(/-/g, ''), 'hex');
@@ -151,12 +176,23 @@ export const CSV_COLUMNS = [
  * each built head) or a placeholder (build-core, which has no heads) - defaults to
  * empty (no count).
  */
-export function buildBusinessCsv(layers = LAYERS, countResources = () => '') {
+export function buildBusinessCsv(layers = LAYERS, countResources = () => '', { bundleTag = null } = {}) {
   const rows = [CSV_COLUMNS.join(',')];
   const blank = (obj) => CSV_COLUMNS.map((c) => csvEscape(obj[c] ?? '')).join(',');
   for (const L of layers) {
     const rc = countResources(L.head);
     const rid = `layer-${L.slug}`;
+    // Downloadable layers get a greasan-data install URL baked into their skeleton,
+    // so a core-only build can fetch them (they carry no bundled data). In a full
+    // build that also bundles the head, this is an OTA/reinstall fallback.
+    const dlUrl = bundleTag && DOWNLOADABLE_SLUGS.has(L.slug) && L.head
+      ? greasanDataAssetUrl(L.head, bundleTag) : '';
+    const config = dlUrl
+      ? { ...(L.config || {}), install: { name: L.slug, url: dlUrl, format: 'built' } }
+      : (L.config || {});
+    const downloads = dlUrl
+      ? [...L.downloads, { f: 'RM', u: dlUrl, n: 'Pre-built parquet head (greasan-data release).' }]
+      : L.downloads;
     // Row 1: all scalars (root + licensing + description + statistics + integration).
     rows.push(blank({
       ResourceID: rid, name: L.name, slug: L.slug, icon: L.icon || '',
@@ -166,12 +202,12 @@ export function buildBusinessCsv(layers = LAYERS, countResources = () => '') {
       resource_count: rc,
       statistics_block: JSON.stringify({ resourceCount: rc === '' ? null : Number(rc), head: L.head || null, builtBy: 'build-layer-catalogue' }),
       integration_slug: L.head || L.slug, default_on: L.default_on, swatch: L.swatch,
-      config_block: JSON.stringify(L.config || {}),
+      config_block: JSON.stringify(config),
     }));
     // One row per link (n-card).
     for (const lk of L.links) rows.push(blank({ ResourceID: rid, link_title: lk.t, link_url: lk.u, link_type: lk.ty }));
     // One row per download (n-card, nested under integration).
-    for (const d of L.downloads) rows.push(blank({ ResourceID: rid, download_format: d.f, download_url: d.u, download_notes: d.n }));
+    for (const d of downloads) rows.push(blank({ ResourceID: rid, download_format: d.f, download_url: d.u, download_notes: d.n }));
   }
   return rows.join('\n') + '\n';
 }
