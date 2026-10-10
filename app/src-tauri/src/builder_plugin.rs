@@ -967,9 +967,26 @@ pub async fn list_layers<R: Runtime>(app: AppHandle<R>) -> Result<Vec<LayerInfo>
     Ok(layers)
 }
 
-/// List locally-built v2 layers (a `head.sqlite` present), so `restoreV2Layers`
-/// can re-register them into the active head-dir set on startup. The v2 sibling
-/// of `list_layers` (which keys on the v1 `summary.bin`).
+/// A directory is a usable v2-duck head iff it carries at least one
+/// `tiles_*.parquet` - the head-engine `head.sqlite` no longer exists. Mirrors
+/// the `present_layer_dirs` check on the read side (`v2.rs`).
+fn has_parquet_tiles(dir: &Path) -> bool {
+    std::fs::read_dir(dir).ok().is_some_and(|rd| {
+        rd.flatten().any(|e| {
+            let n = e.file_name();
+            let n = n.to_string_lossy();
+            n.starts_with("tiles_") && n.ends_with(".parquet")
+        })
+    })
+}
+
+/// List locally-built v2 layers (a `tiles_*.parquet` head present), so
+/// `restoreV2Layers` can re-register them into the active head-dir set on
+/// startup. The v2 sibling of `list_layers` (which keys on the v1 `summary.bin`).
+///
+/// BUGFIX: previously keyed on `head.sqlite`, which the v2-duck (Parquet) emit
+/// never writes - so on-device-built layers (Téarma) were silently dropped on
+/// restart and had to be reinstalled every launch.
 #[command]
 pub async fn list_v2_layers<R: Runtime>(app: AppHandle<R>) -> Result<Vec<LayerInfo>, String> {
     let dir = layers_dir(&app)?;
@@ -980,7 +997,7 @@ pub async fn list_v2_layers<R: Runtime>(app: AppHandle<R>) -> Result<Vec<LayerIn
     };
     for entry in entries.flatten() {
         let path = entry.path();
-        if path.is_dir() && path.join("head.sqlite").exists() {
+        if path.is_dir() && has_parquet_tiles(&path) {
             let layer_id = path
                 .file_name()
                 .unwrap_or_default()

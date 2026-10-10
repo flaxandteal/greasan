@@ -206,12 +206,25 @@ of `build_to_memory`, driven from Settings, under a foreground service — repla
 the v1 flat-artifact build for v2 layers. The memory-bounded emitter it depends on
 now exists and is proven; this is the remaining wiring + the service.
 
-> **Sharding is NOT the fix — it was the measurement method.** The 232 MB number
-> was obtained by splitting the input into 97 files so emit's *existing* file-level
-> streaming kicked in, standing in for a per-resource parser that isn't written
-> yet. Do NOT ship sharding: shard boundaries become chunk boundaries → different
-> content hashes → a different snapshot id, which breaks the manifest-based
-> incremental-update / integrity path. It's a throwaway probe, not a shipping plan.
+> **Sharding is NOT the fix — it was the measurement method, and on the LANDED
+> emit it is now actively HARMFUL.** The 232 MB probe split the input into 97 files
+> so the *old* per-file-streaming emit dropped each file in turn. Two independent
+> reasons never to ship it:
+> 1. **Snapshot id.** Shard boundaries become chunk boundaries → different content
+>    hashes → a different snapshot id, breaking the manifest incremental-update /
+>    integrity path.
+> 2. **Memory — it re-materialises the corpus on the emit that actually shipped.**
+>    Files ≤ 8 MiB (`SMALL_LIMIT`) take the whole-file parse and are held as
+>    `Src::Mem(Box<StaticResource>)` in the `order` vec. So many small shards = the
+>    whole corpus resident on the heap = back to ~2.7 GB. ONLY the seek path (files
+>    > 8 MiB → `Src::Disk` offset) is bounded. The 232 MB sharding number came from
+>    the *pre-seek* emit; it would not reproduce today.
+>
+> **Design rule for ANY streaming producer feeding emit** (including a future
+> `tree_to_tiles`-based loader that skips the CSV/JSON intermediate): keep the input
+> ONE large file (> 8 MiB) and let pass 2 seek + re-parse per resource. Never shard,
+> and never hand emit a `Vec<StaticResource>` — that is `Src::Mem` for every
+> resource, i.e. the whole-corpus peak by another name.
 
 The JS-side descriptor batching can retire once the streaming loader lands. The
 internal spill does not appear to be on the critical path.

@@ -144,7 +144,11 @@
     addError = '';
     // The picker's own title carries the real name; show that, not the SAF id.
     pickedFile = decodeURIComponent(picked.split('/').pop() || 'file');
-    addUrl = picked;                    // content:// URI - build_layer handles it
+    // Android's dialog returns a content:// URI; desktop returns a bare absolute
+    // path (no scheme). build_layer's fetch only handles content:// / file:// /
+    // http(s) - a scheme-less path falls through to reqwest and fails - so prefix
+    // bare local paths with file://. Leave any real scheme (content://, http://) be.
+    addUrl = /^[a-z][a-z0-9+.-]*:\/\//i.test(picked) ? picked : `file://${picked}`;
     if (!addName.trim()) {
       // A picked file maps to its catalogue Layer record by ingest format - a .tbx
       // is Téarma - so the installed layer joins that record's name (and thus its

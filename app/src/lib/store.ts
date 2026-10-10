@@ -520,8 +520,8 @@ export async function bootstrapLayers(): Promise<void> {
 
 /**
  * Restore user-installed v2 heads from disk on startup. Scans layers/<name>/ for
- * a `head.sqlite` (`list_v2_layers`) and re-registers each via `addV2Layer` so it
- * rejoins `currentV2HeadDirs()`. The v2 sibling of `restoreLayers` (v1 summary.bin).
+ * a `tiles_*.parquet` head (`list_v2_layers`) and re-registers each via `addV2Layer`
+ * so it rejoins `currentV2HeadDirs()`. The v2 sibling of `restoreLayers` (v1 summary.bin).
  */
 export async function restoreV2Layers(): Promise<void> {
   try {

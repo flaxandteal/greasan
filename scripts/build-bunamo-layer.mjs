@@ -200,14 +200,18 @@ writeFileSync(resolve(prebuildDir, 'manifest.json'), JSON.stringify({
 }));
 console.log(`[build-bunamo] Prebuild written to ${prebuildDir}`);
 
-// --- Run regen-layer-v2 (Rust emit) -> data/bunamo-v2 ---
+// --- Run regen-parquet-v2 (Rust emit_parquet) -> data/bunamo-v2 ---
+// (was regen-layer-v2 --features v2-emit; the sqlite head engine + its v2-emit
+// feature were removed in the DuckDB+Parquet cutover. emit is non-optional now,
+// so no --features, and the parquet emitter is regen-parquet-v2 - matching
+// build-parquet-layers.mjs. Writes tiles_*.parquet + concept_catalog + graph.json.)
 const outDir = resolve(root, 'data/bunamo-v2');
-console.log('[build-bunamo] Running regen-layer-v2 (cargo, v2-emit)...');
+console.log('[build-bunamo] Running regen-parquet-v2 (cargo, emit_parquet)...');
 const srcTauri = resolve(root, 'app/src-tauri');
 execFileSync('cargo', [
-  'run', '--release', '--example', 'regen-layer-v2', '--features', 'v2-emit',
+  'run', '--release', '--example', 'regen-parquet-v2',
   '--manifest-path', resolve(srcTauri, 'Cargo.toml'),
-  '--', 'data/prebuild-bunamo', 'data/bunamo-v2', GRAPH_ID,
+  '--', 'data/prebuild-bunamo', 'data/bunamo-v2',
 ], { stdio: 'inherit' });
 
 // --- Pagefind: one ga record per goi entry, keyed on INFLECTED forms ---------

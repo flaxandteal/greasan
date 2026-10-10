@@ -20,8 +20,9 @@
     "windows": [
       {
         "title": "Gréasán",
-        "width": 400,
-        "height": 800,
+        "width": 480,
+        "height": 880,
+        "minWidth": 380,
         "resizable": true
       }
     ]
@@ -31,7 +32,7 @@
   },
   "bundle": {
     "active": true,
-    "targets": ["deb"],
+    "targets": ["deb", "appimage"],
     "resources": {
       "../../data/bundle/heads-versions.json": "heads-versions.json",
       "basemap/goidelic.pmtiles": "basemap/goidelic.pmtiles"
