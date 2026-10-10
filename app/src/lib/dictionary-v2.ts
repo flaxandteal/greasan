@@ -334,29 +334,41 @@ export async function enrichEntryV2(
   const etymologies = base.etymologies.map((e) => ({ ...e }));
   const cognates = base.cognates.map((c) => ({ ...c }));
 
-  // Reverse-cognate continuum: entries that CITE this one via `cognate_entry_id`
-  // (e.g. MacBain "fear" citing Irish "fear") surface their etymology/cognates.
-  // SAME-LEXEME gate applied BEFORE hydration via one batched `descriptors`
-  // (display_name = <Headword>, no hydration); hydrate ONLY the matches.
+  // Concept fold: a headword's per-POS entries share a LexicalConcept
+  // (goi-<nhead>-concept) that carries MacBain's whole-headword etymology +
+  // cognates and groups the homographs (concept_headword). Resolve it (reverse
+  // concept_headword link, run concept-authoritative against the concept head),
+  // hydrate it for the shared etymology + the sibling entry ids, and load the
+  // siblings for the grouped card. concept-v2 must LEAD the hydrate stack so its
+  // LexicalConcept graph is the base - a corpus head carries only concept TILES,
+  // not the model graph, so the carrier-union picks the first carrier.
+  let siblings: EntryDetail[] = [];
   try {
-    const citers = (await citedBy(headDirs, uri, 'cognate_entry_id')).filter(
-      (c) => c && c !== uri,
-    );
-    const citerHeads = citers.length ? await descriptors(headDirs, citers) : {};
-    const sameLexeme = citers.filter(
-      (c) => normHead(citerHeads[c] ?? '') === normHead(headword),
-    );
-    const citerTrees = await Promise.all(
-      sameLexeme.map((c) => hydrateLayers(headDirs, c).catch(() => null)),
-    );
-    for (const ct of citerTrees) {
-      if (!ct || typeof ct !== 'object') continue;
-      const citer = ct as Record<string, any>;
-      mergeEtymologies(etymologies, extractEtymologies(citer));
-      mergeCognates(cognates, extractCognates(citer));
+    const conceptHead = headDirs.find((d) => d.includes('concept-v2'));
+    if (conceptHead) {
+      const conceptIds = await citedBy([conceptHead], uri, 'concept_headword');
+      if (conceptIds.length) {
+        const stack = [conceptHead, ...headDirs.filter((d) => d !== conceptHead)];
+        const ctree = (await hydrateLayers(stack, conceptIds[0])) as Record<string, any> | null;
+        if (ctree && typeof ctree === 'object') {
+          mergeEtymologies(etymologies, extractEtymologies(ctree));
+          mergeCognates(cognates, extractCognates(ctree));
+          const sibIds = [
+            ...new Set(
+              asArray(ctree.concept_headword)
+                .map((h: any) => (typeof h === 'string' ? h : h?.resourceId ?? ''))
+                .filter(Boolean),
+            ),
+          ].filter((id) => id !== uri);
+          const loaded = await Promise.all(
+            sibIds.map((id) => loadEntryV2(id, headDirs).catch(() => null)),
+          );
+          siblings = loaded.filter((e): e is EntryDetail => !!e);
+        }
+      }
     }
   } catch (err) {
-    console.warn('[dictionary-v2] cited_by enrichment skipped:', err);
+    console.warn('[dictionary-v2] concept enrichment skipped:', err);
   }
 
   // External example sentences: the ExternalExample graph is not shipped, so
@@ -401,5 +413,5 @@ export async function enrichEntryV2(
     console.warn('[dictionary-v2] placenames skipped:', err);
   }
 
-  return { etymologies, cognates, externalExamples, placenames };
+  return { etymologies, cognates, externalExamples, placenames, siblings };
 }

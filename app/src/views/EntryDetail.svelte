@@ -142,21 +142,36 @@
     return tag === 'masculine' ? 'm' : tag === 'feminine' ? 'f' : tag;
   }
   const ORDINAL = ['', '1st', '2nd', '3rd', '4th', '5th'];
-  /** Compact class badge for the title: 'm1' (noun), 'a1' (adj), '1st conj.' (verb). */
-  let classBadge = $derived.by(() => {
-    if (!entry) return '';
-    const g = entry.gender === 'masculine' ? 'm' : entry.gender === 'feminine' ? 'f' : '';
-    const c = entry.grammarClass ?? '';
-    const kind = posKind(entry.pos);
+  /** Compact class badge for an entry: 'm1' (noun), 'a1' (adj), '1st conj.' (verb). */
+  function badgeFor(e: EntryDetail): string {
+    const g = e.gender === 'masculine' ? 'm' : e.gender === 'feminine' ? 'f' : '';
+    const c = e.grammarClass ?? '';
+    const kind = posKind(e.pos);
     // An inferred/uncertain declension (gramadan guess, not attested) gets a
     // trailing '?' beside the class so the reader knows it is not sourced.
-    const conf = (entry.grammarClassConfidence ?? '').toLowerCase();
+    const conf = (e.grammarClassConfidence ?? '').toLowerCase();
     const q = c && conf && !conf.startsWith('attest') ? '?' : '';
     if (kind === 'noun') return c ? g + c + q : g;
     if (kind === 'adjective') return c ? 'a' + c + q : '';
     if (kind === 'verb') return c && ORDINAL[+c] ? ORDINAL[+c] + ' conj.' + q : '';
     return g;
+  }
+  let classBadge = $derived(entry ? badgeFor(entry) : '');
+
+  // Grouped headword card: the open entry + its sibling POS homographs (same
+  // LexicalConcept) become one section per POS, so `fear` shows the noun ("a man")
+  // and the verb ("to shed") side by side instead of a single POS with the other's
+  // senses leaking in. Self leads; siblings that have senses follow. When there
+  // are no siblings this collapses to the single-entry list (isGrouped = false).
+  let posGroups = $derived.by(() => {
+    if (!entry) return [] as Array<{ uri: string; pos: string; badge: string; senses: EntryDetail['senses']; self: boolean }>;
+    const self = { uri: entry.uri, pos: entry.pos, badge: classBadge, senses: entry.senses, self: true };
+    const sibs = (entry.siblings ?? [])
+      .filter((s) => s.uri !== entry.uri && s.senses.length > 0)
+      .map((s) => ({ uri: s.uri, pos: s.pos, badge: badgeFor(s), senses: s.senses, self: false }));
+    return [self, ...sibs];
   });
+  let isGrouped = $derived(posGroups.length > 1);
 
   function handleStar() {
     if (!entry) return;
@@ -270,33 +285,51 @@
       </div>
     </div>
 
-    <!-- Senses -->
-    {#if entry.senses.length > 0}
+    <!-- Senses (grouped per-POS when the headword has sibling homographs) -->
+    {#if posGroups.some((g) => g.senses.length > 0)}
       <div class="ge-block-title">{$t('entry.senses')}</div>
       <div style="padding:0 16px;">
-        <div class="ge-list">
-          {#each entry.senses as sense, i}
-            {@const dcode = sense.dialect ? dialectCode($familyConfig.id, sense.dialect) || sense.dialect : ''}
-            {@const sw = sense.sourceLabel ? sourceLabelSwatch($familyConfig.id, sense.sourceLabel) : ''}
-            <div class="ge-list-row" style="align-items:flex-start;">
-              <span class="ge-sense-num">{i + 1}</span>
-              <div class="row-main">
-                <div class="ge-list-title">{sense.gloss}</div>
-                {#if sense.examples.length > 0}
-                  <div class="ge-list-subtitle" style="margin-top:4px;">
-                    <span style="font-style:italic;">{sense.examples[0]}</span>
+        {#each posGroups as grp (grp.uri)}
+          {#if grp.senses.length > 0}
+            {#if isGrouped}
+              {#if grp.self}
+                <div class="ge-pos-group-header">
+                  {#if grp.pos}<span style="font-style:italic;">{grp.pos}</span>{/if}
+                  {#if grp.badge}<span class="ge-pos-group-badge">{grp.badge}</span>{/if}
+                </div>
+              {:else}
+                <button class="ge-pos-group-header ge-pos-group-link" onclick={() => selectEntry(grp.uri, entry.headword)}>
+                  {#if grp.pos}<span style="font-style:italic;">{grp.pos}</span>{/if}
+                  {#if grp.badge}<span class="ge-pos-group-badge">{grp.badge}</span>{/if}
+                  <span style="margin-left:auto;opacity:0.45;">›</span>
+                </button>
+              {/if}
+            {/if}
+            <div class="ge-list">
+              {#each grp.senses as sense, i}
+                {@const dcode = sense.dialect ? dialectCode($familyConfig.id, sense.dialect) || sense.dialect : ''}
+                {@const sw = sense.sourceLabel ? sourceLabelSwatch($familyConfig.id, sense.sourceLabel) : ''}
+                <div class="ge-list-row" style="align-items:flex-start;">
+                  <span class="ge-sense-num">{i + 1}</span>
+                  <div class="row-main">
+                    <div class="ge-list-title">{sense.gloss}</div>
+                    {#if sense.examples.length > 0}
+                      <div class="ge-list-subtitle" style="margin-top:4px;">
+                        <span style="font-style:italic;">{sense.examples[0]}</span>
+                      </div>
+                    {/if}
                   </div>
-                {/if}
-              </div>
-              <!-- Two fixed-width slots so dialect and source line up as columns
-                   down the sense list, even when a sense is missing one. -->
-              <div class="ge-sense-tags">
-                <span class="ge-sense-tag dialect" class:empty={!dcode} class:gd={dcode.split('.')[0] === 'GD'} title={sense.dialect ?? ''}>{dcode}</span>
-                <span class="ge-sense-tag source" class:empty={!sense.sourceLabel} class:tinted={!!sw} style={sw ? `--sw:${sw}` : ''}>{sense.sourceLabel ?? ''}</span>
-              </div>
+                  <!-- Two fixed-width slots so dialect and source line up as columns
+                       down the sense list, even when a sense is missing one. -->
+                  <div class="ge-sense-tags">
+                    <span class="ge-sense-tag dialect" class:empty={!dcode} class:gd={dcode.split('.')[0] === 'GD'} title={sense.dialect ?? ''}>{dcode}</span>
+                    <span class="ge-sense-tag source" class:empty={!sense.sourceLabel} class:tinted={!!sw} style={sw ? `--sw:${sw}` : ''}>{sense.sourceLabel ?? ''}</span>
+                  </div>
+                </div>
+              {/each}
             </div>
-          {/each}
-        </div>
+          {/if}
+        {/each}
       </div>
     {/if}
 
@@ -602,6 +635,22 @@
 {/if}
 
 <style>
+  /* Per-POS group header in the grouped headword card (noun / verb sections). */
+  .ge-pos-group-header {
+    display: flex; align-items: baseline; gap: 8px; width: 100%;
+    margin: 14px 0 2px; padding: 4px 0;
+    font-size: 15px; color: var(--fg); font-weight: 600;
+    border-bottom: 1px solid color-mix(in srgb, var(--fg-soft) 22%, transparent);
+  }
+  .ge-pos-group-header:first-child { margin-top: 2px; }
+  .ge-pos-group-badge {
+    font-size: 11px; font-weight: 700; font-variant: small-caps; letter-spacing: 0.02em;
+    background: color-mix(in srgb, var(--fg-soft) 16%, transparent);
+    padding: 1px 7px; border-radius: 4px;
+  }
+  .ge-pos-group-link { background: none; border: 0; cursor: pointer; text-align: left; font-family: inherit; }
+  .ge-pos-group-link:hover { color: var(--accent, var(--fg)); }
+
   /* Paradigm grid (nouns / adjectives) */
   .ge-para { width: 100%; border-collapse: collapse; margin: 4px 0 2px; }
   .ge-para th, .ge-para td { text-align: left; padding: 7px 10px; vertical-align: top; }

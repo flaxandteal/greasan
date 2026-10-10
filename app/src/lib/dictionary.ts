@@ -73,6 +73,12 @@ export interface EntryDetail {
   /** Placenames whose name is constituted by this word (reverse `element_entry`
    *  lookup into the `place` layer). Count is exact; sample is a resolved page. */
   placenames?: { count: number; sample: Array<{ resourceId: string; name: string }> };
+  /** Sibling LexicalEntries that share this word's LexicalConcept - the other
+   *  POS homographs (e.g. the noun + pronoun when this is the verb `fear`). The
+   *  entry view renders self + siblings as one grouped headword card, POS-tagged,
+   *  with the shared concept-level etymology shown once. Populated by the concept
+   *  fold in enrichEntryV2; absent when there is no concept / no siblings. */
+  siblings?: EntryDetail[];
 }
 
 export interface ExampleDetail {
