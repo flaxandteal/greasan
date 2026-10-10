@@ -437,7 +437,14 @@ export async function search(
     // so FTS only joins headword (ga) / gloss (en) search.
     const ftsField: 'headword' | 'gloss' | null =
       lang === 'en' ? 'gloss' : lang === 'sampla' ? null : 'headword';
-    const ftsDirs = ftsField ? currentV2HeadDirs() : [];
+    // INTERNAL layers are reached only through links (a placename's concept, a
+    // note's subject), never opened directly - they are not entries. On-device
+    // FTS-on-install indexes every head's descriptor_name, including the concept
+    // head's labels, so without this filter searching "fear" would also return the
+    // `goi-fear-concept` LexicalConcept (which has no headword/senses). Exclude them.
+    const ftsDirs = ftsField
+      ? currentV2HeadDirs().filter((d) => !/\/(concept|person|note)-v2\b/.test(d))
+      : [];
     if (bases.length === 0 && ftsDirs.length === 0) return []; // nothing to search
 
     // Normalize query: strip diacritics so "focal" matches "fócal"
