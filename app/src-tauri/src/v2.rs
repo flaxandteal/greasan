@@ -399,28 +399,40 @@ pub fn v2_hydrate_layers(head_dirs: Vec<String>, resource_id: String, language: 
     #[cfg(feature = "cmdperf")]
     let __t = std::time::Instant::now();
     let head_dirs = present_layer_dirs(head_dirs);
-    let Some(base) = head_dirs.first() else {
+    if head_dirs.is_empty() {
         return Err("v2_hydrate_layers: no layers given".to_string());
+    }
+    // The hydrate view is a `LayeredGraph` whose nodegroups are the UNION of the
+    // resource's model across the layers that actually CARRY it (so every
+    // contributing layer's tiles are interpretable), plus any fxg-bearing computed
+    // layer (which materializes derived tiles via functions). The base model must
+    // be a carrier: using head_dirs[0] blindly was the bug - over a heterogeneous
+    // stack a non-carrying layer (e.g. an examples head) can lead, and its graph
+    // cannot read the resource's tiles, so the hydrate drops every nodegroup and
+    // the entry renders blank. head_dirs order (precedence) is preserved; the
+    // carrier test is one indexed descriptor lookup (pooled readers). Falls back
+    // to the leading head's graph when nothing is detected as a carrier.
+    let want = [resource_id.clone()];
+    let mut carriers: Vec<std::sync::Arc<StaticGraph>> = Vec::new();
+    let mut fxg_only: Vec<std::sync::Arc<StaticGraph>> = Vec::new();
+    for d in &head_dirs {
+        let Ok(g) = load_graph_cached(&graph_path(d)) else { continue };
+        let carries = ros_madair_duck::descriptors(&[Path::new(d.as_str())], &want)
+            .map(|m| m.contains_key(&resource_id))
+            .unwrap_or(false);
+        if carries {
+            carriers.push(g);
+        } else if g.functions_x_graphs.as_ref().is_some_and(|v| !v.is_empty()) {
+            fxg_only.push(g);
+        }
+    }
+    let base_graph = match carriers.first() {
+        Some(g) => g.clone(),
+        None => load_graph_cached(&graph_path(&head_dirs[0]))?,
     };
-    // The app owns layer-graph loading (one cached `load_graph`): the base model,
-    // plus the fxg-bearing overlays a computed layer contributes. When any
-    // overlay declares functions we retain a composed LayeredGraph (dirs[0] is
-    // the base; overlays are the rest that declare fxgs) and pass it as the
-    // derive-pass view; otherwise the base graph is its own view.
-    let base_graph = load_graph_cached(&graph_path(base))?;
-    let overlays: Vec<std::sync::Arc<StaticGraph>> = head_dirs
-        .iter()
-        .skip(1)
-        .filter_map(|d| load_graph_cached(&graph_path(d)).ok())
-        .filter(|g| {
-            g.functions_x_graphs
-                .as_ref()
-                .is_some_and(|v| !v.is_empty())
-        })
-        .collect();
-    // One graph for hydrate: always a LayeredGraph (a single-layer one when no
-    // computed layer is installed). Whether it wraps one layer or many is
-    // internal to it - hydrate never sees the multiplicity.
+    // Overlays = the other carriers (model union) ++ the fxg-only computed layers.
+    let mut overlays: Vec<std::sync::Arc<StaticGraph>> = carriers.into_iter().skip(1).collect();
+    overlays.extend(fxg_only);
     let composed = cached_layered_graph(&base_graph, &overlays);
     let langs: Vec<&str> = match language.as_deref() {
         Some(l) => vec![l, "ga", "gd", "en"],
