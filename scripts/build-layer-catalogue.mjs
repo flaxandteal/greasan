@@ -30,6 +30,12 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const root = resolve(__dirname, '..');
 const namespace = 'https://flaxandteal.org/ontology/goidelic#';
 
+// --skeleton: the SKELETON catalogue shipped in core/base builds - every Layer
+// resource's metadata + install URLs, but NO resource_count (no built heads to
+// read). An installed layer's own fuller Layer resource (same ResourceID)
+// overrides+supplements this via the store's cross-layer tile merge.
+const SKELETON = process.argv.slice(2).includes('--skeleton');
+
 function elapsed(start) { return `${((performance.now() - start) / 1000).toFixed(1)}s`; }
 
 /** Best-effort resource count from a layer's head spine table (via python3
@@ -68,8 +74,10 @@ const typedGraph = parseStaticGraph(JSON.stringify({ graph: [graph] }));
 typedGraph.setDescriptorTemplate('name', '<Name>');
 
 const bundleTag = readBundleTag(root);
-const businessCsv = buildBusinessCsv(LAYERS, countResources, { bundleTag });
-console.log(`[build-layer] greasan-data install URLs: ${bundleTag ? `tag ${bundleTag}` : 'none (bundle-pin.json absent)'}`);
+// Skeleton builds read no heads (there are none) → empty counts; the installed
+// layer supplies the real resource_count when it overrides the skeleton.
+const businessCsv = buildBusinessCsv(LAYERS, SKELETON ? () => '' : countResources, { bundleTag });
+console.log(`[build-layer] mode: ${SKELETON ? 'SKELETON (no counts)' : 'full'}; greasan-data URLs: ${bundleTag ? `tag ${bundleTag}` : 'none (bundle-pin.json absent)'}`);
 writeFileSync(resolve(root, 'data/layer-business.csv'), businessCsv);
 console.log(`[build-layer] business CSV: ${businessCsv.split('\n').length - 1} rows, ${LAYERS.length} layers`);
 
