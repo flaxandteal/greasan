@@ -24,13 +24,15 @@ export const GREASAN_DATA_REPO = 'flaxandteal/greasan-data';
 /** Layers whose data ships as a pre-built parquet-head `<head>.zip` on the pinned
  * greasan-data release, so they are DOWNLOADABLE (install) even in a core-only
  * build. MUST match the actual assets on that release - offering a slug with no
- * asset 404s on install. Currently present on bundle-2026-08-20:
- *   macbain, gramadan-forms, concept, example-{tatoeba,gaois,udt}.
- * NOT in the bundle (so NOT offered): wiktionary (too large / full-APK only),
- * bunamo (replaced by the computed gramadan-forms), place. Also excluded:
- * tearma (file-picker, not redistributable), person/note (internal), basemap. */
+ * asset 404s on install. Present on bundle-2026-10-10:
+ *   wiktionary, macbain, gramadan-forms, place, concept, example-{tatoeba,gaois,udt}.
+ * A catalogue install fetches only the head zip and builds its search index
+ * on-device (FTS5), so the pagefind size is irrelevant here - wiktionary is a
+ * 26MB head, not the ~115MB of pagefind the full APK bundles. NOT offered:
+ * bunamo (no asset - replaced by the computed gramadan-forms), tearma (file-picker,
+ * not redistributable), person/note (internal), basemap (own PMTiles). */
 export const DOWNLOADABLE_SLUGS = new Set([
-  'macbain', 'gramadan-forms', 'concept',
+  'wiktionary', 'macbain', 'gramadan-forms', 'place', 'concept',
   'example-tatoeba', 'example-gaois', 'example-udt',
 ]);
 
@@ -67,10 +69,10 @@ export const LAYERS = [
     types: ['Glosses', 'Senses', 'Etymology', 'Pronunciation', 'Cognates'], formats: ['Arches JSON', 'RM'],
     swatch: 'var(--layer-wk)', default_on: 'true', descType: 'Overview',
     desc: 'Crowd-sourced Irish and Scottish Gaelic dictionary content extracted from Wiktionary - glosses, senses, etymologies, pronunciations and cognates.',
-    // No `install`: this layer ships bundled in the APK and is auto-installed on
-    // first run (v2_prepare_offline), like bunamo/place. Offering a catalogue
-    // "Install" here only surfaced a dev-only http://localhost:8080 URL that fails
-    // on-device. Re-add a real (GitHub-release) URL if OTA updates are wanted.
+    // Bundled + auto-installed in the FULL APK (v2_prepare_offline); ALSO offered
+    // as a catalogue install for core/base builds via DOWNLOADABLE_SLUGS (the
+    // greasan-data head URL is baked by buildBusinessCsv). The on-device FTS build
+    // means only the 26MB head is fetched, not the pagefind.
     config: { searchable: true, langs: ['ga', 'en'] },
     links: [{ t: 'Wiktionary', u: 'https://www.wiktionary.org/', ty: 'Homepage' }, { t: 'Data dumps', u: 'https://dumps.wikimedia.org/', ty: 'Source' }], downloads: [] },
   { slug: 'macbain', head: 'macbain-v2', name: 'MacBain (1911)',
