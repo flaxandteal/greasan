@@ -1,8 +1,10 @@
 # HANDOFF — Layer-skeleton catalogue
 
-Status: **Phase 1 DONE + verified end-to-end. Phase 2 CODE DONE + merge proven
-natively (see "PHASE 2 — IMPLEMENTED" below). Only the greasan-data re-publish
-(Phase 2 step 4, heavy + outward-facing) remains before Phase 2 is live on-device.**
+Status: **Phase 1 DONE + verified. Phase 2 DONE + published — all 11 bundle heads
+rebuilt with the baked `layer-<slug>` resource and published to greasan-data
+`bundle-2026-10-10`; `bundle-pin.json` re-pinned + vendored skeleton refreshed
+(commit 8854303). Phase 2 is live on the pinned bundle. Only on-device UI
+confirmation on a fresh `--base` build remains.**
 
 ## PHASE 2 — IMPLEMENTED (branch `layer-skeleton-catalogue`, uncommitted)
 The bake-into-heads approach is built and the override is proven at the native layer:
@@ -29,13 +31,21 @@ VERIFIED locally (NAPI + cargo, no greasan-data touch):
   placeholder); `… data/layer-v2 data/parquet-macbain` → `resource_count: "8041"`.
   Same resourceinstanceid; the baked head overrides the skeleton. Phase-2 goal met.
 
-REMAINING (Phase 2 step 4 — NOT done, needs the user):
-- Re-publish greasan-data heads carrying the baked resource (`gh release upload`
-  to flaxandteal/greasan-data; wiktionary ~25 min, or just the 6 downloadable).
-  Until then installed heads on the PINNED bundle lack `tiles_layer`, so the
-  layered read is inert (skeleton still shows null counts). The local
-  `data/bundle/parquet-heads/macbain-v2.zip` already carries it for a cheap verify.
-- On-device confirmation on a `--base` APK / `.deb` once a re-published head is installed.
+DONE (Phase 2 step 4 — published 2026-10-10 as `philtweir`, admin on greasan-data):
+- `bundle-pin.json` bumped to `bundle-2026-10-10`; `build-parquet-layers.mjs` (all)
+  rebuilt + baked every head (counts: wiktionary 37701, macbain 8041, place 85206,
+  bunamo 13242, gramadan-forms 9557, example-gaois 8586, example-tatoeba 2430,
+  example-udt 1388, concept 211, person/note 1); all 11 head zips verified to carry
+  `tiles_layer.parquet`; `publish-bundle.sh --tag bundle-2026-10-10` → 23 assets.
+- Vendored skeleton `app/src-tauri/skeleton/layer-v2.zip` rebuilt (`--skeleton`,
+  new-tag URLs) so a core/base build installs the Phase-2 heads.
+
+REMAINING:
+- On-device confirmation on a fresh `--base` APK / `.deb` built off the new pin:
+  install a layer, confirm its catalogue card shows the real resource_count
+  (baked) instead of null, and no amber "unverified" shield.
+- NOTE gh: this machine has TWO gh logins; publishing MUST be as `philtweir`
+  (`gh auth switch --user philtweir`) — `Phil-Weir_ArupEMU` has no write to greasan-data.
 
 ---
 ## (historical) original Phase-2 plan
