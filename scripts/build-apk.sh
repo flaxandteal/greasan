@@ -78,7 +78,16 @@ fi
 # Reads snapshot_id from inside each parquet-head zip (unzip -p manifest.json). ---
 if [ $BASE_ONLY -eq 1 ]; then
   mkdir -p "$ROOT/data/bundle"; printf '{}' > "$ROOT/data/bundle/heads-versions.json"
-  echo "[bundle] base-only: empty heads-versions.json (no bundled heads)"
+  echo "[bundle] base-only: empty heads-versions.json (no bundled corpus)"
+  # Stage the vendored SKELETON Layer catalogue so even a base build ships the
+  # layer-v2 head (known-layer metadata + greasan-data install URLs), so the
+  # Layer Manager shows installable layers instead of an empty state. Full builds
+  # overwrite this at heads/layer-v2.zip via the REZIP loop (real catalogue).
+  # Rebuild the vendored zip with: node scripts/build-layer-catalogue.mjs --skeleton
+  # then zip data/layer-v2 -> app/src-tauri/skeleton/layer-v2.zip.
+  mkdir -p "$ROOT/data/bundle/heads"
+  cp -f "$ROOT/app/src-tauri/skeleton/layer-v2.zip" "$ROOT/data/bundle/heads/layer-v2.zip"
+  echo "[bundle] base-only: staged skeleton layer-v2.zip"
 else
 python3 - "$ROOT" "${HEADS[@]}" <<'PY'
 import json, pathlib, sys, subprocess

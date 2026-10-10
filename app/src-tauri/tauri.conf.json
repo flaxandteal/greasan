@@ -35,6 +35,7 @@
     "targets": ["deb", "appimage"],
     "resources": {
       "../../data/bundle/heads-versions.json": "heads-versions.json",
+      "../../data/bundle/heads/layer-v2.zip": "heads/layer-v2.zip",
       "basemap/goidelic.pmtiles": "basemap/goidelic.pmtiles"
     }
   }

@@ -40,6 +40,15 @@ mkdir -p "$ROOT/data/bundle"
 printf '{}' > "$ROOT/data/bundle/heads-versions.json"
 echo "[bundle] core-only: empty heads-versions.json (no bundled corpus)"
 
+# Stage the vendored SKELETON Layer catalogue so core-only still ships the layer-v2
+# head (known-layer metadata + greasan-data install URLs) - the Layer Manager shows
+# installable layers, not an empty state. tauri.conf.json lists heads/layer-v2.zip,
+# so it must exist. Rebuild: node scripts/build-layer-catalogue.mjs --skeleton, then
+# zip data/layer-v2 -> app/src-tauri/skeleton/layer-v2.zip.
+mkdir -p "$ROOT/data/bundle/heads"
+cp -f "$ROOT/app/src-tauri/skeleton/layer-v2.zip" "$ROOT/data/bundle/heads/layer-v2.zip"
+echo "[bundle] core-only: staged skeleton layer-v2.zip"
+
 # Basemap is a bundled resource; guarantee the file exists so resource bundling
 # succeeds. Real tiles come from scripts/build-basemap.sh; a 0-byte placeholder
 # keeps the build green (basemap_available() reports false, map falls back).
