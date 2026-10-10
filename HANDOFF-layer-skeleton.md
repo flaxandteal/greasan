@@ -1,6 +1,13 @@
 # HANDOFF — Layer-skeleton catalogue
 
-Status: **build + bundling + classify DONE (branch `layer-skeleton-catalogue`); only Phase-2 (per-package Layer resource + layered read) + BUILD VERIFICATION remain.**
+Status: **DONE + verified end-to-end on a core-only `.deb` (branch `layer-skeleton-catalogue`). Only Phase-2 (per-package Layer resource + layered catalogue read) remains — a refinement, not a blocker.**
+Round-trip proven: a core-only build ships the 24 KB skeleton `layer-v2`; the Layer Manager shows "YOUR LAYERS · 0" + the 6 installable layers from the catalogue; installing MacBain downloads its greasan-data `<head>.zip`, extracts, validates, registers as v2, and moves into "YOUR LAYERS". Four install bugs were fixed to get there (all on the `built` path, each hidden behind the previous):
+1. `extract_built_archive_sync` only did tar.gz → sniff `PK`, extract zip (greasan-data heads are zip).
+2. `DOWNLOADABLE_SLUGS` offered wiktionary/bunamo/place (not assets on the pinned bundle → 404) → restricted to the 6 present: macbain, gramadan-forms, concept, example-{tatoeba,gaois,udt}.
+3. post-extract check required v1 `summary.bin` → validate `has_parquet_tiles` (v2).
+4. `installPackage` finalized via v1 `addDynamicLayer` (hangs on a v2 head) → `addV2Layer`.
+
+PREVIOUS status:
 The `offline.rs` presence gate (`resolved_layers` → `head_has_tiles`, + `v2_prepare_offline` reorder so un-bundled heads leave no empty dir) was the linchpin: `layerStack` now reflects only truly-installed layers, so the frontend's EXISTING "Add a layer · From catalogue" suggestions (catalogue entries with an `install` block, minus installed) + empty-state render the known/available layers with Install buttons — **no frontend change needed**. offline.rs compiles clean. NOT yet run on a base APK/desktop build + device (the only verification left for this slice).
 
 ORIGINAL (pre-§3) status: The §4 fork is RESOLVED — (a) vendored: `app/src-tauri/skeleton/layer-v2.zip` is committed (24 KB, built from `--skeleton`), base `tauri.conf.json` lists `heads/layer-v2.zip`, and `build-apk.sh --base` / `build-desktop.sh` stage the skeleton there. The emit fix (`regen-parquet-v2`) is now runtime-verified (skeleton head built OK). So a core-only build now SHIPS the skeleton `layer-v2` head; what's left is the app reading it as "known/available" rather than "installed-but-empty" (§3), none of which is bundle-verified yet (needs a base APK/desktop build + on-device run).
