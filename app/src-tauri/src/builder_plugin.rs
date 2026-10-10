@@ -589,12 +589,14 @@ pub async fn build_layer<R: Runtime>(
                 return;
             }
 
-            // Validate: summary.bin must exist
-            if !output_dir_clone.join("summary.bin").exists() {
+            // Validate: a v2-duck head must carry at least one tiles_*.parquet.
+            // (The v1 summary.bin no longer exists in the Parquet substrate; the
+            // greasan-data built heads are parquet.)
+            if !has_parquet_tiles(&output_dir_clone) {
                 update_status_failed(
                     &app,
                     &id_clone,
-                    "invalid package: summary.bin not found after extraction".into(),
+                    "invalid package: no tiles_*.parquet found after extraction".into(),
                 );
                 return;
             }
