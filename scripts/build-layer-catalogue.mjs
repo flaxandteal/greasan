@@ -12,7 +12,7 @@
  * layer's existing head at build time; layers without a head (e.g. the basemap)
  * carry no count.
  *
- * Output: data/layer-v2/ (head.sqlite + chunks + graph.json).
+ * Output: data/layer-v2/ (tiles_*.parquet + concept_catalog + graph.json).
  */
 import { createRequire } from 'module';
 import { makeRdmCache } from './lib/rdm-cache.mjs';
@@ -107,11 +107,14 @@ writeFileSync(resolve(prebuildDir, 'manifest.json'), JSON.stringify({
   built: '1970-01-01T00:00:00Z', license: 'CC0 (app-generated catalogue)',
 }));
 
-console.log('[build-layer] running regen-layer-v2...');
+// regen-parquet-v2 (the v2-duck emitter; the sqlite head engine + its v2-emit
+// feature were removed in the DuckDB+Parquet cutover). Writes tiles_*.parquet +
+// concept_catalog + graph.json to data/layer-v2. Mirrors build-bunamo-layer.mjs.
+console.log('[build-layer] running regen-parquet-v2...');
 execFileSync('cargo', [
-  'run', '--release', '--example', 'regen-layer-v2', '--features', 'v2-emit',
+  'run', '--release', '--example', 'regen-parquet-v2',
   '--manifest-path', resolve(root, 'app/src-tauri', 'Cargo.toml'),
-  '--', 'data/prebuild-layer', 'data/layer-v2', graphId,
+  '--', 'data/prebuild-layer', 'data/layer-v2',
 ], { stdio: 'inherit' });
 
 console.log(`[build-layer] Done (${elapsed(t0)}). Head at data/layer-v2/ (graph ${graphId}).`);
