@@ -443,7 +443,7 @@ export async function search(
     // head's labels, so without this filter searching "fear" would also return the
     // `goi-fear-concept` LexicalConcept (which has no headword/senses). Exclude them.
     const ftsDirs = ftsField
-      ? currentV2HeadDirs().filter((d) => !/\/(concept|person|note)-v2\b/.test(d))
+      ? currentV2HeadDirs().filter((d) => !/\/(concept|person|note)(-v2)?(\/|$)/.test(d))
       : [];
     if (bases.length === 0 && ftsDirs.length === 0) return []; // nothing to search
 
@@ -866,7 +866,8 @@ export function currentV2HeadDirs(): string[] {
  * the ACTIVE layer set, matching how `loadEntryV2` finds the same head.
  */
 export function placeHeadDir(): string | undefined {
-  return currentV2HeadDirs().find((d) => d.includes('place-v2'));
+  // Dev head dir (data/place-v2) or installed (layers/place) - see conceptHeadDir.
+  return currentV2HeadDirs().find((d) => /\/place(-v2)?(\/|$)/.test(d));
 }
 
 /**
@@ -877,7 +878,9 @@ export function placeHeadDir(): string | undefined {
  * {@link placeHeadDir}.
  */
 export function conceptHeadDir(): string | undefined {
-  return currentV2HeadDirs().find((d) => d.includes('concept-v2'));
+  // Match the DEV head dir (data/concept-v2) AND the INSTALLED one (layers/concept
+  // - a catalogue install names the dir by the layer slug, dropping the -v2).
+  return currentV2HeadDirs().find((d) => /\/concept(-v2)?(\/|$)/.test(d));
 }
 
 /** The `layer-v2` catalogue head dir (meta layer), or undefined if not active. */

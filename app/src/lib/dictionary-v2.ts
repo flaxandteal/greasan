@@ -344,7 +344,7 @@ export async function enrichEntryV2(
   // not the model graph, so the carrier-union picks the first carrier.
   let siblings: EntryDetail[] = [];
   try {
-    const conceptHead = headDirs.find((d) => d.includes('concept-v2'));
+    const conceptHead = headDirs.find((d) => /\/concept(-v2)?(\/|$)/.test(d));
     if (conceptHead) {
       const conceptIds = await citedBy([conceptHead], uri, 'concept_headword');
       if (conceptIds.length) {
@@ -397,7 +397,7 @@ export async function enrichEntryV2(
   // Keep the full count; resolve display names for a small sample via descriptors.
   let placenames: EntryDetail['placenames'];
   try {
-    const placeHead = headDirs.find((d) => d.includes('place-v2'));
+    const placeHead = headDirs.find((d) => /\/place(-v2)?(\/|$)/.test(d));
     if (placeHead) {
       const placeIds = await citedBy([placeHead], uri, 'element_entry');
       if (placeIds.length) {
