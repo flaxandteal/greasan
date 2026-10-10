@@ -1,6 +1,45 @@
 # HANDOFF — Layer-skeleton catalogue
 
-Status: **DONE + verified end-to-end on a core-only `.deb` (branch `layer-skeleton-catalogue`). Only Phase-2 (per-package Layer resource + layered catalogue read) remains — a refinement, not a blocker.**
+Status: **Phase 1 DONE + verified end-to-end. Phase 2 CODE DONE + merge proven
+natively (see "PHASE 2 — IMPLEMENTED" below). Only the greasan-data re-publish
+(Phase 2 step 4, heavy + outward-facing) remains before Phase 2 is live on-device.**
+
+## PHASE 2 — IMPLEMENTED (branch `layer-skeleton-catalogue`, uncommitted)
+The bake-into-heads approach is built and the override is proven at the native layer:
+- `scripts/lib/layer-emit.mjs` (new): the shared emitter. `buildLayerArtifacts`
+  (graph + enriched resources from the catalogue metadata) + `writeLayerPrebuild`
+  (merge:false fresh catalogue | merge:true bake into a corpus prebuild). Owns
+  `LAYER_NAMESPACE` so skeleton + fragment mint the SAME ResourceID + tile ids.
+- `build-layer-catalogue.mjs`: refactored to use the lib (behaviour-preserving).
+- `build-parquet-layers.mjs`: before `regen-parquet-v2`, bakes each head's own
+  `layer-<slug>` resource (real resource_count from the corpus prebuild
+  business_data) into its prebuild, and passes the corpus graph as the explicit
+  regen primary so `graph.json` stays the corpus model. The head then emits
+  `tiles_layer.parquet` next to its corpus tiles.
+- `app/src/lib/layers-catalogue.ts` `loadLayerCatalogue`: LAYERED read — ids from
+  the skeleton head, each hydrated over `[skeleton, ...currentV2HeadDirs()]` via
+  `hydrateLayers` so an installed head's baked resource overrides the skeleton.
+- `app/src-tauri/examples/layer-merge-probe.rs` (new): native merge proof.
+
+VERIFIED locally (NAPI + cargo, no greasan-data touch):
+- `node scripts/build-parquet-layers.mjs macbain-v2` → bakes `layer-macbain`
+  (resource_count=8041), `regen-parquet-v2` emits BOTH models (`tiles_lexical_entry`
+  + `tiles_layer`), graph.json = corpus. Multi-model-in-one-head path works.
+- `layer-merge-probe 02dbdc28… data/layer-v2` → `resource_count: None` (skeleton
+  placeholder); `… data/layer-v2 data/parquet-macbain` → `resource_count: "8041"`.
+  Same resourceinstanceid; the baked head overrides the skeleton. Phase-2 goal met.
+
+REMAINING (Phase 2 step 4 — NOT done, needs the user):
+- Re-publish greasan-data heads carrying the baked resource (`gh release upload`
+  to flaxandteal/greasan-data; wiktionary ~25 min, or just the 6 downloadable).
+  Until then installed heads on the PINNED bundle lack `tiles_layer`, so the
+  layered read is inert (skeleton still shows null counts). The local
+  `data/bundle/parquet-heads/macbain-v2.zip` already carries it for a cheap verify.
+- On-device confirmation on a `--base` APK / `.deb` once a re-published head is installed.
+
+---
+## (historical) original Phase-2 plan
+
 Round-trip proven: a core-only build ships the 24 KB skeleton `layer-v2`; the Layer Manager shows "YOUR LAYERS · 0" + the 6 installable layers from the catalogue; installing MacBain downloads its greasan-data `<head>.zip`, extracts, validates, registers as v2, and moves into "YOUR LAYERS". Four install bugs were fixed to get there (all on the `built` path, each hidden behind the previous):
 1. `extract_built_archive_sync` only did tar.gz → sniff `PK`, extract zip (greasan-data heads are zip).
 2. `DOWNLOADABLE_SLUGS` offered wiktionary/bunamo/place (not assets on the pinned bundle → 404) → restricted to the 6 present: macbain, gramadan-forms, concept, example-{tatoeba,gaois,udt}.

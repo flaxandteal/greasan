@@ -3,8 +3,8 @@
 // Layer catalogue loader - reads the `layer-v2` META head (one Layer resource
 // per data layer in the stack) for the layer UI. Queried standalone via
 // layerCatalogueHeadDir(); never composed into the lexical/place stack.
-import { queryV2, hydrateV2 } from './v2';
-import { layerCatalogueHeadDir } from './dictionary';
+import { queryV2, hydrateLayers } from './v2';
+import { layerCatalogueHeadDir, currentV2HeadDirs } from './dictionary';
 
 export interface LayerLink { title: string; url: string; type: string }
 export interface LayerDownload { format: string; url: string; notes: string }
@@ -117,7 +117,16 @@ function toEntry(id: string, tree: any): LayerEntry {
   };
 }
 
-/** All Layer resources in the catalogue, by display name. Empty if not installed. */
+/** All Layer resources in the catalogue, by display name. Empty if not installed.
+ *
+ * Layered read: the Layer ids + graph come from the skeleton `layer` head (the
+ * complete catalogue - installed heads only re-supply a slug already present,
+ * never add a new one), but each Layer is hydrated over [skeleton, ...installed
+ * heads]. An installed corpus head carries its OWN fuller `layer-<slug>` resource
+ * (baked in by build-parquet-layers, same ResourceID + tile ids), which overrides
+ * +supplements the skeleton placeholder via the store's topmost-wins tile merge -
+ * e.g. the real resource_count replaces the skeleton's null. With nothing
+ * installed the stack is just [skeleton], i.e. the old single-head behaviour. */
 export async function loadLayerCatalogue(): Promise<LayerEntry[]> {
   const head = layerCatalogueHeadDir();
   if (!head) return [];
@@ -127,8 +136,12 @@ export async function loadLayerCatalogue(): Promise<LayerEntry[]> {
     const r = results.find((x) => x.measure === 'select_ids');
     ids = (r?.rows || []).map((row) => String(row[0])).filter(Boolean);
   } catch (e) { console.warn('[layers] catalogue query failed:', e); return []; }
+  // Skeleton first (authoritative for the Layer graph), then the installed stack.
+  // Dedupe: with zero corpus layers installed, currentV2HeadDirs() falls back to
+  // the catalogue head itself, which we already prepend.
+  const stack = [...new Set([head, ...currentV2HeadDirs()])];
   const entries = await Promise.all(ids.map(async (id) => {
-    try { return toEntry(id, await hydrateV2(head, id)); }
+    try { return toEntry(id, await hydrateLayers(stack, id)); }
     catch (e) { console.warn('[layers] hydrate failed:', id, e); return null; }
   }));
   return entries.filter((e): e is LayerEntry => !!e).sort((a, b) => a.name.localeCompare(b.name));
