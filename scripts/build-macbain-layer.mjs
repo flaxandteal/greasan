@@ -539,6 +539,23 @@ for (const entry of allEntries) {
       for (let i = 0; i < maxRows; i++) {
         const row = { ResourceID: rid };
         if (i === 0) {
+          // Carry MacBain's own headword + gloss even on a matched entry, so the
+          // layer is self-sufficient when installed WITHOUT the layer it matched
+          // (e.g. core + MacBain, no Wiktionary). Otherwise these entries have no
+          // Headword tile (bake descriptor_name = "<Headword>": unnamed +
+          // unsearchable) AND no sense, so the entry view renders blank.
+          //
+          // With both layers installed this does NOT clobber the matched layer:
+          // the headword is cardinality-one + identical, so the merge unifies it
+          // to the same value; senses are cardinality-N, so MacBain's gloss
+          // interleaves as an extra MB-attributed sense rather than replacing the
+          // richer ones. Dialect is left to the matched layer (a goi- lemma may be
+          // Irish, not Scottish Gaelic - we must not force a dialect on it).
+          row.headword = entry.primaryHeadword;
+          if (entry.gloss) {
+            row.gloss = entry.gloss;
+            row.source_label = MACBAIN_TAG;
+          }
           row.etymology_text = entry.etymologyText;
           row.etymology_source = MACBAIN_TAG;
         }
