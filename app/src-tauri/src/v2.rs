@@ -430,8 +430,19 @@ pub fn v2_hydrate_layers(head_dirs: Vec<String>, resource_id: String, language: 
         Some(g) => g.clone(),
         None => load_graph_cached(&graph_path(&head_dirs[0]))?,
     };
-    // Overlays = the other carriers (model union) ++ the fxg-only computed layers.
-    let mut overlays: Vec<std::sync::Arc<StaticGraph>> = carriers.into_iter().skip(1).collect();
+    // Overlays = the other carriers THAT ARE THE SAME MODEL as the base, plus the
+    // fxg-only computed layers. A carrier whose graph.json is a DIFFERENT model -
+    // e.g. a corpus head (macbain/wiktionary, primary lexical_entry) that carries
+    // this resource only as a SECONDARY model (a LexicalConcept it co-mints) -
+    // supplies TILES, not the model graph. Folding its graph into the LayeredGraph
+    // would collide nodegroup aliases shared across models (lexical_entry +
+    // lexical_concept both have `etymology`/`cognates`) and drop those fields on
+    // hydrate. So compose only same-graphid carriers; the rest still contribute
+    // tiles via `dirs`. (The frontend leads the stack with the resource's own model
+    // head - e.g. concept-v2 for a concept - so carriers[0] is the right base.)
+    let base_gid = base_graph.graphid.clone();
+    let mut overlays: Vec<std::sync::Arc<StaticGraph>> =
+        carriers.into_iter().skip(1).filter(|g| g.graphid == base_gid).collect();
     overlays.extend(fxg_only);
     let composed = cached_layered_graph(&base_graph, &overlays);
     let langs: Vec<&str> = match language.as_deref() {

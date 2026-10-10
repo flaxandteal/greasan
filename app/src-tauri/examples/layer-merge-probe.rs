@@ -45,7 +45,9 @@ fn main() {
             else if g.functions_x_graphs.as_ref().is_some_and(|v| !v.is_empty()) { fxg_only.push(g); }
         }
         let base = carriers.first().cloned().unwrap_or_else(|| Arc::new(load_graph(&graph_json)));
-        let mut overlays: Vec<Arc<StaticGraph>> = carriers.into_iter().skip(1).collect();
+        let base_gid = base.graphid.clone();
+        let mut overlays: Vec<Arc<StaticGraph>> =
+            carriers.into_iter().skip(1).filter(|g| g.graphid == base_gid).collect();
         overlays.extend(fxg_only);
         eprintln!("[merge] CARRIER_UNION: {} carrier(s) + {} fxg", 1 + overlays.len(), 0);
         LayeredGraph::new(base, overlays)
