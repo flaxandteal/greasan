@@ -93,6 +93,7 @@ pub fn run() {
         v2::v2_descriptors,
         fts::v2_search_fts,
         v2::v2_cited_by,
+        v2::v2_concept_values,
         v2::v2_geo_points,
         v2::v2_emit_overlay,
         v2::v2_verify_layer,

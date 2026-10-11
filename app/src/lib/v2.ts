@@ -179,6 +179,25 @@ export async function descriptors(headDirs: string[], uris: string[]): Promise<R
   return await invoke<Record<string, string>>('v2_descriptors', { headDirs, uris });
 }
 
+/**
+ * Batch-read concept-node values (as labels) for resource URIs - the facet/qualifier
+ * read for installed-layer (FTS) search. FTS carries no POS/dialect (it is pure text),
+ * so this resolves the REFERENCE side over the melted concept store for just the
+ * candidate URIs: `{ uri: { alias: label } }`. `nodeAliases` are e.g.
+ * `['part_of_speech', 'dialect']` (both concept-datatype, card-1). One indexed
+ * read, not a per-entry hydrate; powers both the POS/dialect display and the POS
+ * facet filter on installed layers.
+ */
+export async function conceptValues(
+  headDirs: string[],
+  uris: string[],
+  nodeAliases: string[],
+): Promise<Record<string, Record<string, string>>> {
+  return await invoke<Record<string, Record<string, string>>>(
+    'v2_concept_values', { headDirs, uris, nodeAliases },
+  );
+}
+
 export interface FtsHit { uri: string; headword: string; gloss: string; snippet: string; score: number }
 
 /**

@@ -8,7 +8,7 @@ export { warmClosure } from './dictionary-v2';
 // Live binding (store <-> dictionary is a lazy cycle: `currentEntry` is only read
 // at runtime inside loadEntryFlagged, never at module init, so it resolves).
 import { currentEntry } from './store';
-import { prepareOffline, prewarmLayers, descriptors, hydrateV2, citedBy, searchFts } from './v2';
+import { prepareOffline, prewarmLayers, descriptors, hydrateV2, citedBy, searchFts, conceptValues } from './v2';
 
 let activeFamilyConfig: FamilyConfig = FAMILIES[DEFAULT_FAMILY];
 
@@ -505,17 +505,34 @@ export async function search(
     }
     const resultSets: EntrySummary[][] = [...pfSets];
     if (ftsHits.length) {
-      // The FTS index carries no dialect column, but every FTS-built layer is
-      // Téarma, which is uniformly Irish → tag GA (matches the Pagefind builder's
-      // hardcoded GA, and keeps Téarma headwords from being dimmed as non-GA).
+      // FTS is text-only (no POS/dialect columns), so resolve the REFERENCE side -
+      // part_of_speech + the entry-level dialect - from the melted concept store for
+      // just the hit URIs (v2_concept_values, one indexed read). This restores POS +
+      // real dialect on installed-layer cards AND makes the POS facet filter work
+      // there (with pos='' every FTS row was silently dropped by the filter, and all
+      // homographs collapsed to one POS-less card). Best-effort: on failure fall back
+      // to no POS + GA - Téarma, the original FTS-only layer, is uniformly Irish.
+      let cv: Record<string, Record<string, string>> = {};
+      try {
+        cv = await conceptValues(ftsDirs, ftsHits.map(h => h.uri), ['part_of_speech', 'dialect']);
+      } catch (err) {
+        console.warn('[dictionary] FTS concept-value enrichment failed:', err);
+      }
       resultSets.push(
-        ftsHits.map(h => ({
-          uri: h.uri,
-          headword: h.headword,
-          pos: '',
-          gloss: lang === 'en' ? h.snippet || h.gloss || undefined : h.gloss || undefined,
-          dialect: 'GA',
-        }))
+        ftsHits.map(h => {
+          const v = cv[h.uri] || {};
+          return {
+            uri: h.uri,
+            headword: h.headword,
+            // Same shape as the Pagefind path (raw label; the filter + collapse key
+            // lowercase it, the display shows it as-is).
+            pos: v.part_of_speech || '',
+            gloss: lang === 'en' ? h.snippet || h.gloss || undefined : h.gloss || undefined,
+            // Raw dialect label → normalised to a branch/code by the pass below
+            // (same as Pagefind's raw meta); GA when the entry-level rollup is absent.
+            dialect: v.dialect || 'GA',
+          };
+        })
       );
     }
 

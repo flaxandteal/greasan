@@ -684,6 +684,101 @@ pub fn v2_cited_by(
     r
 }
 
+/// Batch-read concept-node values (as labels) for a set of resources - the
+/// facet/qualifier read that lets installed-layer (FTS) search cards carry POS +
+/// real dialect, and makes the POS facet filter work there. FTS is pure text ->
+/// URIs; this resolves the REFERENCE side (concept predicates) over the melted
+/// concept store for just the candidate URIs, so "text results, narrowed/tagged by
+/// concept" is one cheap indexed read rather than a per-entry hydrate.
+///
+/// `node_aliases` (e.g. `["part_of_speech", "dialect"]`) are resolved to node ids
+/// against the leading head's primary graph (lexical entries, every corpus head's
+/// primary). Returns `{ uri: { alias: label } }`. Only melted `concept`-datatype
+/// nodes are readable this way (part_of_speech, dialect are both concept card-1);
+/// first non-empty across the stack wins per (uri, alias).
+///
+/// Queries `concepts_*.parquet` (schema: resource_id, tile_id, nodegroup_id,
+/// node_id, concept_id) joined to `concept_catalog.parquet` (concept_id -> label)
+/// via duckdb directly - the same offline read_parquet path `fts.rs` uses; there is
+/// no per-(resource,node) concept read in ros_madair_duck (descriptors/hydrate only).
+#[tauri::command]
+pub fn v2_concept_values(
+    head_dirs: Vec<String>,
+    uris: Vec<String>,
+    node_aliases: Vec<String>,
+) -> Result<HashMap<String, HashMap<String, String>>, String> {
+    let head_dirs = present_layer_dirs(head_dirs);
+    if head_dirs.is_empty() || uris.is_empty() || node_aliases.is_empty() {
+        return Ok(HashMap::new());
+    }
+    // alias -> node_id, resolved against the leading head's primary (lexical) graph.
+    let graph = load_graph_cached(&graph_path(&head_dirs[0]))?;
+    let mut node_to_alias: HashMap<String, String> = HashMap::new();
+    for a in &node_aliases {
+        if let Some(n) = graph.get_node_by_alias(a) {
+            node_to_alias.insert(n.nodeid.clone(), a.clone());
+        }
+    }
+    if node_to_alias.is_empty() {
+        return Ok(HashMap::new());
+    }
+    // Collect existing concept-store + catalog files across the stack (a head may
+    // carry neither - e.g. a forms-only layer; skip it rather than error on a glob
+    // that matches nothing).
+    let mut concept_files: Vec<String> = Vec::new();
+    let mut catalog_files: Vec<String> = Vec::new();
+    for d in &head_dirs {
+        if let Ok(rd) = std::fs::read_dir(d) {
+            for e in rd.flatten() {
+                let name = e.file_name().to_string_lossy().to_string();
+                if name.starts_with("concepts_") && name.ends_with(".parquet") {
+                    concept_files.push(e.path().to_string_lossy().into_owned());
+                }
+            }
+        }
+        let cat = Path::new(d).join("concept_catalog.parquet");
+        if cat.is_file() {
+            catalog_files.push(cat.to_string_lossy().into_owned());
+        }
+    }
+    if concept_files.is_empty() || catalog_files.is_empty() {
+        return Ok(HashMap::new());
+    }
+    let lit = |v: &[String]| {
+        v.iter()
+            .map(|s| format!("'{}'", s.replace('\'', "''")))
+            .collect::<Vec<_>>()
+            .join(",")
+    };
+    let node_ids: Vec<String> = node_to_alias.keys().cloned().collect();
+    let sql = format!(
+        "SELECT c.resource_id, c.node_id, cat.label \
+         FROM read_parquet([{}]) c \
+         JOIN read_parquet([{}]) cat ON c.concept_id = cat.concept_id \
+         WHERE c.resource_id IN ({}) AND c.node_id IN ({}) AND cat.label IS NOT NULL",
+        lit(&concept_files),
+        lit(&catalog_files),
+        lit(&uris),
+        lit(&node_ids),
+    );
+    let conn = duckdb::Connection::open_in_memory().map_err(|e| format!("duckdb open: {e}"))?;
+    let mut stmt = conn.prepare(&sql).map_err(|e| format!("duckdb prepare: {e}"))?;
+    let mut rows = stmt.query([]).map_err(|e| format!("duckdb query: {e}"))?;
+    let mut out: HashMap<String, HashMap<String, String>> = HashMap::new();
+    while let Some(row) = rows.next().map_err(|e| format!("duckdb row: {e}"))? {
+        let rid: String = row.get(0).map_err(|e| format!("col resource_id: {e}"))?;
+        let nid: String = row.get(1).map_err(|e| format!("col node_id: {e}"))?;
+        let label: String = row.get(2).map_err(|e| format!("col label: {e}"))?;
+        if let Some(alias) = node_to_alias.get(&nid) {
+            out.entry(rid)
+                .or_default()
+                .entry(alias.clone())
+                .or_insert(label);
+        }
+    }
+    Ok(out)
+}
+
 // ---------------------------------------------------------------------------
 // Geo-point lookup (map(layer, filter) primitive) - a single indexed SQL join
 // on a head that carries the spine/geo tables, no hydration.
