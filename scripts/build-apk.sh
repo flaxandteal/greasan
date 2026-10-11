@@ -77,8 +77,6 @@ fi
 # on an update, not all ~400MB. Regenerated every build (also under --no-rezip).
 # Reads snapshot_id from inside each parquet-head zip (unzip -p manifest.json). ---
 if [ $BASE_ONLY -eq 1 ]; then
-  mkdir -p "$ROOT/data/bundle"; printf '{}' > "$ROOT/data/bundle/heads-versions.json"
-  echo "[bundle] base-only: empty heads-versions.json (no bundled corpus)"
   # Stage the vendored SKELETON Layer catalogue so even a base build ships the
   # layer-v2 head (known-layer metadata + greasan-data install URLs), so the
   # Layer Manager shows installable layers instead of an empty state. Full builds
@@ -88,6 +86,20 @@ if [ $BASE_ONLY -eq 1 ]; then
   mkdir -p "$ROOT/data/bundle/heads"
   cp -f "$ROOT/app/src-tauri/skeleton/layer-v2.zip" "$ROOT/data/bundle/heads/layer-v2.zip"
   echo "[bundle] base-only: staged skeleton layer-v2.zip"
+  # heads-versions.json MUST carry the skeleton layer-v2's snapshot_id, NOT be
+  # empty. offline.rs only re-extracts a head when the BUNDLED snapshot is known
+  # AND differs from the one in app-data; an empty index makes bundled=None, which
+  # collapses to "present = keep" and freezes a stale catalogue forever across
+  # upgrades (a new layer's install URL would never appear). Stamp layer-v2's real
+  # snapshot so a changed catalogue re-extracts on next launch.
+  LAYER_SNAP="$(unzip -p "$ROOT/data/bundle/heads/layer-v2.zip" manifest.json | python3 -c 'import json,sys; print(json.load(sys.stdin).get("snapshot_id",""))')"
+  if [ -n "$LAYER_SNAP" ]; then
+    printf '{"layer-v2": "%s"}\n' "$LAYER_SNAP" > "$ROOT/data/bundle/heads-versions.json"
+    echo "[bundle] base-only: heads-versions.json pins layer-v2 snapshot $LAYER_SNAP"
+  else
+    printf '{}' > "$ROOT/data/bundle/heads-versions.json"
+    echo "[bundle] base-only: WARN layer-v2 snapshot unreadable; empty heads-versions.json (stale-catalogue guard disabled)"
+  fi
 else
 python3 - "$ROOT" "${HEADS[@]}" <<'PY'
 import json, pathlib, sys, subprocess
