@@ -37,9 +37,6 @@ done
 # ships none, so the app boots to empty state and the user installs Téarma from
 # their own TBX. heads-versions.json is a bundled resource, so it must exist.
 mkdir -p "$ROOT/data/bundle"
-printf '{}' > "$ROOT/data/bundle/heads-versions.json"
-echo "[bundle] core-only: empty heads-versions.json (no bundled corpus)"
-
 # Stage the vendored SKELETON Layer catalogue so core-only still ships the layer-v2
 # head (known-layer metadata + greasan-data install URLs) - the Layer Manager shows
 # installable layers, not an empty state. tauri.conf.json lists heads/layer-v2.zip,
@@ -48,6 +45,21 @@ echo "[bundle] core-only: empty heads-versions.json (no bundled corpus)"
 mkdir -p "$ROOT/data/bundle/heads"
 cp -f "$ROOT/app/src-tauri/skeleton/layer-v2.zip" "$ROOT/data/bundle/heads/layer-v2.zip"
 echo "[bundle] core-only: staged skeleton layer-v2.zip"
+
+# heads-versions.json MUST carry the skeleton layer-v2's snapshot_id, NOT be empty.
+# offline.rs only re-extracts a head when the BUNDLED snapshot is known AND differs
+# from the one already in app-data; an empty index makes bundled=None, which
+# collapses to "present = keep" and freezes a stale catalogue forever (a core-only
+# deb could never refresh its known-layer list - e.g. a new layer's install URL).
+# Stamp layer-v2's real snapshot so a changed catalogue re-extracts on next launch.
+LAYER_SNAP="$(unzip -p "$ROOT/data/bundle/heads/layer-v2.zip" manifest.json | python3 -c 'import json,sys; print(json.load(sys.stdin).get("snapshot_id",""))')"
+if [ -n "$LAYER_SNAP" ]; then
+  printf '{"layer-v2": "%s"}\n' "$LAYER_SNAP" > "$ROOT/data/bundle/heads-versions.json"
+  echo "[bundle] core-only: heads-versions.json pins layer-v2 snapshot $LAYER_SNAP"
+else
+  printf '{}' > "$ROOT/data/bundle/heads-versions.json"
+  echo "[bundle] core-only: WARN layer-v2 snapshot unreadable; empty heads-versions.json (stale-catalogue guard disabled)"
+fi
 
 # Basemap is a bundled resource; guarantee the file exists so resource bundling
 # succeeds. Real tiles come from scripts/build-basemap.sh; a 0-byte placeholder
