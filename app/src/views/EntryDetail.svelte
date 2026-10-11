@@ -262,10 +262,13 @@
       <div style="padding:4px 18px 0;">
         <div class="ge-headword display" style="color:var(--cream);font-size:84px;">{entry.headword}</div>
         <div style="font-size:14px;color:rgba(246,244,235,0.72);margin-top:{hasDescenders ? '8px' : '-4px'};display:flex;align-items:baseline;gap:8px;flex-wrap:wrap;">
-          {#if entry.pos}
+          <!-- POS + grammatical class are per-homograph; in a grouped card they
+               belong to each POS section header, not the shared headword hero.
+               Only the dialect code (headword-wide, spans layers) stays. -->
+          {#if entry.pos && !isGrouped}
             <span style="font-style:italic;">{entry.pos}</span>
           {/if}
-          {#if classBadge}
+          {#if classBadge && !isGrouped}
             <span style="font-size:12px;font-weight:700;background:rgba(246,244,235,0.16);padding:2px 8px;border-radius:4px;font-variant:small-caps;letter-spacing:0.02em;">{classBadge}</span>
           {/if}
           {#if entryDialectCode}
