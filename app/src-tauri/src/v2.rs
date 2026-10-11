@@ -216,6 +216,21 @@ fn graph_path(head_dir: &str) -> PathBuf {
     Path::new(head_dir).join("graph.json")
 }
 
+/// Path to a head's graph for a SPECIFIC model. A multi-model head ships
+/// `graph_<gid>.json` per model (regen-parquet-v2); `None`, or a head that only
+/// ships the single `graph.json`, falls back to the primary. This retires the
+/// "a head has one primary model" assumption - a resource is hydrated against its
+/// OWN model's graph wherever that model's tiles live.
+fn graph_path_for(head_dir: &str, graph_id: Option<&str>) -> PathBuf {
+    if let Some(gid) = graph_id {
+        let p = Path::new(head_dir).join(format!("graph_{gid}.json"));
+        if p.is_file() {
+            return p;
+        }
+    }
+    graph_path(head_dir)
+}
+
 /// Keep only head dirs that actually carry parquet tiles. A layer can be
 /// registered (offline.rs lists every corpus unconditionally) yet have no data
 /// on disk - mid-install, or an on-device-only layer like Téarma that was never
@@ -392,7 +407,7 @@ pub fn v2_descriptors(
 /// via ros_madair_duck::hydrate_layers - same per-nodegroup precedence, tiles from
 /// the `data` column. (Needs each dataset dir to carry graph.json; slice 6.)
 #[tauri::command]
-pub fn v2_hydrate_layers(head_dirs: Vec<String>, resource_id: String, language: Option<String>) -> Result<Value, String> {
+pub fn v2_hydrate_layers(head_dirs: Vec<String>, resource_id: String, language: Option<String>, graph_id: Option<String>) -> Result<Value, String> {
     // Drop registered-but-dataless layers (e.g. an on-device-only Téarma not
     // built here) before composing - hydrate_layers opens every dir's parquet
     // and errors hard on one with no tiles, which would fail the whole entry.
@@ -415,8 +430,15 @@ pub fn v2_hydrate_layers(head_dirs: Vec<String>, resource_id: String, language: 
     let want = [resource_id.clone()];
     let mut carriers: Vec<std::sync::Arc<StaticGraph>> = Vec::new();
     let mut fxg_only: Vec<std::sync::Arc<StaticGraph>> = Vec::new();
+    // graph_id (optional): hydrate the resource against THIS model's graph,
+    // loaded per-head as graph_<gid>.json, so a head carrying the resource as a
+    // secondary model (e.g. MacBain co-minting a LexicalConcept) is a valid base -
+    // no separate "primary-model head" needs to be in the stack. Omitted -> each
+    // head's primary graph.json (back-compat: lexical entries, whose model is every
+    // lexical head's primary).
+    let gid = graph_id.as_deref();
     for d in &head_dirs {
-        let Ok(g) = load_graph_cached(&graph_path(d)) else { continue };
+        let Ok(g) = load_graph_cached(&graph_path_for(d, gid)) else { continue };
         let carries = ros_madair_duck::descriptors(&[Path::new(d.as_str())], &want)
             .map(|m| m.contains_key(&resource_id))
             .unwrap_or(false);
@@ -428,7 +450,7 @@ pub fn v2_hydrate_layers(head_dirs: Vec<String>, resource_id: String, language: 
     }
     let base_graph = match carriers.first() {
         Some(g) => g.clone(),
-        None => load_graph_cached(&graph_path(&head_dirs[0]))?,
+        None => load_graph_cached(&graph_path_for(&head_dirs[0], gid))?,
     };
     // Overlays = the other carriers THAT ARE THE SAME MODEL as the base, plus the
     // fxg-only computed layers. A carrier whose graph.json is a DIFFERENT model -
@@ -627,12 +649,25 @@ pub fn v2_cited_by(
     head_dirs: Vec<String>,
     uri: String,
     node_path: String,
+    graph_id: Option<String>,
 ) -> Result<Vec<String>, String> {
     let head_dirs = present_layer_dirs(head_dirs);
-    let Some(base) = head_dirs.first() else {
+    if head_dirs.is_empty() {
         return Err("v2_cited_by: no layers given".to_string());
-    };
-    let graph = load_graph_cached(&graph_path(base))?;
+    }
+    // Resolve the node alias against the TARGET model's graph (graph_id), loaded
+    // from the first head that ships it (graph_<gid>.json) - so e.g.
+    // `concept_headword` resolves even when no head has the LexicalConcept model as
+    // its primary. Omitted -> head_dirs[0]'s primary graph (back-compat).
+    let gid = graph_id.as_deref();
+    let graph_dir = gid
+        .and_then(|g| {
+            head_dirs
+                .iter()
+                .find(|d| Path::new(d.as_str()).join(format!("graph_{g}.json")).is_file())
+        })
+        .unwrap_or(&head_dirs[0]);
+    let graph = load_graph_cached(&graph_path_for(graph_dir, gid))?;
     let node_id = graph
         .get_node_by_alias(&node_path)
         .map(|n| n.nodeid.clone())

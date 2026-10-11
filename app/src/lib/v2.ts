@@ -152,8 +152,11 @@ export async function queryLayers(headDirs: string[], ir: V2Query): Promise<V2La
  * tiles are gathered from every layer that carries it and merged with
  * per-nodegroup precedence (topmost wins) before hydration. Graph is `headDirs[0]`.
  */
-export async function hydrateLayers(headDirs: string[], resourceId: string): Promise<unknown> {
-  return await invoke<unknown>('v2_hydrate_layers', { headDirs, resourceId });
+export async function hydrateLayers(headDirs: string[], resourceId: string, graphId?: string): Promise<unknown> {
+  // graphId: hydrate the resource against THIS model's graph (loaded per-head as
+  // graph_<gid>.json), so a head carrying it as a secondary model is a valid base -
+  // no model-specific head need lead the stack. Omit for primary-model resources.
+  return await invoke<unknown>('v2_hydrate_layers', { headDirs, resourceId, graphId });
 }
 
 /**
@@ -208,8 +211,12 @@ export async function citedBy(
   headDirs: string[],
   uri: string,
   nodePath: string,
+  graphId?: string,
 ): Promise<string[]> {
-  return await invoke<string[]>('v2_cited_by', { headDirs, uri, nodePath });
+  // graphId: resolve `nodePath` against this model's graph (loaded from the first
+  // head shipping graph_<gid>.json), so a link node from a non-primary model (e.g.
+  // the concept's `concept_headword`) resolves without that model leading the stack.
+  return await invoke<string[]>('v2_cited_by', { headDirs, uri, nodePath, graphId });
 }
 
 /** One geo-point resolved by {@link geoPoints}: a citing resource with a point. */

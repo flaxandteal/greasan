@@ -23,6 +23,12 @@ import { invoke } from '@tauri-apps/api/core';
 import { hydrateLayers, citedBy, descriptors } from './v2';
 import type { EntryDetail } from './dictionary';
 
+/** The LexicalConcept model graph id (models/lexical_concept). A corpus head
+ * (MacBain) carries the headword grouping concepts as a SECONDARY model, so the
+ * concept fold passes this to citedBy/hydrateLayers to load the concept model's
+ * graph (graph_<gid>.json) wherever its tiles are - no concept-primary head needed. */
+const LEXICAL_CONCEPT_GRAPH_ID = 'c5d452c6-5ab6-53e6-a7e8-b2e9f2495c90';
+
 /** Cache the closure map per headDirs stack (keyed by the ordered join). */
 const closureCache = new Map<string, Promise<Record<string, string>>>();
 
@@ -336,35 +342,31 @@ export async function enrichEntryV2(
 
   // Concept fold: a headword's per-POS entries share a LexicalConcept
   // (goi-<nhead>-concept) that carries MacBain's whole-headword etymology +
-  // cognates and groups the homographs (concept_headword). Resolve it (reverse
-  // concept_headword link, run concept-authoritative against the concept head),
-  // hydrate it for the shared etymology + the sibling entry ids, and load the
-  // siblings for the grouped card. concept-v2 must LEAD the hydrate stack so its
-  // LexicalConcept graph is the base - a corpus head carries only concept TILES,
-  // not the model graph, so the carrier-union picks the first carrier.
+  // cognates and groups the homographs (concept_headword). The concept lives in
+  // whichever layer mints it (MacBain) as a SECONDARY model; passing the
+  // LexicalConcept graph id lets citedBy/hydrateLayers load that model's graph
+  // (graph_<gid>.json) from wherever its tiles are, so no concept-specific head
+  // need lead the stack. Resolve (reverse concept_headword link), hydrate for the
+  // shared etymology + sibling ids, load the siblings for the grouped card.
   let siblings: EntryDetail[] = [];
   try {
-    const conceptHead = headDirs.find((d) => /\/concept(-v2)?(\/|$)/.test(d));
-    if (conceptHead) {
-      const conceptIds = await citedBy([conceptHead], uri, 'concept_headword');
-      if (conceptIds.length) {
-        const stack = [conceptHead, ...headDirs.filter((d) => d !== conceptHead)];
-        const ctree = (await hydrateLayers(stack, conceptIds[0])) as Record<string, any> | null;
-        if (ctree && typeof ctree === 'object') {
-          mergeEtymologies(etymologies, extractEtymologies(ctree));
-          mergeCognates(cognates, extractCognates(ctree));
-          const sibIds = [
-            ...new Set(
-              asArray(ctree.concept_headword)
-                .map((h: any) => (typeof h === 'string' ? h : h?.resourceId ?? ''))
-                .filter(Boolean),
-            ),
-          ].filter((id) => id !== uri);
-          const loaded = await Promise.all(
-            sibIds.map((id) => loadEntryV2(id, headDirs).catch(() => null)),
-          );
-          siblings = loaded.filter((e): e is EntryDetail => !!e);
-        }
+    const conceptIds = await citedBy(headDirs, uri, 'concept_headword', LEXICAL_CONCEPT_GRAPH_ID);
+    if (conceptIds.length) {
+      const ctree = (await hydrateLayers(headDirs, conceptIds[0], LEXICAL_CONCEPT_GRAPH_ID)) as Record<string, any> | null;
+      if (ctree && typeof ctree === 'object') {
+        mergeEtymologies(etymologies, extractEtymologies(ctree));
+        mergeCognates(cognates, extractCognates(ctree));
+        const sibIds = [
+          ...new Set(
+            asArray(ctree.concept_headword)
+              .map((h: any) => (typeof h === 'string' ? h : h?.resourceId ?? ''))
+              .filter(Boolean),
+          ),
+        ].filter((id) => id !== uri);
+        const loaded = await Promise.all(
+          sibIds.map((id) => loadEntryV2(id, headDirs).catch(() => null)),
+        );
+        siblings = loaded.filter((e): e is EntryDetail => !!e);
       }
     }
   } catch (err) {

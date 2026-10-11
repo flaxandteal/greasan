@@ -258,7 +258,6 @@ console.log('[build-place] Building goi lookup...');
 // MacBain's unique gd-<head>-etym entries are a last-resort fallback.
 const gaLookup = new Map();   // normalised headword -> goi ResourceID[]
 const gdFallback = new Map(); // normalised headword -> gd- ResourceID (MacBain, Scottish-only)
-const headwordLabel = new Map(); // normalised headword -> original spelling (concept label)
 function loadLexicalCsv(relPath) {
   const path = resolve(root, relPath);
   if (!existsSync(path)) { console.warn(`[build-place]   skip (missing): ${relPath}`); return; }
@@ -274,7 +273,6 @@ function loadLexicalCsv(relPath) {
     if (!hw) continue;
     const key = normalizeHead(hw);
     if (rid.startsWith('goi-')) {
-      if (!headwordLabel.has(key)) headwordLabel.set(key, hw);
       if (!gaLookup.has(key)) gaLookup.set(key, []);
       const arr = gaLookup.get(key);
       if (!arr.includes(rid)) arr.push(rid);
@@ -537,29 +535,13 @@ for (const el of glossary) {
   conceptRows.push(CONCEPT_COLUMNS.map(c => csvEscape(row[c] || '')).join(','));
 }
 
-// --- Headword LexicalConcepts: group every headword's per-POS goi entries under a
-// shared `goi-<nhead>-concept` (concept_headword list), so MacBain can attach its
-// POS-independent etymology to the SAME concept id (unioned in from the macbain head)
-// and the entry view can render a grouped card. The grouping comes from gaLookup
-// (all lexical sources, every POS); concept-v2 is the LexicalConcept-model head, so
-// it supplies the base graph a secondary-model concept tile in macbain can't. ---
-// Only HOMOGRAPH headwords (>1 per-POS goi entry) get a grouping concept - a
-// single-POS headword's "group" is itself, so a concept adds no value and the
-// full headword set is ~217k (a needless head). The grouped card + the MacBain
-// POS-independent etymology both only matter where there is more than one POS.
-let headwordConceptCount = 0;
-for (const [key, rids] of gaLookup) {
-  if (rids.length < 2) continue;
-  const cid = `goi-${key}-concept`;
-  const label = headwordLabel.get(key) || key;
-  const uuids = rids.map(goiUuid);
-  for (let i = 0; i < uuids.length; i++) {
-    const row = { ResourceID: cid, label: i === 0 ? label : '', concept_headword: uuids[i] };
-    conceptRows.push(CONCEPT_COLUMNS.map(c => csvEscape(row[c] || '')).join(','));
-  }
-  headwordConceptCount++;
-}
-console.log(`[build-place] Headword concepts: ${headwordConceptCount} (homographs only; >1 POS entry)`);
+// NOTE: the HOMOGRAPH headword-grouping concepts (goi-<nhead>-concept) are NOT
+// minted here. They live wholly in the MacBain layer (build-macbain-layer.mjs),
+// which mints each concept with its POS group AND its POS-independent etymology.
+// With per-model head graphs (regen-parquet-v2 ships graph_<gid>.json) the hydrate
+// loads the LexicalConcept model from whichever head carries the concept tiles, so
+// a concept-primary head is no longer needed to supply the base graph. concept-v2
+// is therefore back to the ~211 Logainm toponymic concepts (lgc-*) only.
 
 const conceptCsv = conceptRows.join('\n') + '\n';
 const conceptResourcesRaw = buildResourcesFromBusinessCsv(conceptCsv, conceptGraph, [], 'en', false, LAYER_NAMESPACE)

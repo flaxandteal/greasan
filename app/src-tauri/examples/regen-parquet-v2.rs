@@ -60,14 +60,26 @@ fn main() {
                 .map(|s| s.graph_id.clone())
         })
         .expect("no model emitted");
-    let graph_src = data_dir
-        .join("graphs/resource_models")
-        .join(format!("{primary}.json"));
+    let models_dir = data_dir.join("graphs/resource_models");
+    let graph_src = models_dir.join(format!("{primary}.json"));
     std::fs::copy(&graph_src, out_dir.join("graph.json"))
         .unwrap_or_else(|e| panic!("copy graph.json ({}): {e}", graph_src.display()));
 
+    // Ship EVERY emitted model's graph (not just the primary's) as graph_<gid>.json,
+    // so a multi-model head is self-describing: v2_hydrate_layers/v2_cited_by can
+    // load the graph for a resource's OWN model instead of assuming the head has a
+    // single "primary" model. (graph.json stays = primary for back-compat callers.)
+    for s in &summaries {
+        let src = models_dir.join(format!("{}.json", s.graph_id));
+        if src.is_file() {
+            std::fs::copy(&src, out_dir.join(format!("graph_{}.json", s.graph_id)))
+                .unwrap_or_else(|e| panic!("copy graph_{}.json: {e}", s.graph_id));
+        }
+    }
+
     eprintln!(
-        "[parquet] {} model(s) + graph.json ({primary}) -> {}",
+        "[parquet] {} model(s) + graph.json ({primary}) + {} per-model graph(s) -> {}",
+        summaries.len(),
         summaries.len(),
         out_dir.display()
     );
