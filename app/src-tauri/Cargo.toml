@@ -38,23 +38,23 @@ unicode-normalization = "0.1"
 # v2.rs uses `alizarin_core` (not the old `alizarin_core_v2` alias).
 # The artifact format types - notably `Manifest.handlers`, which is what makes
 # the registry below derivable instead of guessable.
-ros-madair-format = { version = "0.1.0-alpha.22" }
+ros-madair-format = { version = "0.1.0-alpha.26" }
 # The single source of the extension-type registry. We no longer hand-build one
 # from alizarin-clm-core: the registry is rebuilt from the handler set the
 # *manifest declares*, so an emit/query registry mismatch fails loudly instead of
 # silently returning zero rows.
-ros-madair-handlers = { version = "0.1.0-alpha.22" }
-ros-madair-query = { version = "0.1.0-alpha.22" }
+ros-madair-handlers = { version = "0.1.0-alpha.26" }
+ros-madair-query = { version = "0.1.0-alpha.26" }
 rusqlite = { version = "0.32", features = ["bundled"] }
 # Regeneration only (`v2-emit`) - see examples/regen-macbain-v2.rs. Emitting from
 # *this* workspace keeps us off the sandbox's target/ lock and Cargo.lock, which
 # `cargo run -p ros-madair-emit --manifest-path <sandbox>` would take.
-ros-madair-emit = { version = "0.1.0-alpha.22" }
+ros-madair-emit = { version = "0.1.0-alpha.26" }
 # --- DuckDB+Parquet substrate (migration, see HANDOFF-substrate-migration-and-mobile.md) ---
 # ros-madair-duck compiles the ros-madair-query IR to DuckDB SQL over tile-row
 # Parquet. `duckdb` is the native binding; bundled+json+parquet static-link the
 # amalgamation + the parquet reader so read_parquet works OFFLINE (no INSTALL).
-ros-madair-duck = { version = "0.1.0-alpha.22" }
+ros-madair-duck = { version = "0.1.0-alpha.26" }
 duckdb = { version = "1", features = ["bundled", "json", "parquet"] }
 # The gramadan Derive provider: generates the `forms` nodegroup on demand from
 # gramadan-rs. Registered into the FunctionsRegistry the duck hydrate path runs,
