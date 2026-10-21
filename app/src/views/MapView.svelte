@@ -34,9 +34,9 @@
   maplibregl.setWorkerCount(1);
   import { invoke } from '@tauri-apps/api/core';
   import { t } from '../lib/i18n';
-  import { geoPoints, hydrateLayers, descriptors, type GeoPoint } from '../lib/v2';
+  import { geoPoints, hydrateLayers, descriptors, responderBuffer, type GeoPoint, type BufferResult } from '../lib/v2';
   import { darkMode, closeMap, currentEntry, loading } from '../lib/store';
-  import { loadEntryFlagged, conceptHeadDir } from '../lib/dictionary';
+  import { loadEntryFlagged, conceptHeadDir, currentV2HeadDirs } from '../lib/dictionary';
   import FlagButton from './FlagButton.svelte';
   // Public-domain outline (Natural Earth, naturalearthdata.com): the Goidelic
   // area (Ireland + Isle of Man + western Scotland). Static asset, not a head.
@@ -74,6 +74,16 @@
   $effect(() => { selectedId = selected; });
   /** Bottom-sheet snap state - DEFAULT peek (map dominant, Google/Apple style). */
   let snap = $state<'peek' | 'half' | 'full'>('peek');
+
+  // --- Spatial buffer ("in range here") -------------------------------------
+  // Tap a point -> entities whose footprint falls in a cell-pruned SUPERSET box
+  // (not a precise circle) via responder_buffer / GridBox over the grid edge.
+  // Additive: OFF by default, so the base point-cloud map is unchanged.
+  let bufferMode = $state(false);
+  let bufferRadius = $state(2000); // metres
+  let bufferResult = $state<BufferResult | null>(null);
+  let bufferBusy = $state(false);
+  let bufferError = $state('');
 
   let rootEl = $state<HTMLDivElement>();
   let mapEl = $state<HTMLDivElement>();
@@ -185,6 +195,34 @@
         geometry: { type: 'Point', coordinates: [p.lng, p.lat] },
         properties: { id: p.id, name: p.name },
       }],
+    };
+  }
+  /** The honest over-inclusive search box (a rectangle, NOT a circle). */
+  function bufferBoxFC(): any {
+    const b = bufferResult?.bbox;
+    if (!b) return { type: 'FeatureCollection', features: [] };
+    const [minLng, minLat, maxLng, maxLat] = b;
+    return {
+      type: 'FeatureCollection',
+      features: [{
+        type: 'Feature',
+        geometry: { type: 'Polygon', coordinates: [[
+          [minLng, minLat], [maxLng, minLat], [maxLng, maxLat], [minLng, maxLat], [minLng, minLat],
+        ]] },
+        properties: {},
+      }],
+    };
+  }
+  /** The entities in range (those with a representative point). */
+  function bufferPinsFC(): any {
+    const bs = bufferResult?.buildings ?? [];
+    return {
+      type: 'FeatureCollection',
+      features: bs.filter((b) => b.lng != null && b.lat != null).map((b) => ({
+        type: 'Feature',
+        geometry: { type: 'Point', coordinates: [b.lng, b.lat] },
+        properties: { id: b.id, name: b.name ?? '' },
+      })),
     };
   }
 
@@ -320,6 +358,28 @@
         'circle-stroke-color': pal.ring,
       },
     });
+    // Spatial buffer: the honest over-inclusive search box (outline + faint fill)
+    // and the entities in range (gold pins). Empty until a tap in buffer mode.
+    map.addSource('buffer-box', { type: 'geojson', data: bufferBoxFC() });
+    map.addSource('buffer-pins', { type: 'geojson', data: bufferPinsFC() });
+    map.addLayer({
+      id: 'buffer-box-fill', type: 'fill', source: 'buffer-box',
+      paint: { 'fill-color': pal.gold, 'fill-opacity': 0.06 },
+    });
+    map.addLayer({
+      id: 'buffer-box-line', type: 'line', source: 'buffer-box',
+      paint: { 'line-color': pal.gold, 'line-width': 1.4, 'line-opacity': 0.7, 'line-dasharray': [2, 1.5] },
+    });
+    map.addLayer({
+      id: 'buffer-pins', type: 'circle', source: 'buffer-pins',
+      paint: {
+        'circle-radius': 5,
+        'circle-color': pal.gold,
+        'circle-opacity': 0.9,
+        'circle-stroke-width': 1.5,
+        'circle-stroke-color': pal.ring,
+      },
+    });
   }
 
   /** Re-tint every layer from the current theme (light/dark toggle). */
@@ -404,6 +464,16 @@
     // heatmap layer isn't feature-queryable and the circle layer is invisible at
     // low zoom.
     map.on('click', (e) => {
+      // Buffer mode: a tap on a result pin selects it (tap-through to the card);
+      // a tap elsewhere runs a fresh buffer around that point. Base mode: tap =
+      // select the nearest plotted point.
+      if (bufferMode) {
+        const hit = map!.queryRenderedFeatures(e.point, { layers: ['buffer-pins'] })[0];
+        const id = hit?.properties?.id as string | undefined;
+        if (id) { selectPoint(id, false); return; }
+        void runBuffer(e.lngLat.lng, e.lngLat.lat);
+        return;
+      }
       let best: string | undefined;
       let bestD = 22 * 22;
       for (const p of points) {
@@ -485,6 +555,28 @@
       if (p) map.easeTo({ center: [p.lng, p.lat], zoom: Math.max(map.getZoom(), 9), duration: 500 });
     }
   }
+
+  /** Tap -> entities in a buffer around the point (cell-pruned SUPERSET box). */
+  async function runBuffer(lng: number, lat: number) {
+    bufferBusy = true; bufferError = '';
+    try {
+      bufferResult = await responderBuffer(currentV2HeadDirs(), lng, lat, bufferRadius, 'Place');
+      if (snap === 'peek') snap = 'half';
+    } catch (err) {
+      bufferError = String((err as any)?.message ?? err);
+      bufferResult = null;
+    } finally { bufferBusy = false; }
+  }
+
+  // Push the buffer box + pins into the map whenever the result changes.
+  $effect(() => {
+    void bufferResult;
+    if (!map || !mapLoaded) return;
+    (map.getSource('buffer-box') as GeoJSONSource | undefined)?.setData(bufferBoxFC() as any);
+    (map.getSource('buffer-pins') as GeoJSONSource | undefined)?.setData(bufferPinsFC() as any);
+  });
+  // Leaving buffer mode clears the box + pins.
+  $effect(() => { if (!bufferMode) { bufferResult = null; bufferError = ''; } });
 
   function close() {
     // Mirrors the entry back-button: pop the history entry the map pushed, which
@@ -649,6 +741,30 @@
     </button>
   </div>
 
+  <!-- Spatial buffer ("in range here") - Phase-0 responder proof. English-only
+       for now; needs i18n keys + a human Irish translation before shipping (do
+       NOT machine-translate). Radius applies to the next tap. -->
+  <div class="ge-map-buffer">
+    <button class="ge-map-buffer-toggle" class:on={bufferMode} onclick={() => (bufferMode = !bufferMode)}>
+      {bufferMode ? 'In range · tap the map' : 'In range here'}
+    </button>
+    {#if bufferMode}
+      <label class="ge-map-buffer-radius">
+        <span>{(bufferRadius / 1000).toFixed(1)} km</span>
+        <input type="range" min="200" max="10000" step="200" bind:value={bufferRadius} />
+      </label>
+      {#if bufferBusy}
+        <div class="ge-map-buffer-status">…</div>
+      {:else if bufferError}
+        <div class="ge-map-buffer-status err">{bufferError}</div>
+      {:else if bufferResult}
+        <div class="ge-map-buffer-status">
+          {bufferResult.count.toLocaleString()} in range (box — over-inclusive, not a precise circle){#if bufferResult.truncated} · showing {bufferResult.buildings.length}{/if}
+        </div>
+      {/if}
+    {/if}
+  </div>
+
   <!-- Floating status / attribution -->
   {#if loadingPoints}
     <div class="ge-map-status">{$t('map.loading')}</div>
@@ -771,6 +887,33 @@
     padding: 2px 6px; border-radius: 6px; pointer-events: none;
     max-width: 62%;
   }
+
+  /* Spatial buffer control: a floating panel under the top chrome. */
+  .ge-map-buffer {
+    position: absolute; right: 10px; top: 58px; z-index: 3;
+    display: flex; flex-direction: column; align-items: flex-end; gap: 6px;
+    max-width: 62%;
+  }
+  .ge-map-buffer-toggle {
+    font-size: 12px; font-weight: 600; color: var(--fg); cursor: pointer;
+    background: color-mix(in srgb, var(--srf-app) 90%, transparent);
+    border: 1px solid var(--border, #0002); border-radius: 999px; padding: 6px 12px;
+  }
+  .ge-map-buffer-toggle.on {
+    color: var(--paper, #fff); background: var(--gold-deep, #b39b52); border-color: transparent;
+  }
+  .ge-map-buffer-radius {
+    display: flex; align-items: center; gap: 6px; font-size: 11px; color: var(--fg-soft);
+    background: color-mix(in srgb, var(--srf-app) 90%, transparent);
+    border-radius: 8px; padding: 4px 8px;
+  }
+  .ge-map-buffer-radius input { width: 110px; }
+  .ge-map-buffer-status {
+    font-size: 11px; color: var(--fg-soft); text-align: right;
+    background: color-mix(in srgb, var(--srf-app) 80%, transparent);
+    border-radius: 6px; padding: 3px 7px; max-width: 100%;
+  }
+  .ge-map-buffer-status.err { color: var(--danger, #b4453a); }
 
   .ge-map-sheet {
     position: absolute; left: 0; right: 0; bottom: 0; z-index: 4;
