@@ -39,7 +39,7 @@
   "dependencies": {
     "@alizarin/clm": "https://github.com/flaxandteal/alizarin/releases/download/v2.0.0-alpha.140/alizarin-clm-2.0.0-alpha.140.tgz",
     "@alizarin/napi": "https://github.com/flaxandteal/alizarin/releases/download/v2.0.0-alpha.140/alizarin-napi-2.0.0-alpha.140.tgz",
-    "@tauri-apps/api": "~2.11",
+    "@tauri-apps/api": "~2.12",
     "@tauri-apps/plugin-dialog": "~2.7.1",
     "@tauri-apps/plugin-fs": "~2.5.1",
     "alizarin": "https://github.com/flaxandteal/alizarin/releases/download/v2.0.0-alpha.140/alizarin-2.0.0-alpha.140.tgz",
