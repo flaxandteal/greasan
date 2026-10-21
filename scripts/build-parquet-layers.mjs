@@ -92,6 +92,11 @@ for (const [head, prebuild] of HEADS) {
   }
 
   const primaryArg = layer && primary ? ` ${primary}` : '';
+  // Clean the dataset dir first: regen-parquet-v2 leaves pre-existing files, and
+  // the slug -> graph-id tile-naming change (RM alpha.20) means a re-emit would
+  // otherwise union stale slug-named `*_<slug>.parquet` with the fresh
+  // `*_<graphid>.parquet` into duplicate/mismatched tiles (the frankenstein).
+  execSync(`rm -rf "${resolve(root, dataset)}"`);
   execSync(
     `cargo run --release --example regen-parquet-v2 ` +
       `--manifest-path app/src-tauri/Cargo.toml -- data/${prebuild} ${dataset}${primaryArg}`,

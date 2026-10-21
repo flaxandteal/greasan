@@ -69,6 +69,12 @@ writeLayerPrebuild(prebuildDir, { graphId, graph, enriched, collections }, { mer
 // feature were removed in the DuckDB+Parquet cutover). Writes tiles_*.parquet +
 // concept_catalog + graph.json to data/layer-v2. Mirrors build-bunamo-layer.mjs.
 console.log('[build-layer] running regen-parquet-v2...');
+// Clean the output dir first: regen-parquet-v2 does not remove pre-existing
+// files, and tile naming changed slug -> graph-id (RM alpha.20), so a re-emit
+// into a dir with OLD slug-named `*_layer.parquet` leaves them beside the new
+// `*_<graphid>.parquet`; the `tiles_*.parquet` glob then UNIONS stale + fresh
+// into duplicate (and mismatched-reference) tiles. rm -rf avoids the frankenstein.
+execSync(`rm -rf "${resolve(root, 'data/layer-v2')}"`);
 execFileSync('cargo', [
   'run', '--release', '--example', 'regen-parquet-v2',
   '--manifest-path', resolve(root, 'app/src-tauri', 'Cargo.toml'),
