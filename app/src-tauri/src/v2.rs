@@ -822,6 +822,166 @@ pub fn v2_geo_points(
         .collect())
 }
 
+// ---------------------------------------------------------------------------
+// Spatial buffer (responder) - tap → entities in a cell-pruned SUPERSET box.
+// The critical path for the Aonach Mór Responder; proven here on Place/geo first.
+// GridBox prunes over the grid edge (no new engine code); the cheap list rides
+// the grid edge's render fields (descriptor + geo_descriptor point). The full
+// card is a follow-up `v2_hydrate_layers` on tap.
+// ---------------------------------------------------------------------------
+
+#[derive(serde::Deserialize)]
+pub struct BufferFilter {
+    /// service_roles Is <concept id> (e.g. a Shelter concept) - building transplant.
+    pub role: Option<String>,
+    /// capacity >= N (raw metres/persons; quantized engine-side) - building transplant.
+    pub min_capacity: Option<f64>,
+}
+
+#[derive(serde::Serialize)]
+pub struct BufferBuilding {
+    pub id: String,
+    pub name: Option<String>,
+    /// Representative point from the grid edge's geo_descriptor (None if non-geo).
+    pub lng: Option<f64>,
+    pub lat: Option<f64>,
+    pub service_role: Option<String>,
+    pub capacity: Option<f64>,
+    /// Which head carried it (layer id) → provenance swatch.
+    pub source_slice: String,
+}
+
+#[derive(serde::Serialize)]
+pub struct BufferResult {
+    /// [min_lng,min_lat,max_lng,max_lat] - the honest over-inclusive box to DRAW.
+    pub bbox: [f64; 4],
+    pub radius_m: f64,
+    /// count_records over the prune (may exceed the returned `buildings`).
+    pub count: u32,
+    pub truncated: bool,
+    pub buildings: Vec<BufferBuilding>,
+}
+
+/// Does `dir` carry a grid edge (`grid_*.parquet`)?
+fn dir_has_grid(dir: &str) -> bool {
+    std::fs::read_dir(dir).ok().is_some_and(|rd| {
+        rd.flatten().any(|e| {
+            let n = e.file_name();
+            let n = n.to_string_lossy();
+            n.starts_with("grid_") && n.ends_with(".parquet")
+        })
+    })
+}
+
+/// Parse a geojson `Point` string (`{"type":"Point","coordinates":[lng,lat]}`) to
+/// `(lng, lat)`. The grid edge's `geo_descriptor` is the representative point (v4).
+fn parse_point(geojson: &str) -> Option<(f64, f64)> {
+    let v: Value = serde_json::from_str(geojson).ok()?;
+    let c = v.get("coordinates")?.as_array()?;
+    Some((c.first()?.as_f64()?, c.get(1)?.as_f64()?))
+}
+
+/// Tap → entities whose footprint falls in a buffer around (`lng`,`lat`) - a
+/// cell-pruned SUPERSET box, NOT a precise circle. Runs `GridBox` on the
+/// grid-carrying head in `head_dirs`; the list rides the grid edge's render
+/// summary (descriptor + geo_descriptor point). Full contacts/links are a
+/// follow-up `v2_hydrate_layers(head_dirs, id)` on tap.
+#[tauri::command]
+pub fn responder_buffer(
+    head_dirs: Vec<String>,
+    lng: f64,
+    lat: f64,
+    radius_m: f64,
+    model: String,
+    _filter: Option<BufferFilter>,
+    limit: Option<u32>,
+) -> Result<BufferResult, String> {
+    let limit = limit.unwrap_or(500);
+    // 1. bbox from point + radius, latitude-corrected. A superset of the circle.
+    let dlat = radius_m / 111_320.0;
+    let dlng = radius_m / (111_320.0 * lat.to_radians().cos().abs().max(1e-9));
+    let (min_lng, min_lat, max_lng, max_lat) = (lng - dlng, lat - dlat, lng + dlng, lat + dlat);
+    let bbox = [min_lng, min_lat, max_lng, max_lat];
+
+    // 2. Guard the area: cells_in_box errors over MAX_BOX_CELLS (too-large area).
+    ros_madair_handlers::cells_in_box(min_lng, min_lat, max_lng, max_lat)
+        .map_err(|_| "area too large — zoom in".to_string())?;
+
+    // 3. Find the grid-carrying head (the one with grid_*.parquet).
+    let grid_dir = head_dirs
+        .iter()
+        .find(|d| dir_has_grid(d))
+        .ok_or_else(|| "no grid edge — re-emit at FORMAT_VERSION 3".to_string())?;
+
+    // 4. Run GridBox on it (count_records for the honest total + select_ids). The
+    //    grid edge is whole-resource, so `path` names the model's spatial node but
+    //    the cell semijoin prunes per-resource. The compiler validates the alias:
+    //    Place's spatial node is `location` (geojson-feature-collection); a building's
+    //    is `footprint` after the transplant.
+    let geo_path = if model.eq_ignore_ascii_case("Place") { "location" } else { "footprint" };
+    let ir = serde_json::json!({
+        "model": model,
+        "where": { "all": [
+            { "grid_box": { "path": geo_path,
+                "min_lng": min_lng, "min_lat": min_lat, "max_lng": max_lng, "max_lat": max_lat } }
+        ]},
+        "measures": ["count_records", "select_ids"],
+        "limit": limit,
+    });
+    let graph = load_graph(&graph_path(grid_dir))?;
+    let out = run_query(Path::new(grid_dir.as_str()), &ir, &graph)?;
+    let results = out.get("results").and_then(|r| r.as_array()).cloned().unwrap_or_default();
+    let mut count: u32 = 0;
+    let mut ids: Vec<String> = Vec::new();
+    for r in &results {
+        match r.get("measure").and_then(|m| m.as_str()) {
+            Some("count_records") => {
+                count = r.get("rows").and_then(|rs| rs.as_array())
+                    .and_then(|rs| rs.first()).and_then(|row| row.as_array())
+                    .and_then(|row| row.first()).and_then(|n| n.as_u64()).unwrap_or(0) as u32;
+            }
+            Some("select_ids") => {
+                ids = r.get("rows").and_then(|rs| rs.as_array()).map(|rs| {
+                    rs.iter().filter_map(|row| row.as_array()?.first()?.as_str().map(String::from)).collect()
+                }).unwrap_or_default();
+            }
+            _ => {}
+        }
+    }
+    let truncated = count as usize > ids.len();
+
+    // 5. Render columns for those ids off the SAME grid edge (descriptor +
+    //    geo_descriptor point), no scattered per-id fetch. source_slice = layer id.
+    let slice = layer_id_of(grid_dir);
+    let glob = format!("{grid_dir}/tiles_*.parquet");
+    let duck = ros_madair_duck::DuckReader::open_with(&glob, ros_madair_duck::SpatialSource::None)
+        .map_err(|e| e.to_string())?;
+    let summaries = duck.render_summaries(&ids).map_err(|e| e.to_string())?;
+    let buildings = ids
+        .into_iter()
+        .map(|id| {
+            let (name, point) = match summaries.get(&id) {
+                Some((descriptor, geo, _summary)) => {
+                    let pt = geo.as_deref().and_then(parse_point);
+                    (descriptor.clone(), pt)
+                }
+                None => (None, None),
+            };
+            BufferBuilding {
+                id,
+                name,
+                lng: point.map(|(x, _)| x),
+                lat: point.map(|(_, y)| y),
+                service_role: None,
+                capacity: None,
+                source_slice: slice.clone(),
+            }
+        })
+        .collect();
+
+    Ok(BufferResult { bbox, radius_m, count, truncated, buildings })
+}
+
 /// Re-emit a v2 head in place from an in-memory business-data JSON - the app's
 /// write path (the first one). `head_dir` is the head to (re)generate (e.g. the
 /// note/flag overlay), `graph_id` its resource model, `business_data_json` the

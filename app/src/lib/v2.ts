@@ -48,7 +48,12 @@ export type V2Expr =
    *  corners in the head's lng/lat space. A strict SUPERSET of true intersection
    *  ("headwords/places near here"), so results are recall-tolerant: never claim
    *  exact containment. Compiles `coarse`. */
-  | { bbox: { path: string; min_lng: number; min_lat: number; max_lng: number; max_lat: number } };
+  | { bbox: { path: string; min_lng: number; min_lat: number; max_lng: number; max_lat: number } }
+  /** Cell-pruned spatial SUPERSET box on a grid-edge (`grid_*.parquet`, FORMAT_VERSION
+   *  3+): `cell IN (cells_in_box(...))` over the cell-sorted edge, reading only the
+   *  overlapping cells' row groups. Twin of {@link bbox} but backed by the grid edge
+   *  rather than per-tile bbox overlap - the buffer path ("entities near here"). */
+  | { grid_box: { path: string; min_lng: number; min_lat: number; max_lng: number; max_lat: number } };
 
 /** What to compute (mirrors `ros_madair_query::Measure`). */
 export type V2Measure = 'count_records' | 'select_ids';
@@ -263,4 +268,53 @@ export async function geoPoints(
   targetUri: string,
 ): Promise<GeoPoint[]> {
   return await invoke<GeoPoint[]>('v2_geo_points', { headDir, nodePath, targetUri });
+}
+
+// ---------------------------------------------------------------------------
+// Spatial buffer (responder) - tap a point, get the entities whose footprint
+// falls in a cell-pruned SUPERSET box around it (not a precise circle). The
+// cheap list rides the grid edge's render fields (descriptor + geo_descriptor
+// point + render_summary); the full card is a follow-up hydrateLayers on tap.
+// ---------------------------------------------------------------------------
+
+/** One entity in a {@link responderBuffer} result. `lng`/`lat` is the grid edge's
+ *  representative point (geo_descriptor); null when the carrier has no geometry. */
+export interface BufferBuilding {
+  id: string;
+  name?: string;
+  lng?: number;
+  lat?: number;
+  service_role?: string;
+  capacity?: number;
+  source_slice: string;
+}
+/** The composed answer to a {@link responderBuffer} tap. `bbox` is the honest
+ *  over-inclusive box to DRAW; `count` is the prune total (may exceed `buildings`). */
+export interface BufferResult {
+  bbox: [number, number, number, number];
+  radius_m: number;
+  count: number;
+  truncated: boolean;
+  buildings: BufferBuilding[];
+}
+
+/**
+ * Tap → entities in a buffer around (`lng`,`lat`) within `radiusM` metres, over the
+ * grid-carrying head in `headDirs`. Returns a cell-pruned SUPERSET (box, not circle)
+ * - draw `result.bbox`, never claim a precise radius. `model` is "Place" here, a
+ * "building" after the Aonach transplant. Heavy per-entity compose stays off this
+ * path (follow up with {@link hydrateLayers} on tap).
+ */
+export async function responderBuffer(
+  headDirs: string[],
+  lng: number,
+  lat: number,
+  radiusM: number,
+  model = 'Place',
+  filter?: { role?: string; min_capacity?: number },
+  limit = 500,
+): Promise<BufferResult> {
+  return await invoke<BufferResult>('responder_buffer', {
+    headDirs, lng, lat, radiusM, model, filter: filter ?? null, limit,
+  });
 }
