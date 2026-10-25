@@ -8,10 +8,14 @@ name = "greasan_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
 
 [build-dependencies]
-tauri-build = { version = "2", features = [] }
+tauri-build = { version = "=2.6.1", features = [] }
 
 [dependencies]
-tauri = { version = "2", features = ["protocol-asset"] }
+# Pinned to the 2.11 stack: tauri 2.12 / wry 0.57 broke Android native-context
+# init (tao main_android_context() == None -> ndk_context uninitialized ->
+# resource_dir fails -> bundled heads never stage -> zero layers). This was
+# collateral from the alpha.140 broad cargo update, not required by it.
+tauri = { version = "=2.11.1", features = ["protocol-asset"] }
 tauri-plugin-opener = "2"
 tauri-plugin-dialog = "2"
 tauri-plugin-fs = "2"
@@ -38,23 +42,23 @@ unicode-normalization = "0.1"
 # v2.rs uses `alizarin_core` (not the old `alizarin_core_v2` alias).
 # The artifact format types - notably `Manifest.handlers`, which is what makes
 # the registry below derivable instead of guessable.
-ros-madair-format = { version = "0.1.0-alpha.29" }
+ros-madair-format = { version = "=0.1.0-alpha.29" }
 # The single source of the extension-type registry. We no longer hand-build one
 # from alizarin-clm-core: the registry is rebuilt from the handler set the
 # *manifest declares*, so an emit/query registry mismatch fails loudly instead of
 # silently returning zero rows.
-ros-madair-handlers = { version = "0.1.0-alpha.29" }
-ros-madair-query = { version = "0.1.0-alpha.29" }
+ros-madair-handlers = { version = "=0.1.0-alpha.29" }
+ros-madair-query = { version = "=0.1.0-alpha.29" }
 rusqlite = { version = "0.32", features = ["bundled"] }
 # Regeneration only (`v2-emit`) - see examples/regen-macbain-v2.rs. Emitting from
 # *this* workspace keeps us off the sandbox's target/ lock and Cargo.lock, which
 # `cargo run -p ros-madair-emit --manifest-path <sandbox>` would take.
-ros-madair-emit = { version = "0.1.0-alpha.29" }
+ros-madair-emit = { version = "=0.1.0-alpha.29" }
 # --- DuckDB+Parquet substrate (migration, see HANDOFF-substrate-migration-and-mobile.md) ---
 # ros-madair-duck compiles the ros-madair-query IR to DuckDB SQL over tile-row
 # Parquet. `duckdb` is the native binding; bundled+json+parquet static-link the
 # amalgamation + the parquet reader so read_parquet works OFFLINE (no INSTALL).
-ros-madair-duck = { version = "0.1.0-alpha.29" }
+ros-madair-duck = { version = "=0.1.0-alpha.29" }
 duckdb = { version = "1", features = ["bundled", "json", "parquet"] }
 # The gramadan Derive provider: generates the `forms` nodegroup on demand from
 # gramadan-rs. Registered into the FunctionsRegistry the duck hydrate path runs,
