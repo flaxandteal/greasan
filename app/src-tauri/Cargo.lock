@@ -1222,7 +1222,7 @@ dependencies = [
  "libc",
  "option-ext",
  "redox_users",
- "windows-sys 0.60.2",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -1449,7 +1449,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "39cab71617ae0d63f51a36d69f866391735b51691dbda63cf6f96d042b63efeb"
 dependencies = [
  "libc",
- "windows-sys 0.60.2",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -2983,7 +2983,7 @@ dependencies = [
  "png 0.18.1",
  "serde",
  "thiserror 2.0.18",
- "windows-sys 0.60.2",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -4065,9 +4065,9 @@ dependencies = [
 
 [[package]]
 name = "ros-madair-compile"
-version = "0.1.0-alpha.29"
+version = "0.1.0-alpha.31"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "422380072f84820dd3f096beb280a5e8ef78ea5d818f187e9f2b307d5020d053"
+checksum = "f11296af807b3ea6d1b494854908bae4b72c670e4d27a9f914d84806ba0f3f60"
 dependencies = [
  "alizarin-core",
  "getrandom 0.2.17",
@@ -4078,9 +4078,9 @@ dependencies = [
 
 [[package]]
 name = "ros-madair-duck"
-version = "0.1.0-alpha.29"
+version = "0.1.0-alpha.31"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "fc35e21593c2e7c1be800739ac4c81e012875a3ba05ea438e77c3e67796004d3"
+checksum = "710bda641fe75b7f6a69974921410497886d7fd89e5426a6e5b917f9214e01b6"
 dependencies = [
  "alizarin-core",
  "duckdb",
@@ -4093,9 +4093,9 @@ dependencies = [
 
 [[package]]
 name = "ros-madair-emit"
-version = "0.1.0-alpha.29"
+version = "0.1.0-alpha.31"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0ad5f5d887eddd342f067b07738e6dcec460ca99a7e0d9a100d1eb6a3e1843b7"
+checksum = "73543ff580191fb82c3a49c227be83b0a52f38138d206be2dc9bcb0919d6f9b6"
 dependencies = [
  "alizarin-core",
  "arrow",
@@ -4114,9 +4114,9 @@ dependencies = [
 
 [[package]]
 name = "ros-madair-format"
-version = "0.1.0-alpha.29"
+version = "0.1.0-alpha.31"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d9d4c8f157977ae5eaeaf696658bcb18dc865951e3139d2d56953c4983bb9c0a"
+checksum = "0cbe7a2c526f4dca6eebc8b5a89eb5c017af8cc1556bdef2eb343d80f1fcea1b"
 dependencies = [
  "base64 0.22.1",
  "bs58",
@@ -4130,9 +4130,9 @@ dependencies = [
 
 [[package]]
 name = "ros-madair-handlers"
-version = "0.1.0-alpha.29"
+version = "0.1.0-alpha.31"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2f903b5269d4598fa9f08afd875e491146cf34586ec9412d69c909047f7c2117"
+checksum = "1baf7fd4629985e55b25e3b939a94f94cb7b60e7395b7126141e30fe17f5744c"
 dependencies = [
  "alizarin-clm-core",
  "alizarin-core",
@@ -4143,9 +4143,9 @@ dependencies = [
 
 [[package]]
 name = "ros-madair-query"
-version = "0.1.0-alpha.29"
+version = "0.1.0-alpha.31"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "104330df6fe8f57b343693ece9a9e86269bd285c39992a1d2edee5b0236ecf99"
+checksum = "5d66a63ca44ff50c14ae5731ff7aed635cdafd0f88c77e7eaf38ca67938db086"
 dependencies = [
  "alizarin-core",
  "getrandom 0.2.17",
@@ -4266,7 +4266,7 @@ dependencies = [
  "errno",
  "libc",
  "linux-raw-sys 0.12.1",
- "windows-sys 0.60.2",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -4672,7 +4672,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3a766e1110788c36f4fa1c2b71b387a7815aa65f88ce0229841826633d93723e"
 dependencies = [
  "libc",
- "windows-sys 0.60.2",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -5242,7 +5242,7 @@ dependencies = [
  "getrandom 0.4.2",
  "once_cell",
  "rustix 1.1.4",
- "windows-sys 0.60.2",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -5623,7 +5623,7 @@ dependencies = [
  "png 0.18.1",
  "serde",
  "thiserror 2.0.18",
- "windows-sys 0.60.2",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -5658,7 +5658,7 @@ checksum = "f2f6fb2847f6742cd76af783a2a2c49e9375d0a111c7bef6f71cd9e738c72d6e"
 dependencies = [
  "memoffset",
  "tempfile",
- "windows-sys 0.60.2",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -6151,7 +6151,7 @@ version = "0.1.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c2a7b1c03c876122aa43f3020e6c3c3ee5c05081c9a00739faf7503aeba10d22"
 dependencies = [
- "windows-sys 0.60.2",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]

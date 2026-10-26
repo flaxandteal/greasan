@@ -1,5 +1,19 @@
 # Handoff → ros-madair-duck: make the reader pool concurrent (per-dir locks)
 
+> **STATUS: RESOLVED in `ros-madair-duck` 0.1.0-alpha.31** ("reader-pool concurrency
+> fix") — `with_layer` now uses exactly the per-dir `Arc<Mutex<Option<DuckReader>>>`
+> pattern proposed below. Gréasán bumped alpha.29 → alpha.31.
+>
+> **Caveat found on verification:** this fixed the pooled *hydrate* path and read
+> concurrency generally, but did **not** speed the catalogue's `queryV2` — because
+> Gréasán's `run_query` (v2.rs) opens a **fresh** `DuckReader` via `open_with`,
+> bypassing the `with_layer` pool entirely. Its ~950 ms contention was actually
+> prewarm's concurrent IO/CPU burst, not this lock (loadCatalogue stayed ~2.7 s with
+> mass-prewarm on alpha.31; ~1.6 s without). Downstream fix: don't mass-prewarm
+> (lazy-open + single-head warm-up). **Possible upstream follow-up:** route
+> `run_query` through the pool too, or expose a pooled query entry point, so repeated
+> queries reuse a warm reader instead of creating a fresh connection each call.
+
 **Crate:** `ros-madair-duck` (observed on `0.1.0-alpha.29`)
 **Function:** `with_layer` — the process-global `DuckReader` pool.
 **Severity:** startup/UX — serializes *all* DuckDB work process-wide; measured ~950 ms

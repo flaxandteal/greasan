@@ -1364,6 +1364,7 @@ pub fn maybe_run_emit_measurement(app: tauri::AppHandle) {
             "https://example.org/",
             &ros_madair_emit::default_registry(),
             &cfg_by_graph,
+            None, // no tier filter (alpha.31 default-deny tier) - emit the full head
             &mut on_progress,
         ) {
             Ok(s) => serde_json::to_string(&s)

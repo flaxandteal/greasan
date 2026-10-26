@@ -502,15 +502,15 @@ export async function bootstrapLayers(): Promise<void> {
   // readers) dominates the first hydrate at ~600ms; RM_HYDRATE_PERF confirmed it
   // is 96% of the cost. Fire-and-forget - v2_prewarm is idempotent.
   // Warm DuckDB's one-time process cold-init (~1s: engine + bundled parquet/json
-  // extensions) in the background, on a SINGLE head, so the user's first query pays
-  // only a ~85ms reader open rather than inheriting the cold-init. We deliberately do
-  // NOT mass-prewarm the whole stack any more: `with_layer` holds a process-global
-  // lock for the duration of each open AND each query, so warming all ~N readers at
-  // once stalls concurrent queries (the catalogue load + first search) for ~2s
-  // (measured: queryV2 2075ms racing prewarm vs 1128ms without). Remaining readers
-  // open lazily on first use. ros-madair-duck is moving to per-dir locks (see
-  // HANDOFF-rosmadair-reader-pool-concurrency.md); once that lands, mass prewarm (and
-  // true read concurrency) becomes safe again.
+  // extensions) in the background on a SINGLE head; the rest open lazily on first use.
+  // We deliberately do NOT mass-prewarm the whole stack: opening all ~N readers is ~2s
+  // of concurrent IO/CPU that slows every other startup query - measured loadCatalogue
+  // 2720ms with mass-prewarm vs 1617ms without. (ros-madair-duck alpha.31 fixed the
+  // `with_layer` pool lock - per-dir now - which helps the pooled hydrate path and read
+  // concurrency generally; but `run_query` opens FRESH readers, so the catalogue's
+  // queryV2 contends on raw IO/CPU, not that lock. See
+  // HANDOFF-rosmadair-reader-pool-concurrency.md.) alpha.31's per-dir lock also means
+  // the lazy opens below never block one another.
   const warmHead = currentV2HeadDirs()[0];
   if (warmHead) void perfStep('duckdb warm-up (bg)', () => prewarmLayers([warmHead]));
   // Warm the concept-label closure cache too. `v2_closure` opens a fresh cold
