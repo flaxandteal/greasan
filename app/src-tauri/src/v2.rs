@@ -492,6 +492,85 @@ pub fn v2_hydrate_layers(head_dirs: Vec<String>, resource_id: String, language: 
     r
 }
 
+/// Batch counterpart of `v2_hydrate_layers`: hydrate MANY resources over the same
+/// head stack in ONE command call. The layer catalogue fires one hydrate per Layer
+/// resource; as N separate invokes they each pay IPC + contend on the process-global
+/// DuckReader pool mutex, so they run effectively serially (1-2s for ~15 layers).
+/// Folding them into one call pays the IPC + lock dance once, and detects carriers
+/// with ONE `descriptors` scan per dir over ALL ids (M calls, not N*M); graph loads,
+/// the gramadan registry, and the layer-id list are shared across every id.
+///
+/// Returns a JSON object keyed by resource_id -> hydrated tree. Ids that fail to
+/// hydrate (or no carrier) are simply absent, mirroring the per-id try/catch the
+/// caller used to do - one bad id never fails the batch.
+#[tauri::command]
+pub fn v2_hydrate_layers_batch(head_dirs: Vec<String>, resource_ids: Vec<String>, language: Option<String>, graph_id: Option<String>) -> Result<Value, String> {
+    #[cfg(feature = "cmdperf")]
+    let __t = std::time::Instant::now();
+    let head_dirs = present_layer_dirs(head_dirs);
+    if head_dirs.is_empty() {
+        return Err("v2_hydrate_layers_batch: no layers given".to_string());
+    }
+    if resource_ids.is_empty() {
+        return Ok(Value::Object(serde_json::Map::new()));
+    }
+    let gid = graph_id.as_deref();
+
+    // Per-dir, loaded ONCE: the dir's graph, and the set of requested ids it carries
+    // (one descriptors scan over ALL ids instead of per-id-per-dir). This is the bulk
+    // of what the single-resource path repeats N times.
+    let dirs: Vec<&Path> = head_dirs.iter().map(|d| Path::new(d.as_str())).collect();
+    let mut dir_graph: Vec<Option<std::sync::Arc<StaticGraph>>> = Vec::with_capacity(head_dirs.len());
+    let mut dir_carries: Vec<std::collections::HashSet<String>> = Vec::with_capacity(head_dirs.len());
+    for d in &head_dirs {
+        dir_graph.push(load_graph_cached(&graph_path_for(d, gid)).ok());
+        let carried = ros_madair_duck::descriptors(&[Path::new(d.as_str())], &resource_ids)
+            .map(|m| m.into_keys().collect())
+            .unwrap_or_default();
+        dir_carries.push(carried);
+    }
+
+    let langs: Vec<&str> = match language.as_deref() {
+        Some(l) => vec![l, "ga", "gd", "en"],
+        None => vec!["ga", "gd", "en"],
+    };
+    let functions = gramadan_registry(&dirs);
+    let layer_ids: Vec<String> = head_dirs.iter().map(|d| layer_id_of(d)).collect();
+
+    let mut out = serde_json::Map::with_capacity(resource_ids.len());
+    for rid in &resource_ids {
+        // Carriers for THIS id (precedence preserved), from the precomputed per-dir
+        // carry sets - same base/overlay selection as the single-resource path.
+        let mut carriers: Vec<std::sync::Arc<StaticGraph>> = Vec::new();
+        let mut fxg_only: Vec<std::sync::Arc<StaticGraph>> = Vec::new();
+        for (i, g_opt) in dir_graph.iter().enumerate() {
+            let Some(g) = g_opt.clone() else { continue };
+            if dir_carries[i].contains(rid) {
+                carriers.push(g);
+            } else if g.functions_x_graphs.as_ref().is_some_and(|v| !v.is_empty()) {
+                fxg_only.push(g);
+            }
+        }
+        let base_graph = match carriers.first() {
+            Some(g) => g.clone(),
+            None => match load_graph_cached(&graph_path_for(&head_dirs[0], gid)) {
+                Ok(g) => g,
+                Err(_) => continue,
+            },
+        };
+        let base_gid = base_graph.graphid.clone();
+        let mut overlays: Vec<std::sync::Arc<StaticGraph>> =
+            carriers.into_iter().skip(1).filter(|g| g.graphid == base_gid).collect();
+        overlays.extend(fxg_only);
+        let composed = cached_layered_graph(&base_graph, &overlays);
+        if let Ok(v) = ros_madair_duck::hydrate_layers(&dirs, rid, &composed, &langs, Some(&layer_ids), &functions) {
+            out.insert(rid.clone(), v);
+        }
+    }
+    crate::cmdperf!("[cmdperf] v2_hydrate_layers_batch dirs={} ids={} {}ms", dirs.len(), resource_ids.len(), __t.elapsed().as_millis());
+    Ok(Value::Object(out))
+}
+
 /// Pre-warm every per-hydrate cache for a layer set so the FIRST entry open is as
 /// fast as the rest: the app-side graph / LayeredGraph / functions-registry caches,
 /// and the duck-side reader pool + concept-label cache. Fire-and-forget from the

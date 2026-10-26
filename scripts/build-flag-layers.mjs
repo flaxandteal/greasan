@@ -110,7 +110,9 @@ function emitHead(slug, modelDir, businessCsv, outSlug, descriptorTemplate) {
   const outDir = resolve(root, `data/${outSlug}`);
   console.log(`[build-flag] ${slug}: running regen-layer-v2...`);
   execFileSync('cargo', [
-    'run', '--release', '--example', 'regen-layer-v2', '--features', 'v2-emit',
+    // The v2/v2-emit/v2-duck cargo features were removed - the DuckDB read+emit
+    // path is non-optional now, so examples run with NO --features.
+    'run', '--release', '--example', 'regen-layer-v2',
     '--manifest-path', resolve(root, 'app/src-tauri', 'Cargo.toml'),
     '--', `data/prebuild-${slug}`, `data/${outSlug}`, graphId,
   ], { stdio: 'inherit' });
@@ -130,8 +132,8 @@ emitHead('person', 'models/person', 'ResourceID,name\nuser,User\n', 'person-v2',
 
 // --- NOTE (one sample flag on baile, authored by User) ---
 const noteCsv =
-  'ResourceID,description,subject,author\n' +
-  `note-sample-1,${csvEscape('Sampla nóta don bhaile · sample flag')},${SAMPLE_SUBJECT_UUID},${USER_UUID}\n`;
+  'ResourceID,description,subject,author,note_type\n' +
+  `note-sample-1,${csvEscape('Sampla nóta don bhaile · sample flag')},${SAMPLE_SUBJECT_UUID},${USER_UUID},${csvEscape('Flag for Review')}\n`;
 emitHead('note', 'models/note', noteCsv, 'note-v2', { name: '<Description>' });
 
 console.log(`[build-flag] Done (${elapsed(t0)}). Seeded User: ${USER_UUID}`);

@@ -126,6 +126,9 @@ const en: Record<string, string> = {
   'flag.subject.entry': 'Headword',
   'flag.subject.example': 'Example',
   'flag.subject.place': 'Place',
+  'flag.noteType': 'Note type',
+  'flag.type.personal': 'Personal Note',
+  'flag.type.review': 'Flag for Review',
 
   // Layer detail page
   'layerDetail.title': 'Layer',

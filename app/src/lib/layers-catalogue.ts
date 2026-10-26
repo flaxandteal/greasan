@@ -3,7 +3,7 @@
 // Layer catalogue loader - reads the `layer-v2` META head (one Layer resource
 // per data layer in the stack) for the layer UI. Queried standalone via
 // layerCatalogueHeadDir(); never composed into the lexical/place stack.
-import { queryV2, hydrateLayers } from './v2';
+import { queryV2, hydrateLayersBatch } from './v2';
 import { layerCatalogueHeadDir, currentV2HeadDirs } from './dictionary';
 
 export interface LayerLink { title: string; url: string; type: string }
@@ -140,10 +140,17 @@ export async function loadLayerCatalogue(): Promise<LayerEntry[]> {
   // Dedupe: with zero corpus layers installed, currentV2HeadDirs() falls back to
   // the catalogue head itself, which we already prepend.
   const stack = [...new Set([head, ...currentV2HeadDirs()])];
-  const entries = await Promise.all(ids.map(async (id) => {
-    try { return toEntry(id, await hydrateLayers(stack, id)); }
-    catch (e) { console.warn('[layers] hydrate failed:', id, e); return null; }
-  }));
+  // One batched hydrate for ALL Layer bodies instead of N per-id invokes that
+  // serialize on the reader-pool mutex (the 1-2s "bodies trail the names" lag).
+  let hydrated: Record<string, unknown> = {};
+  try { hydrated = await hydrateLayersBatch(stack, ids); }
+  catch (e) { console.warn('[layers] batch hydrate failed:', e); return []; }
+  const entries = ids.map((id) => {
+    const tree = hydrated[id];
+    if (tree == null) return null; // no carrier / failed to hydrate - skip (as before)
+    try { return toEntry(id, tree); }
+    catch (e) { console.warn('[layers] toEntry failed:', id, e); return null; }
+  });
   return entries.filter((e): e is LayerEntry => !!e).sort((a, b) => a.name.localeCompare(b.name));
 }
 

@@ -31,12 +31,22 @@ const NOTE_GRAPH_CSV = `name,ontology_class,author,description,is_resource
 Note,http://www.w3.org/ns/oa#Annotation,,A user note/flag attached to one or more resources,true
 `;
 const NOTE_NODES_CSV = `parent_alias,alias,name,datatype,cardinality,ontology_class,parent_property,description,collection_name,required,searchable,exportable,sortorder
+,note_type,Note Type,concept,1,http://www.w3.org/ns/oa#Motivation,http://www.w3.org/ns/oa#motivatedBy,The kind of note - a personal note vs a flag raised for review (oa:motivatedBy),Note Types,false,true,true,0
 ,description,Description,string,1,http://www.w3.org/ns/oa#bodyValue,http://www.w3.org/ns/oa#bodyValue,The note text (the resource descriptor),,true,true,true,1
 ,subject,Subject,resource-instance-list,n,http://www.w3.org/ns/oa#hasTarget,http://www.w3.org/ns/oa#hasTarget,The flagged resource(s) this note is about,,false,false,true,2
 ,author,Author,resource-instance,1,http://purl.org/dc/terms/creator,http://purl.org/dc/terms/creator,The Person who created the note,,false,false,true,3
 `;
+// Controlled list for note_type. Concept labels must match the values written in
+// buildBusinessData (and models/note/collections.csv) so the reference resolves.
 const NOTE_COLL_CSV = `collection_name,concept_label,parent_label,sort_order
+Note Types,Personal Note,,1
+Note Types,Flag for Review,,2
 `;
+
+/** The note_type controlled-list values (concept labels). The first is the default. */
+export const NOTE_TYPES = ['Personal Note', 'Flag for Review'] as const;
+export type NoteType = (typeof NOTE_TYPES)[number];
+export const DEFAULT_NOTE_TYPE: NoteType = 'Personal Note';
 
 export type SubjectKind = 'entry' | 'example' | 'place';
 
@@ -45,6 +55,8 @@ export interface NoteRec {
   description: string;
   subject: string[];
   author: string;
+  /** Controlled-list category (concept label). Legacy notes lack it - default applied on emit. */
+  noteType?: NoteType;
   // Denormalized subject context (localStorage only - not emitted to the head),
   // captured at flag-time so the all-flags page can render + navigate without a
   // per-note lookup.
@@ -73,6 +85,7 @@ export function loadNotes(): NoteRec[] {
       description: 'Sampla nóta don bhaile · sample flag',
       subject: [BAILE_UUID],
       author: USER_UUID,
+      noteType: 'Flag for Review',
       subjectName: 'baile',
       subjectGraph: 'Ceannfhocal · Headword',
       subjectKind: 'entry',
@@ -97,9 +110,11 @@ function csvEscape(v: string): string {
 function buildBusinessData(notes: NoteRec[]): string {
   const { graph, collections } = buildGraphFromModelCsvs(NOTE_GRAPH_CSV, NOTE_NODES_CSV, NS, NOTE_COLL_CSV);
   const rows = notes.map((n) =>
-    [n.rid, n.description, n.subject.join(','), n.author].map(csvEscape).join(','),
+    [n.rid, n.description, n.subject.join(','), n.author, n.noteType || DEFAULT_NOTE_TYPE]
+      .map(csvEscape)
+      .join(','),
   );
-  const csv = 'ResourceID,description,subject,author\n' + rows.join('\n') + '\n';
+  const csv = 'ResourceID,description,subject,author,note_type\n' + rows.join('\n') + '\n';
   const result: any = buildResourcesFromBusinessCsv(csv, graph, collections, 'en', false, NOTE_LAYER_NS);
   const resources = result?.business_data?.resources || [];
   const typedGraph: any = parseStaticGraph(JSON.stringify({ graph: [graph] }));
@@ -124,13 +139,19 @@ async function rebuild(notes: NoteRec[]): Promise<void> {
 }
 
 /** Flag a resource with a note. */
-export async function addFlag(subjectUri: string, text: string, meta: FlagMeta = {}): Promise<void> {
+export async function addFlag(
+  subjectUri: string,
+  text: string,
+  meta: FlagMeta = {},
+  noteType: NoteType = DEFAULT_NOTE_TYPE,
+): Promise<void> {
   const notes = loadNotes();
   notes.push({
     rid: 'note-' + crypto.randomUUID(),
     description: text,
     subject: [subjectUri],
     author: USER_UUID,
+    noteType,
     subjectName: meta.name,
     subjectGraph: meta.graph,
     subjectKind: meta.kind,
@@ -139,9 +160,11 @@ export async function addFlag(subjectUri: string, text: string, meta: FlagMeta =
   await rebuild(notes);
 }
 
-/** Edit a note's text. */
-export async function editFlag(rid: string, text: string): Promise<void> {
-  const notes = loadNotes().map((n) => (n.rid === rid ? { ...n, description: text } : n));
+/** Edit a note's text and/or its controlled-list type. */
+export async function editFlag(rid: string, text: string, noteType?: NoteType): Promise<void> {
+  const notes = loadNotes().map((n) =>
+    n.rid === rid ? { ...n, description: text, ...(noteType ? { noteType } : {}) } : n,
+  );
   persist(notes);
   await rebuild(notes);
 }

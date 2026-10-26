@@ -105,6 +105,11 @@ const ga: Record<string, string> = {
   'flag.subject.entry': 'Ceannfhocal',
   'flag.subject.example': 'Sampla',
   'flag.subject.place': 'Logainm',
+  // TODO(ga): human Irish needed for the note controlled-list - do NOT machine-translate.
+  // Falls back to English until filled:
+  //   'flag.noteType': '…',
+  //   'flag.type.personal': '…',   // "Personal Note"
+  //   'flag.type.review': '…',     // "Flag for Review"
 
   // Layer detail page
   'layerDetail.title': 'Sraith',

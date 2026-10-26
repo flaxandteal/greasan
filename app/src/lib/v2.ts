@@ -165,6 +165,17 @@ export async function hydrateLayers(headDirs: string[], resourceId: string, grap
 }
 
 /**
+ * Batch hydrate: resolve MANY resources over the same stack in ONE command call.
+ * Returns a map of resourceId -> hydrated tree; ids that fail/have no carrier are
+ * absent. Far cheaper than N `hydrateLayers` calls (one IPC + one reader-pool lock
+ * pass + one descriptors scan per dir), which is what made the layer catalogue's
+ * bodies trail the names by 1-2s.
+ */
+export async function hydrateLayersBatch(headDirs: string[], resourceIds: string[], graphId?: string): Promise<Record<string, unknown>> {
+  return await invoke<Record<string, unknown>>('v2_hydrate_layers_batch', { headDirs, resourceIds, graphId });
+}
+
+/**
  * Pre-warm the hydrate caches (per-layer DuckDB reader pool, concept labels,
  * graph/registry) for a layer set, so the FIRST entry open is as fast as the
  * rest. Fire-and-forget at startup after the layer set is known; the native side

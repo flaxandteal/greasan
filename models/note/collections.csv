@@ -1,1 +1,3 @@
 collection_name,concept_label,parent_label,sort_order
+Note Types,Personal Note,,1
+Note Types,Flag for Review,,2
