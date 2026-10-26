@@ -594,21 +594,36 @@ pub fn v2_hydrate_layers_batch(head_dirs: Vec<String>, resource_ids: Vec<String>
         Some(l) => vec![l, "ga", "gd", "en"],
         None => vec!["ga", "gd", "en"],
     };
-    let functions = gramadan_registry(&dirs);
+    // No gramadan Derive providers: this command hydrates Layer-catalogue resources
+    // (the Layer model), which carry no morphology forms. gramadan_registry here was
+    // ~900ms - a cache MISS (its key is the dir set, and the catalogue's stack is
+    // prefixed with the catalogue head, so it never matches prewarm's entry) for zero
+    // effect. An empty registry means no compute hooks fire, which is correct here.
+    let functions = std::sync::Arc::new(alizarin_core::default_functions_registry());
     let layer_ids: Vec<String> = head_dirs.iter().map(|d| layer_id_of(d)).collect();
 
     let mut out = serde_json::Map::with_capacity(resource_ids.len());
     for rid in &resource_ids {
         // Carriers for THIS id (precedence preserved), from the precomputed per-dir
-        // carry sets - same base/overlay selection as the single-resource path.
+        // carry sets - same base/overlay selection as the single-resource path. We
+        // ALSO record the dir INDICES so the hydrate scans only the dirs that carry
+        // the resource (+ any fxg compute layer), not the whole stack. This is the
+        // catalogue-latency fix: `hydrate_layers` runs `resource_tiles(uuid)` on
+        // EVERY dir it's handed, so passing all N dirs for each of N ids is ~N*M
+        // mostly-empty parquet scans (the ~4s). The carrier subset is ~1-2 dirs.
+        // Safe because descriptor-detection covers the tile-carriers for the Layer
+        // catalogue (every head bakes a full layer-<slug> resource) - the sole caller.
         let mut carriers: Vec<std::sync::Arc<StaticGraph>> = Vec::new();
         let mut fxg_only: Vec<std::sync::Arc<StaticGraph>> = Vec::new();
+        let mut idx: Vec<usize> = Vec::new();
         for (i, g_opt) in dir_graph.iter().enumerate() {
             let Some(g) = g_opt.clone() else { continue };
             if dir_carries[i].contains(rid) {
                 carriers.push(g);
+                idx.push(i);
             } else if g.functions_x_graphs.as_ref().is_some_and(|v| !v.is_empty()) {
                 fxg_only.push(g);
+                idx.push(i);
             }
         }
         let base_graph = match carriers.first() {
@@ -623,7 +638,15 @@ pub fn v2_hydrate_layers_batch(head_dirs: Vec<String>, resource_ids: Vec<String>
             carriers.into_iter().skip(1).filter(|g| g.graphid == base_gid).collect();
         overlays.extend(fxg_only);
         let composed = cached_layered_graph(&base_graph, &overlays);
-        if let Ok(v) = ros_madair_duck::hydrate_layers(&dirs, rid, &composed, &langs, Some(&layer_ids), &functions) {
+        // Hydrate over the carrier+fxg subset; fall back to the full stack only when
+        // nothing was detected (correctness over speed - a truly uncarried id
+        // hydrates empty either way, so this costs one slow scan, not wrong data).
+        let (sub_dirs, sub_lids): (Vec<&Path>, Vec<String>) = if idx.is_empty() {
+            (dirs.clone(), layer_ids.clone())
+        } else {
+            (idx.iter().map(|&i| dirs[i]).collect(), idx.iter().map(|&i| layer_ids[i].clone()).collect())
+        };
+        if let Ok(v) = ros_madair_duck::hydrate_layers(&sub_dirs, rid, &composed, &langs, Some(&sub_lids), &functions) {
             out.insert(rid.clone(), v);
         }
     }

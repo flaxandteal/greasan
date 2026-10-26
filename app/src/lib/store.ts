@@ -501,7 +501,18 @@ export async function bootstrapLayers(): Promise<void> {
   // first entry open hits cached readers. Otherwise gather (opening ~11 parquet
   // readers) dominates the first hydrate at ~600ms; RM_HYDRATE_PERF confirmed it
   // is 96% of the cost. Fire-and-forget - v2_prewarm is idempotent.
-  void perfStep('prewarm (bg)', () => prewarmLayers(currentV2HeadDirs()));
+  // Warm DuckDB's one-time process cold-init (~1s: engine + bundled parquet/json
+  // extensions) in the background, on a SINGLE head, so the user's first query pays
+  // only a ~85ms reader open rather than inheriting the cold-init. We deliberately do
+  // NOT mass-prewarm the whole stack any more: `with_layer` holds a process-global
+  // lock for the duration of each open AND each query, so warming all ~N readers at
+  // once stalls concurrent queries (the catalogue load + first search) for ~2s
+  // (measured: queryV2 2075ms racing prewarm vs 1128ms without). Remaining readers
+  // open lazily on first use. ros-madair-duck is moving to per-dir locks (see
+  // HANDOFF-rosmadair-reader-pool-concurrency.md); once that lands, mass prewarm (and
+  // true read concurrency) becomes safe again.
+  const warmHead = currentV2HeadDirs()[0];
+  if (warmHead) void perfStep('duckdb warm-up (bg)', () => prewarmLayers([warmHead]));
   // Warm the concept-label closure cache too. `v2_closure` opens a fresh cold
   // DuckReader per layer + reads each catalog (~2s across the full stack), and the
   // entry loader awaits it alongside the hydrate - so without this the FIRST entry
@@ -509,10 +520,12 @@ export async function bootstrapLayers(): Promise<void> {
   // same currentV2HeadDirs() the loader uses. Fire-and-forget; getClosure de-dupes.
   void perfStep('warmClosure (bg)', () => warmClosure(currentV2HeadDirs()));
   void refreshLayerTrust();
-  // Populate the catalogue so the tray shows layer-v2 names/swatches from the
-  // first render (not the family.ts fallback). Best-effort; head must be unpacked.
-  await perfStep('loadCatalogue', () => loadCatalogue());
-  perfMark('bootstrapLayers done');
+  // Populate the catalogue so the tray shows layer-v2 names/swatches instead of the
+  // family.ts fallback - but DON'T block bootstrap on it: it's cosmetic (the tray
+  // has a working fallback) and the hydrate is the single biggest startup cost. Fire
+  // it in the background; `layerCatalogue` updates reactively when it lands.
+  void perfStep('loadCatalogue (bg)', () => loadCatalogue());
+  perfMark('bootstrapLayers done (catalogue loading in bg)');
 }
 
 /**
