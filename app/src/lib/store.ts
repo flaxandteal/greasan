@@ -5,6 +5,7 @@ import { FAMILIES, DEFAULT_FAMILY, layerSwatch, type FamilyId } from './family';
 import { switchFamily, addDynamicLayer, addV2Layer, removeV2Layer, getDynamicLayers, registerV2Layers, initOfflineLayers, setHiddenLayers, search, loadEntryFlagged, currentV2HeadDirs, warmClosure, type DynamicLayerInfo, type ExampleDetail } from './dictionary';
 import { buildLayer, waitForBuild, listLayers, listV2Layers, assetUrl, removeLayerFiles, type BuildLayerStatus } from './tauri-builder';
 import { verifyLayer, prewarmLayers, type LayerVerification } from './v2';
+import { perfMark, perfStep } from './perf';
 import type { SearchLang, EntrySummary } from './dictionary';
 
 export type { DynamicLayerInfo } from './dictionary';
@@ -55,7 +56,7 @@ export const currentLayer = writable<import('./layers-catalogue').LayerEntry | n
 export const loading = writable(false);
 
 export const wasmReady = readable(false, (set) => {
-  ready.then(() => set(true)).catch(() => set(false));
+  ready.then(() => { perfMark('wasmReady (WASM init done)'); set(true); }).catch(() => set(false));
 });
 
 export const activeTab = writable<'search' | 'starred' | 'settings'>('search');
@@ -475,39 +476,43 @@ export async function removeLayer(name: string): Promise<void> {
 export async function bootstrapLayers(): Promise<void> {
   // Built app: unpack bundled heads + Pagefind zips into app-data on first
   // launch, then point the active layer set at those real paths. No-op in dev.
+  perfMark('bootstrapLayers start');
   try {
     preparingDictionary.set(true);
-    await initOfflineLayers();
+    await perfStep('initOfflineLayers', () => initOfflineLayers());
   } catch (err) {
     console.error('[store] offline layer prep failed:', err);
   } finally {
     preparingDictionary.set(false);
   }
+  perfMark('offline prep done (overlay cleared)');
   registerV2Layers();
   // Re-add any user-installed v2 heads (built on-device via `prebuild-v2`),
   // persisted on disk under layers/<name>/head.sqlite, into the active head-dir
   // set. This is the v2 counterpart of restoreLayers (which is v1-only).
-  await restoreV2Layers();
+  await perfStep('restoreV2Layers', () => restoreV2Layers());
   // Re-apply persisted visibility now that the real layer set is known:
   // `setHiddenLayers` strips the base layer, and until initOfflineLayers has
   // run that base is the dev constant, not the installed one.
   setHiddenLayers(get(hiddenLayerNames));
   layers.set(getDynamicLayers());
+  perfMark('layers registered (search usable)');
   // Warm the DuckDB reader pool for the active head dirs in the background, so the
   // first entry open hits cached readers. Otherwise gather (opening ~11 parquet
   // readers) dominates the first hydrate at ~600ms; RM_HYDRATE_PERF confirmed it
   // is 96% of the cost. Fire-and-forget - v2_prewarm is idempotent.
-  void prewarmLayers(currentV2HeadDirs());
+  void perfStep('prewarm (bg)', () => prewarmLayers(currentV2HeadDirs()));
   // Warm the concept-label closure cache too. `v2_closure` opens a fresh cold
   // DuckReader per layer + reads each catalog (~2s across the full stack), and the
   // entry loader awaits it alongside the hydrate - so without this the FIRST entry
   // open blocks ~2s on it (cmdperf: v2_closure 2098ms). Cached after, keyed on the
   // same currentV2HeadDirs() the loader uses. Fire-and-forget; getClosure de-dupes.
-  void warmClosure(currentV2HeadDirs());
+  void perfStep('warmClosure (bg)', () => warmClosure(currentV2HeadDirs()));
   void refreshLayerTrust();
   // Populate the catalogue so the tray shows layer-v2 names/swatches from the
   // first render (not the family.ts fallback). Best-effort; head must be unpacked.
-  await loadCatalogue();
+  await perfStep('loadCatalogue', () => loadCatalogue());
+  perfMark('bootstrapLayers done');
 }
 
 /**

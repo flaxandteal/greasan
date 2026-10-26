@@ -353,23 +353,83 @@ pub fn v2_query_layers(_head_dirs: Vec<String>, _ir: Value) -> Result<Value, Str
 // Later layers override earlier, matching the base-first precedence of `Layers`.
 // ---------------------------------------------------------------------------
 
+/// Serialized concept-label closure, with the stack fingerprint it was built for.
+#[derive(serde::Serialize, serde::Deserialize)]
+struct ClosureCache {
+    key: String,
+    map: HashMap<String, String>,
+}
+
+/// Stack fingerprint for the closure disk cache: each present head dir paired with
+/// its manifest `snapshot_id` (content hash), in stack order. Any head add / remove
+/// / re-emit changes a snapshot_id -> the key changes -> a stale cache is never served.
+fn closure_cache_key(head_dirs: &[String]) -> String {
+    head_dirs
+        .iter()
+        .map(|d| {
+            let snap = std::fs::read(Path::new(d).join("manifest.json"))
+                .ok()
+                .and_then(|b| serde_json::from_slice::<Value>(&b).ok())
+                .and_then(|v| v.get("snapshot_id").and_then(|s| s.as_str()).map(str::to_string))
+                .unwrap_or_else(|| "nosnap".to_string());
+            format!("{d}={snap}")
+        })
+        .collect::<Vec<_>>()
+        .join(";")
+}
+
+fn read_closure_cache(path: &Path, key: &str) -> Option<HashMap<String, String>> {
+    let cached: ClosureCache = serde_json::from_slice(&std::fs::read(path).ok()?).ok()?;
+    (cached.key == key).then_some(cached.map)
+}
+
+fn write_closure_cache(path: &Path, key: &str, map: &HashMap<String, String>) {
+    if let Some(parent) = path.parent() {
+        let _ = std::fs::create_dir_all(parent);
+    }
+    let cache = ClosureCache { key: key.to_string(), map: map.clone() };
+    if let Ok(bytes) = serde_json::to_vec(&cache) {
+        // Write + rename so a concurrent reader never sees a half-written file.
+        let tmp = path.with_extension("json.tmp");
+        if std::fs::write(&tmp, bytes).is_ok() {
+            let _ = std::fs::rename(&tmp, path);
+        }
+    }
+}
+
 /// Fold each head's (base first) `vocab.label` into one `uuid -> label` map by
 /// joining `vocab` to `dict` on the concept term_id. Concept UUIDs resolve
 /// directly; later layers override earlier. A head whose `vocab` is empty (an
 /// overlay that carries no concepts) simply contributes nothing rather than
-/// failing the stack. The command name and signature are unchanged from the
-/// `closure.json` era so the TS wrapper and `loadEntryV2` need no edits.
+/// failing the stack. The TS wrapper passes only `headDirs`; `app` is injected.
 #[tauri::command]
-pub fn v2_closure(head_dirs: Vec<String>) -> Result<HashMap<String, String>, String> {
+pub fn v2_closure(app: tauri::AppHandle, head_dirs: Vec<String>) -> Result<HashMap<String, String>, String> {
+    use tauri::Manager;
     #[cfg(feature = "cmdperf")]
     let __t = std::time::Instant::now();
     let head_dirs = present_layer_dirs(head_dirs);
-    // Pooled + cached: hits the same reader pool + label cache `prewarm` warms, so
-    // after startup this is a cache hit rather than a fresh per-layer catalog read
-    // (which was ~2s cold across the full stack). Later dirs override earlier.
+
+    // Disk cache: `concept_labels` is a per-layer catalog read, ~2s cold across the
+    // full stack - paid on EVERY launch by warmClosure, and by the first entry open
+    // if it beats the warm. The in-process pool only helps within one run. Persist
+    // the uuid->label map keyed on the stack's snapshot_ids so a cold launch over an
+    // unchanged stack is a ~ms file read instead of a 2s sweep.
+    let cache_path = app.path().app_data_dir().ok().map(|d| d.join("closure-cache.json"));
+    let key = closure_cache_key(&head_dirs);
+    if let Some(ref cp) = cache_path {
+        if let Some(map) = read_closure_cache(cp, &key) {
+            crate::cmdperf!("[cmdperf] v2_closure CACHE HIT dirs={} labels={} {}ms", head_dirs.len(), map.len(), __t.elapsed().as_millis());
+            return Ok(map);
+        }
+    }
+
+    // Miss: compute over the stack, then persist for next launch.
     let dirs: Vec<&Path> = head_dirs.iter().map(|d| Path::new(d.as_str())).collect();
     let map = ros_madair_duck::concept_labels(&dirs).map_err(|e| e.to_string())?;
-    crate::cmdperf!("[cmdperf] v2_closure dirs={} labels={} {}ms", head_dirs.len(), map.len(), __t.elapsed().as_millis());
+    if let Some(ref cp) = cache_path {
+        write_closure_cache(cp, &key, &map);
+    }
+    crate::cmdperf!("[cmdperf] v2_closure MISS dirs={} labels={} {}ms", head_dirs.len(), map.len(), __t.elapsed().as_millis());
     Ok(map)
 }
 

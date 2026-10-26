@@ -1,6 +1,7 @@
 <script lang="ts">
   import { App } from 'konsta/svelte';
   import { onMount } from 'svelte';
+  import { perfMark } from './lib/perf';
   import { get } from 'svelte/store';
   import { currentEntry, currentExample, currentLayer, wasmReady, activeTab, darkMode, density, listStyle, bootstrapLayers, pushRecent, overlayView, preparingDictionary, mapState, licenseFlowActive } from './lib/store';
   import { t } from './lib/i18n';
@@ -37,6 +38,7 @@
   }
 
   onMount(() => {
+    perfMark('App onMount (first render)');
     // Only apply system preference if no explicit user choice is persisted
     if (typeof localStorage === 'undefined' || localStorage.getItem('ge:darkMode') === null) {
       const mq = matchMedia('(prefers-color-scheme: dark)');
