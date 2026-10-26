@@ -22,7 +22,7 @@ function enabled(): boolean {
 export function perfMark(label: string): void {
   if (!enabled()) return;
   const now = performance.now();
-  console.log(`[startup-perf] +${(now - T0).toFixed(0)}ms (Δ${(now - last).toFixed(0)}) ${label}`);
+  console.warn(`[startup-perf] +${(now - T0).toFixed(0)}ms (Δ${(now - last).toFixed(0)}) ${label}`);
   last = now;
 }
 
@@ -32,6 +32,6 @@ export async function perfStep<T>(label: string, fn: () => T | Promise<T>): Prom
   try {
     return await fn();
   } finally {
-    if (enabled()) console.log(`[startup-perf] step ${label} = ${(performance.now() - t).toFixed(0)}ms`);
+    if (enabled()) console.warn(`[startup-perf] step ${label} = ${(performance.now() - t).toFixed(0)}ms`);
   }
 }
