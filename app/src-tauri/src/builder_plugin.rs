@@ -302,6 +302,7 @@ fn copy_pagefind_indices(src: &Path, dest: &Path) {
 fn stream_tbx_v2_build(
     out_dir: &Path,
     graph: &StaticGraph,
+    concept_graph: &StaticGraph,
     collections: &[SkosCollection],
     records: Vec<tbx_parser::TbxRecord>,
     source_label: &str,
@@ -330,6 +331,14 @@ fn stream_tbx_v2_build(
         serde_json::to_vec(graph).map_err(|e| e.to_string())?,
     )
     .map_err(|e| e.to_string())?;
+    // Second model in the same head: LexicalConcept (headword grouping). emit_parquet
+    // emits tiles_lexical_concept next to tiles_lexical_entry.
+    let concept_gid = concept_graph.graphid.clone();
+    std::fs::write(
+        models.join(format!("{concept_gid}.json")),
+        serde_json::to_vec(concept_graph).map_err(|e| e.to_string())?,
+    )
+    .map_err(|e| e.to_string())?;
     for col in collections {
         std::fs::write(
             cols_dir.join(format!("{}.json", col.id)),
@@ -348,6 +357,13 @@ fn stream_tbx_v2_build(
     let mut desc_graph = graph.clone();
     let _ = desc_graph.set_descriptor_template("name", "<Headword>");
     let _ = desc_graph.set_descriptor_template("description", "<Gloss>");
+    // Concept descriptor: name -> the headword label. FTS headword lookup indexes the
+    // CONCEPTS (one per headword), not the per-POS entries.
+    let mut concept_desc_graph = concept_graph.clone();
+    let _ = concept_desc_graph.set_descriptor_template("name", "<Label>");
+    // headword(normalized concept id) -> (display headword, entry UUIDs, first gloss).
+    // Built from the entries as they stream, then emitted as tombstone concepts.
+    let mut concept_map: HashMap<String, (String, Vec<String>, String)> = HashMap::new();
 
     // FTS5 full-text sidecar (search.sqlite beside head.sqlite) - the on-device
     // text index that replaces pagefind on this path: seconds, not ~40 min, and
@@ -408,14 +424,22 @@ fn stream_tbx_v2_build(
                 first = false;
                 serde_json::to_writer(&mut w, r)
                     .map_err(|e| format!("serialize resource: {e}"))?;
-                // Feed the FTS index - headword + gloss from the descriptors.
+                // Group by headword for the tombstone concepts (fed to FTS after the
+                // loop) instead of FTS-indexing each per-POS entry. First headword/gloss
+                // seen for a concept wins; every entry UUID is recorded so the concept
+                // groups them (and tap-through hydrates them) - all within Téarma, so it
+                // works standalone.
                 if let Some(tiles) = &r.tiles {
                     let d = desc_graph.build_descriptors(tiles);
-                    fts.add(
-                        &r.resourceinstance.resourceinstanceid,
-                        d.name.as_deref().unwrap_or(""),
-                        d.description.as_deref().unwrap_or(""),
-                    )?;
+                    let headword = d.name.as_deref().unwrap_or("");
+                    if !headword.is_empty() {
+                        let crid = concept_resource_id(headword);
+                        let gloss = d.description.as_deref().unwrap_or("").to_string();
+                        let e = concept_map
+                            .entry(crid)
+                            .or_insert_with(|| (headword.to_string(), Vec::new(), gloss));
+                        e.1.push(r.resourceinstance.resourceinstanceid.clone());
+                    }
                 }
                 total += 1;
             }
@@ -429,6 +453,68 @@ fn stream_tbx_v2_build(
         drop(records);
         stamp(format!(
             "build_resources (batched, size {batch_size}): {build_ms} ms, {total} resources"
+        ));
+
+        // ── Tombstone LexicalConcepts: one per headword, grouping its entries ──
+        // Emitted as a second model (tiles_lexical_concept). The FTS headword index
+        // points at THESE (one card per headword, not N per-POS entries); tap-through
+        // hydrates concept_headword -> the entries. concept_headword references ONLY
+        // Téarma's own entry UUIDs, so search + view work when Téarma is the sole layer.
+        let t = std::time::Instant::now();
+        {
+            let mut ccsv = String::from("ResourceID,label,concept_headword\n");
+            for (crid, (headword, entry_uuids, _gloss)) in &concept_map {
+                let n = entry_uuids.len().max(1);
+                for i in 0..n {
+                    let label = if i == 0 { ccsv_escape(headword) } else { String::new() };
+                    let ch = entry_uuids.get(i).map(|u| u.as_str()).unwrap_or("");
+                    ccsv.push_str(&format!("{},{},{}\n", ccsv_escape(crid), label, ccsv_escape(ch)));
+                }
+            }
+            let concept_resources = build_resources_from_business_csv_with_context(
+                &ccsv,
+                concept_graph,
+                &[],
+                Some(&registry),
+                BusinessDataCsvOptions {
+                    strict_concepts: false,
+                    uuid_namespace: Some(uuid_ns.to_string()),
+                    ..Default::default()
+                },
+                Some(&ser_ctx),
+            )
+            .map_err(|e| format!("build concept resources failed: {e}"))?;
+
+            let cbd_path = bd.join(format!("{concept_gid}.json"));
+            let cfile = std::fs::File::create(&cbd_path)
+                .map_err(|e| format!("create concept business_data: {e}"))?;
+            let mut cw = std::io::BufWriter::new(cfile);
+            cw.write_all(br#"{"business_data":{"resources":["#).map_err(|e| e.to_string())?;
+            let mut cfirst = true;
+            for cr in &concept_resources {
+                if !cfirst {
+                    cw.write_all(b",").map_err(|e| e.to_string())?;
+                }
+                cfirst = false;
+                serde_json::to_writer(&mut cw, cr).map_err(|e| format!("serialize concept: {e}"))?;
+                // FTS: headword (name=<Label>) + the representative gloss for the concept.
+                if let Some(tiles) = &cr.tiles {
+                    let d = concept_desc_graph.build_descriptors(tiles);
+                    let label = d.name.as_deref().unwrap_or("");
+                    let gloss = concept_map
+                        .get(&concept_resource_id(label))
+                        .map(|a| a.2.as_str())
+                        .unwrap_or("");
+                    fts.add(&cr.resourceinstance.resourceinstanceid, label, gloss)?;
+                }
+            }
+            cw.write_all(br#"]}}"#).map_err(|e| e.to_string())?;
+            cw.flush().map_err(|e| e.to_string())?;
+        }
+        stamp(format!(
+            "concepts: {} ms, {} headwords",
+            t.elapsed().as_millis(),
+            concept_map.len()
         ));
 
         // Commit the FTS index (fast - seconds even at Téarma scale).
@@ -666,6 +752,16 @@ pub async fn build_layer<R: Runtime>(
                         return;
                     }
                 };
+                // The headword-grouping model, so Téarma emits its OWN tombstone
+                // concepts and is searchable/viewable standalone (no reliance on the
+                // corpus's concepts).
+                let concept_graph = match load_core_graph(&app, LEXICAL_CONCEPT_GRAPH_ID) {
+                    Ok(g) => g,
+                    Err(e) => {
+                        update_status_failed(&app, &id_clone, format!("load concept graph failed: {e}"));
+                        return;
+                    }
+                };
                 let collections = match load_core_collections(&app) {
                     Ok(c) => c,
                     Err(e) => {
@@ -687,6 +783,7 @@ pub async fn build_layer<R: Runtime>(
                     let n = stream_tbx_v2_build(
                         &out,
                         &graph,
+                        &concept_graph,
                         &collections,
                         records,
                         "TÉ",
@@ -1093,8 +1190,44 @@ pub async fn layer_has_pagefind<R: Runtime>(
 // ── Core bundle loading for TBX builds ──────────────────────────────────────
 
 const LEXICAL_ENTRY_GRAPH_ID: &str = "449c8695-253e-521b-8994-27701ce22305";
+const LEXICAL_CONCEPT_GRAPH_ID: &str = "c5d452c6-5ab6-53e6-a7e8-b2e9f2495c90";
 const TEARMA_UUID_NS: &str = "14b35a4a-7420-5d80-89a3-ad00565dc430";
 const CORE_PREFIX: &str = "core-goidelic";
+
+/// Concept-id normalization: NFC + lowercase + fold grave/acute to macron ONLY - NO
+/// whitespace->hyphen and NO punctuation strip. Deliberately LIGHTER than the entry
+/// slug's `tbx_parser::normalize_head`; it mirrors `scripts/lib/concept-emit.mjs`
+/// `normalizeHead` so Téarma's tombstone concept id UNIONS with the corpus
+/// (wiktionary/macbain) concept id for the same headword.
+fn concept_normalize_head(text: &str) -> String {
+    use unicode_normalization::UnicodeNormalization;
+    let s: String = text.nfc().collect::<String>().to_lowercase();
+    s.chars()
+        .map(|c| match c {
+            'à' | 'á' => 'ā',
+            'è' | 'é' => 'ē',
+            'ì' | 'í' => 'ī',
+            'ò' | 'ó' => 'ō',
+            'ù' | 'ú' => 'ū',
+            _ => c,
+        })
+        .collect()
+}
+
+/// The headword-level LexicalConcept ResourceID (`goi-<nhead>-concept`).
+fn concept_resource_id(headword: &str) -> String {
+    format!("goi-{}-concept", concept_normalize_head(headword))
+}
+
+/// Minimal CSV field escape for the concept business CSV (headword/id may contain
+/// commas, quotes, spaces).
+fn ccsv_escape(v: &str) -> String {
+    if v.contains([',', '"', '\n', '\r']) {
+        format!("\"{}\"", v.replace('"', "\"\""))
+    } else {
+        v.to_string()
+    }
+}
 
 /// Load a StaticGraph from the core bundle embedded in the frontend dist.
 ///
@@ -1251,4 +1384,20 @@ fn load_core_asset<R: Runtime>(app: &AppHandle<R>, path: &str) -> Result<Vec<u8>
     Err(format!(
         "core asset not found: {path} (tried asset resolver and filesystem fallbacks)"
     ))
+}
+
+#[cfg(test)]
+mod concept_id_tests {
+    use super::concept_resource_id;
+
+    #[test]
+    fn unions_with_corpus_concept_ids() {
+        // MUST equal scripts/lib/concept-emit.mjs conceptResourceId (verified against
+        // node): NFC + lowercase + macron, NO whitespace->hyphen, NO punctuation strip.
+        assert_eq!(concept_resource_id("fear"), "goi-fear-concept");
+        assert_eq!(concept_resource_id("féar"), "goi-fēar-concept");
+        assert_eq!(concept_resource_id("Mór"), "goi-mōr-concept");
+        assert_eq!(concept_resource_id("Bun os Cionn"), "goi-bun os cionn-concept");
+        assert_eq!(concept_resource_id("Cé'n"), "goi-cē'n-concept");
+    }
 }

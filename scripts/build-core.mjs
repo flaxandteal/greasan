@@ -72,6 +72,17 @@ const models = [
       description: '<Gloss>',
     },
   },
+  {
+    // Headword-level grouping (goi-<head>-concept). Needed in the core bundle so
+    // the on-device Téarma TBX build can load this graph and emit its own tombstone
+    // concepts - Téarma must be searchable/viewable standalone, not relying on the
+    // corpus's concepts. Descriptor name = <Label> (the headword).
+    name: 'lexical_concept',
+    dir: 'models/lexical_concept',
+    descriptors: {
+      name: '<Label>',
+    },
+  },
 ];
 
 // --- Build all models (graph + collections only, no business data) ---
