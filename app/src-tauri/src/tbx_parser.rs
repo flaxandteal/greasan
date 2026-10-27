@@ -29,7 +29,8 @@ fn map_pos(raw: &str) -> &'static str {
         "br" => "verb",
         "a1" | "a2" | "a3" | "gu mar a" => "adjective",
         "frása" => "phrase",
-        _ => "noun",
+        // Unknown code -> empty, not a fabricated "noun" (Wiktionary parity).
+        _ => "",
     }
 }
 
@@ -464,8 +465,12 @@ fn parse_single_entry(xml: &str) -> Result<Vec<TbxRecord>, String> {
                 continue;
             }
 
+            // Behave like the Wiktionary pipeline (`entry.get("part_of_speech", "")`):
+            // use the real POS, else LEAVE IT EMPTY - never fabricate "noun". A
+            // fabricated POS both mislabels the entry in search AND forces a
+            // `goi-<head>-noun` slug that would wrongly compose with a real noun.
             let pos = if tg.raw_pos.is_empty() {
-                "noun"
+                ""
             } else {
                 map_pos(&tg.raw_pos)
             };
@@ -572,15 +577,37 @@ fn merge_duplicates(records: Vec<TbxRecord>) -> Vec<TbxRecord> {
 // Slugify (from ontolex.py)
 // ---------------------------------------------------------------------------
 
-fn slugify(word: &str, pos: &str, lang_code: &str) -> String {
-    let mut slug = word.to_lowercase();
-    slug = slug.split_whitespace().collect::<Vec<_>>().join("-");
-    slug.retain(|c| c.is_alphanumeric() || c == '-' || c == '_' || "áéíóúàèìòù".contains(c));
-    if lang_code.is_empty() {
-        format!("{slug}-{pos}")
-    } else {
-        format!("{lang_code}-{slug}-{pos}")
-    }
+/// Canonical identity form of a headword or POS segment - mirrors the Python
+/// `slug_identity.normalize_head` (docs/goidelic-slug-identity.md §3) EXACTLY so
+/// on-device Téarma resource IDs match the goi- corpus: casefold+strip, NFC, fold
+/// grave/acute to a MACRON (length preserved, `á`->`ā` - NOT stripped), whitespace
+/// to hyphen, drop any non-word char (macron vowels / digits / `_` survive).
+fn normalize_head(text: &str) -> String {
+    use unicode_normalization::UnicodeNormalization;
+    let s: String = text.trim().to_lowercase().nfc().collect();
+    let s: String = s
+        .chars()
+        .map(|c| match c {
+            'à' | 'á' => 'ā',
+            'è' | 'é' => 'ē',
+            'ì' | 'í' => 'ī',
+            'ò' | 'ó' => 'ō',
+            'ù' | 'ú' => 'ū',
+            _ => c,
+        })
+        .collect();
+    let s = s.split_whitespace().collect::<Vec<_>>().join("-");
+    s.chars().filter(|c| c.is_alphanumeric() || *c == '-' || *c == '_').collect()
+}
+
+/// The dialect-neutral `goi-HEAD-POS` resource slug (docs/goidelic-slug-identity.md),
+/// matching the Python pipeline so on-device Téarma resources share IDs - and thus
+/// COMPOSE - with the bundled wiktionary/macbain/bunamo heads. (Was `ga-<head>-<pos>`
+/// with raw accents, a different identity scheme, so Téarma never merged with the
+/// rest.) `lang_code` is accepted for call-site compatibility but ignored - dialect
+/// lives on the tiles, not the slug.
+fn slugify(word: &str, pos: &str, _lang_code: &str) -> String {
+    format!("goi-{}-{}", normalize_head(word), normalize_head(pos))
 }
 
 // ---------------------------------------------------------------------------
@@ -741,5 +768,21 @@ fn csv_escape(s: &str) -> String {
         format!("\"{}\"", s.replace('"', "\"\""))
     } else {
         s.to_string()
+    }
+}
+
+#[cfg(test)]
+mod slug_identity_tests {
+    use super::{normalize_head, slugify};
+
+    #[test]
+    fn matches_goi_scheme() {
+        // goi- prefix + macron normalization, == Python slug_identity.goi_slug.
+        assert_eq!(slugify("fear", "noun", "ga"), "goi-fear-noun");
+        assert_eq!(slugify("féar", "noun", "ga"), "goi-fēar-noun"); // fada -> macron, stays distinct
+        assert_eq!(slugify("mór", "adjective", "ga"), "goi-mōr-adjective");
+        assert_eq!(slugify("Baile", "proper noun", "ga"), "goi-baile-proper-noun"); // ws -> hyphen
+        assert_eq!(slugify("fear", "", "ga"), "goi-fear-"); // classless: empty POS, no fabrication
+        assert_eq!(normalize_head("Cé'n"), "cēn"); // apostrophe dropped, é -> ē (macron)
     }
 }
