@@ -1123,7 +1123,7 @@ pub fn responder_buffer(
         .into_iter()
         .map(|id| {
             let (name, point) = match summaries.get(&id) {
-                Some((descriptor, geo, _summary)) => {
+                Some((descriptor, geo, _summary, _render_fields)) => {
                     let pt = geo.as_deref().and_then(parse_point);
                     (descriptor.clone(), pt)
                 }
@@ -1365,6 +1365,7 @@ pub fn maybe_run_emit_measurement(app: tauri::AppHandle) {
             &ros_madair_emit::default_registry(),
             &cfg_by_graph,
             None, // no tier filter (alpha.31 default-deny tier) - emit the full head
+            None, // no owner-declared provenance manifest (alpha.32)
             &mut on_progress,
         ) {
             Ok(s) => serde_json::to_string(&s)

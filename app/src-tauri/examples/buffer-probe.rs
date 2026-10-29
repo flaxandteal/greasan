@@ -41,7 +41,7 @@ fn main() {
     let seeds = duck.render_summaries(&seed_ids).expect("seed summaries");
     let (seed, (lng, lat)) = seed_ids
         .iter()
-        .find_map(|id| seeds.get(id).and_then(|(_, g, _)| g.as_deref()).and_then(point_of).map(|p| (id.clone(), p)))
+        .find_map(|id| seeds.get(id).and_then(|(_, g, _, _)| g.as_deref()).and_then(point_of).map(|p| (id.clone(), p)))
         .expect("a seed resource with a geo_descriptor point");
     eprintln!("[buffer] seed {seed} @ ({lng:.5},{lat:.5}), radius {radius} m");
 
@@ -66,8 +66,8 @@ fn main() {
 
     // Render columns off the grid edge for those ids.
     let sm = duck.render_summaries(&ids).expect("render_summaries");
-    let with_pt = ids.iter().filter(|id| sm.get(*id).and_then(|(_, g, _)| g.as_deref()).and_then(point_of).is_some()).count();
-    let named = ids.iter().filter(|id| sm.get(*id).and_then(|(d, _, _)| d.as_deref()).is_some()).count();
+    let with_pt = ids.iter().filter(|id| sm.get(*id).and_then(|(_, g, _, _)| g.as_deref()).and_then(point_of).is_some()).count();
+    let named = ids.iter().filter(|id| sm.get(*id).and_then(|(d, _, _, _)| d.as_deref()).is_some()).count();
     eprintln!("[buffer] with point {with_pt}/{}, with name {named}/{}", ids.len(), ids.len());
 
     assert!(count > 0, "expected places in the buffer");
