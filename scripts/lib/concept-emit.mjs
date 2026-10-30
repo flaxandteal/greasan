@@ -19,6 +19,10 @@ import { readFileSync, writeFileSync, mkdirSync } from 'fs';
 import { resolve } from 'path';
 import { makeRdmCache } from './rdm-cache.mjs';
 import { uuidv5, ALIZARIN_NS, csvEscape } from './layers-data.mjs';
+// The concept identity normaliser lives in one place now (asserted against
+// tests/fixtures/slug-golden.json); re-export so existing importers still resolve
+// `normalizeHead` / `conceptResourceId` from here.
+export { normalizeHead, conceptResourceId } from './slug-identity.mjs';
 import {
   buildGraphFromModelCsvs, buildResourcesFromBusinessCsv,
   createResourceRegistry, parseStaticGraph,
@@ -31,22 +35,6 @@ const LEX_GRAPH_ID = '449c8695-253e-521b-8994-27701ce22305';
  * every lexical layer mints, so concept_headword points at the shared entries). */
 export function goiUuid(rid) {
   return uuidv5(rid, uuidv5(`resource/${LEX_GRAPH_ID}`, ALIZARIN_NS));
-}
-
-/** Headword identity: NFC + casefold + grave/acute → macron (length-preserving).
- * MUST match the .mjs builders' local `normalizeHead` (build-place-layer /
- * build-macbain-layer: NFC + toLowerCase + macron, NO whitespace→hyphen and NO
- * punctuation strip) so the concept id a headword yields here equals the one
- * concept-v2 + MacBain each compute, and the tiles union. */
-const MACRON = { 'à':'ā','á':'ā','è':'ē','é':'ē','ì':'ī','í':'ī','ò':'ō','ó':'ō','ù':'ū','ú':'ū' };
-export function normalizeHead(text) {
-  const s = (text || '').normalize('NFC').toLowerCase();
-  return Array.from(s, (ch) => MACRON[ch] || ch).join('');
-}
-
-/** The concept ResourceID for a headword (POS-independent). */
-export function conceptResourceId(headword) {
-  return `goi-${normalizeHead(headword)}-concept`;
 }
 
 /** Build the lexical_concept graph + its deterministic uuid helpers. */

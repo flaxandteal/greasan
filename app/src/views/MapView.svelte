@@ -601,17 +601,8 @@
   let placeDetail = $state<PlaceDetail | null>(null);
   let placeLoading = $state(false);
 
-  // feature_type is a reference concept → resolve via the place head's closure
-  // map (cheap, cached). Best-effort: falls back to the raw value / nothing.
-  let closurePromise: Promise<Record<string, string>> | undefined;
-  function closure(): Promise<Record<string, string>> {
-    if (!closurePromise) {
-      closurePromise = invoke<Record<string, string>>('v2_closure', { headDirs: [layer.headDir] })
-        .catch(() => ({} as Record<string, string>));
-    }
-    return closurePromise;
-  }
-
+  // feature_type is a reference concept, resolved to its label by hydrate_layers
+  // before we see the tree - just read it (no closure round-trip).
   function localStr(v: unknown): string {
     if (v == null) return '';
     if (typeof v === 'string') return v;
@@ -636,12 +627,11 @@
     placeDetail = null;
     const forId = id;
     try {
-      const [treeRaw, closureMap] = await Promise.all([hydrateLayers([layer.headDir], id), closure()]);
+      const treeRaw = await hydrateLayers([layer.headDir], id);
       if (forId !== selectedId) return; // a newer selection superseded this one
       const tree = treeRaw as Record<string, any> | null;
       if (!tree || typeof tree !== 'object') { placeDetail = null; return; }
-      const ftRaw = tree.feature_type;
-      const featureType = typeof ftRaw === 'string' ? (closureMap[ftRaw] ?? '') : localStr(ftRaw);
+      const featureType = localStr(tree.feature_type);
       const elemsRaw = asArray(tree.name_elements)
         .map((ne) => ({
           surface: localStr(ne?.element_surface),

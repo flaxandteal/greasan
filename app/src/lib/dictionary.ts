@@ -4,7 +4,6 @@ import { getPagefind, resetPagefind, type PagefindInstance } from './pagefind';
 import { FAMILIES, DEFAULT_FAMILY, type FamilyConfig, type FamilyId } from './family';
 import { diagStart, diagEnd } from './diagnostics';
 import { loadEntryV2, enrichEntryV2 } from './dictionary-v2';
-export { warmClosure } from './dictionary-v2';
 // Live binding (store <-> dictionary is a lazy cycle: `currentEntry` is only read
 // at runtime inside loadEntryFlagged, never at module init, so it resolves).
 import { currentEntry } from './store';

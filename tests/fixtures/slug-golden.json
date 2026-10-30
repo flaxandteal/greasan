@@ -1,0 +1,36 @@
+{
+  "_comment": "Cross-language golden vectors for the goi- slug identity. A matching slug == a matching uuid5 resource id == cross-layer compose, so the FOUR implementations must agree byte-for-byte: Python src/goidelic/slug_identity.py, Rust app/src-tauri/src/tbx_parser.rs (entry), Rust app/src-tauri/src/builder_plugin.rs (concept), and JS scripts/lib/slug-identity.mjs (concept). A divergence silently breaks merge (see the Téarma-POS incident), so each implementation's unit test asserts against THIS file - edit the scheme and the vectors fail in every language at once. Two families: 'entry' (full normalisation: casefold+NFC+macron+ws->hyphen+strip-punct) is Python+Rust-tbx; 'concept' (lighter: NFC+lowercase+macron only, keeps spaces/apostrophes) is Rust-builder+JS. The apostrophe is the sharpest divergence probe: the entry slug drops it, the concept id keeps it.",
+  "entry": {
+    "normalize_head": [
+      { "in": "Fear", "out": "fear" },
+      { "in": "féar", "out": "fēar" },
+      { "in": "mòr", "out": "mōr" },
+      { "in": "Spás", "out": "spās" },
+      { "in": "proper noun", "out": "proper-noun" },
+      { "in": "cé'n", "out": "cēn" }
+    ],
+    "goi_slug": [
+      { "word": "fear", "pos": "noun", "out": "goi-fear-noun" },
+      { "word": "féar", "pos": "noun", "out": "goi-fēar-noun" },
+      { "word": "mór", "pos": "adjective", "out": "goi-mōr-adjective" },
+      { "word": "mòr", "pos": "adjective", "out": "goi-mōr-adjective" },
+      { "word": "baile", "pos": "proper noun", "out": "goi-baile-proper-noun" },
+      { "word": "cé'n", "pos": "particle", "out": "goi-cēn-particle" }
+    ]
+  },
+  "concept": {
+    "normalize_head": [
+      { "in": "Fear", "out": "fear" },
+      { "in": "féar", "out": "fēar" },
+      { "in": "Mòr", "out": "mōr" },
+      { "in": "cé'n", "out": "cē'n" },
+      { "in": "Bun os cionn", "out": "bun os cionn" }
+    ],
+    "concept_resource_id": [
+      { "headword": "fear", "out": "goi-fear-concept" },
+      { "headword": "cé'n", "out": "goi-cē'n-concept" },
+      { "headword": "Bun os cionn", "out": "goi-bun os cionn-concept" },
+      { "headword": "Mòr", "out": "goi-mōr-concept" }
+    ]
+  }
+}

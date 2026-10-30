@@ -775,14 +775,29 @@ fn csv_escape(s: &str) -> String {
 mod slug_identity_tests {
     use super::{normalize_head, slugify};
 
+    // The shared cross-language golden vectors (Python + Rust must agree on the
+    // ENTRY family). Edit the scheme -> these fail here AND in the Python test.
+    const GOLDEN: &str = include_str!("../../../tests/fixtures/slug-golden.json");
+
     #[test]
-    fn matches_goi_scheme() {
-        // goi- prefix + macron normalization, == Python slug_identity.goi_slug.
-        assert_eq!(slugify("fear", "noun", "ga"), "goi-fear-noun");
-        assert_eq!(slugify("féar", "noun", "ga"), "goi-fēar-noun"); // fada -> macron, stays distinct
-        assert_eq!(slugify("mór", "adjective", "ga"), "goi-mōr-adjective");
-        assert_eq!(slugify("Baile", "proper noun", "ga"), "goi-baile-proper-noun"); // ws -> hyphen
-        assert_eq!(slugify("fear", "", "ga"), "goi-fear-"); // classless: empty POS, no fabrication
-        assert_eq!(normalize_head("Cé'n"), "cēn"); // apostrophe dropped, é -> ē (macron)
+    fn entry_slug_matches_golden() {
+        let g: serde_json::Value = serde_json::from_str(GOLDEN).expect("golden json");
+        let entry = &g["entry"];
+        for v in entry["normalize_head"].as_array().unwrap() {
+            let (inp, out) = (v["in"].as_str().unwrap(), v["out"].as_str().unwrap());
+            assert_eq!(normalize_head(inp), out, "normalize_head({inp:?})");
+        }
+        for v in entry["goi_slug"].as_array().unwrap() {
+            let (word, pos, out) =
+                (v["word"].as_str().unwrap(), v["pos"].as_str().unwrap(), v["out"].as_str().unwrap());
+            assert_eq!(slugify(word, pos, "ga"), out, "goi_slug({word:?}, {pos:?})");
+        }
+    }
+
+    #[test]
+    fn classless_pos_is_not_fabricated() {
+        // Not in the golden (it is a Rust-only guarantee): an unmapped/empty POS
+        // stays empty rather than defaulting to "noun" - matching Wiktionary.
+        assert_eq!(slugify("fear", "", "ga"), "goi-fear-");
     }
 }

@@ -90,7 +90,6 @@ pub fn run() {
         v2::v2_hydrate_layers,
         v2::v2_hydrate_layers_batch,
         v2::v2_prewarm,
-        v2::v2_closure,
         v2::v2_descriptors,
         fts::v2_search_fts,
         v2::v2_cited_by,

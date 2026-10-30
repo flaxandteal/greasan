@@ -27,6 +27,7 @@ import {
   setNapiModule,
 } from '../app/node_modules/alizarin/dist/alizarin.js';
 import * as pagefind from './lib/pagefind-fork.mjs';
+import { normalizeHead } from './lib/slug-identity.mjs';
 import { readFileSync, writeFileSync, mkdirSync, existsSync } from 'fs';
 import { execSync, execFileSync } from 'child_process';
 import { fileURLToPath } from 'url';
@@ -72,12 +73,8 @@ function stripDiacritics(text) {
 
 // Identity normalization for goi matching: fold acute/grave to a macron (length
 // preserved), matching docs/goidelic-slug-identity.md - so element matches align
-// with the goi slug identity (dún = dūn).
-const _MACRON = { 'à': 'ā', 'á': 'ā', 'è': 'ē', 'é': 'ē', 'ì': 'ī', 'í': 'ī', 'ò': 'ō', 'ó': 'ō', 'ù': 'ū', 'ú': 'ū' };
-function normalizeHead(text) {
-  const s = text.normalize('NFC').toLowerCase();
-  return Array.from(s, (ch) => _MACRON[ch] || ch).join('');
-}
+// with the goi slug identity (dún = dūn). `normalizeHead` comes from the shared
+// slug-identity module (one copy, golden-tested).
 
 function csvEscape(value) {
   if (value == null || value === '') return '';

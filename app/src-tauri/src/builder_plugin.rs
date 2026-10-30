@@ -288,6 +288,23 @@ fn copy_pagefind_indices(src: &Path, dest: &Path) {
     }
 }
 
+/// Pick a DuckDB `memory_limit` (MB) for the on-device Parquet emit. DuckDB's
+/// default is 512MB, which at Téarma scale forces the final `ORDER BY` to spill
+/// to a `stage.duckdb` on phone flash and thrash (observed >55 min on a 16GB
+/// Pixel) while most of the device's RAM sits idle. Use ~40% of physical RAM,
+/// floored at 1GB and capped at 8GB - DuckDB only needs headroom for the
+/// merge-sort, not all of RAM, and the WebView + OS need the rest. Returns `None`
+/// when RAM can't be read, leaving DuckDB's own default in place.
+fn emit_memory_limit_mb() -> Option<u64> {
+    let meminfo = std::fs::read_to_string("/proc/meminfo").ok()?;
+    let kb: u64 = meminfo
+        .lines()
+        .find_map(|l| l.strip_prefix("MemTotal:"))
+        .and_then(|rest| rest.trim().split_whitespace().next())
+        .and_then(|n| n.parse().ok())?;
+    Some(((kb / 1024) * 2 / 5).clamp(1024, 8192))
+}
+
 /// Streaming tbx-v2 build: the memory-bounded counterpart of
 /// `build_resources_from_business_csv` (whole corpus → `Vec` → emit), which
 /// OOMs at Téarma scale (~189k resources ≈ 3GB resident before emit ever runs).
@@ -534,6 +551,15 @@ fn stream_tbx_v2_build(
         // its bm25 index. emit_parquet has no fine-grained progress callback, so the
         // bar advances coarsely across this phase rather than per-tick.
         {
+            // Raise the emit memory limit off DuckDB's 512MB default so the final
+            // sort stays in RAM instead of thrashing to flash. Honour an explicit
+            // override if the environment already set one (e.g. an adb-pushed value).
+            if std::env::var_os("ROS_MADAIR_EMIT_MEMORY_LIMIT").is_none() {
+                if let Some(mb) = emit_memory_limit_mb() {
+                    std::env::set_var("ROS_MADAIR_EMIT_MEMORY_LIMIT", format!("{mb}MB"));
+                    stamp(format!("emit memory_limit = {mb}MB (was DuckDB default 512MB)"));
+                }
+            }
             let cfg_by_graph: std::collections::HashMap<String, ros_madair_emit::ClusterConfig> =
                 std::collections::HashMap::new();
             // emit_parquet streams and never learns the total, but we already have
@@ -1389,16 +1415,24 @@ fn load_core_asset<R: Runtime>(app: &AppHandle<R>, path: &str) -> Result<Vec<u8>
 
 #[cfg(test)]
 mod concept_id_tests {
-    use super::concept_resource_id;
+    use super::{concept_normalize_head, concept_resource_id};
+
+    // The shared cross-language golden vectors (Rust + JS must agree on the CONCEPT
+    // family, or on-device Téarma concepts stop UNIONing with the corpus). Edit the
+    // scheme -> these fail here AND in scripts/lib/slug-identity.test.ts.
+    const GOLDEN: &str = include_str!("../../../tests/fixtures/slug-golden.json");
 
     #[test]
-    fn unions_with_corpus_concept_ids() {
-        // MUST equal scripts/lib/concept-emit.mjs conceptResourceId (verified against
-        // node): NFC + lowercase + macron, NO whitespace->hyphen, NO punctuation strip.
-        assert_eq!(concept_resource_id("fear"), "goi-fear-concept");
-        assert_eq!(concept_resource_id("féar"), "goi-fēar-concept");
-        assert_eq!(concept_resource_id("Mór"), "goi-mōr-concept");
-        assert_eq!(concept_resource_id("Bun os Cionn"), "goi-bun os cionn-concept");
-        assert_eq!(concept_resource_id("Cé'n"), "goi-cē'n-concept");
+    fn concept_id_matches_golden() {
+        let g: serde_json::Value = serde_json::from_str(GOLDEN).expect("golden json");
+        let concept = &g["concept"];
+        for v in concept["normalize_head"].as_array().unwrap() {
+            let (inp, out) = (v["in"].as_str().unwrap(), v["out"].as_str().unwrap());
+            assert_eq!(concept_normalize_head(inp), out, "concept_normalize_head({inp:?})");
+        }
+        for v in concept["concept_resource_id"].as_array().unwrap() {
+            let (hw, out) = (v["headword"].as_str().unwrap(), v["out"].as_str().unwrap());
+            assert_eq!(concept_resource_id(hw), out, "concept_resource_id({hw:?})");
+        }
     }
 }

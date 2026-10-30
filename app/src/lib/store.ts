@@ -2,7 +2,7 @@ import { writable, derived, readable, get, type Writable } from 'svelte/store';
 import { listen } from '@tauri-apps/api/event';
 import { ready } from './wasm';
 import { FAMILIES, DEFAULT_FAMILY, layerSwatch, type FamilyId } from './family';
-import { switchFamily, addDynamicLayer, addV2Layer, removeV2Layer, getDynamicLayers, registerV2Layers, initOfflineLayers, setHiddenLayers, search, loadEntryFlagged, currentV2HeadDirs, warmClosure, type DynamicLayerInfo, type ExampleDetail } from './dictionary';
+import { switchFamily, addDynamicLayer, addV2Layer, removeV2Layer, getDynamicLayers, registerV2Layers, initOfflineLayers, setHiddenLayers, search, loadEntryFlagged, currentV2HeadDirs, type DynamicLayerInfo, type ExampleDetail } from './dictionary';
 import { buildLayer, waitForBuild, listLayers, listV2Layers, assetUrl, removeLayerFiles, type BuildLayerStatus } from './tauri-builder';
 import { verifyLayer, prewarmLayers, type LayerVerification } from './v2';
 import { perfMark, perfStep } from './perf';
@@ -513,12 +513,9 @@ export async function bootstrapLayers(): Promise<void> {
   // the lazy opens below never block one another.
   const warmHead = currentV2HeadDirs()[0];
   if (warmHead) void perfStep('duckdb warm-up (bg)', () => prewarmLayers([warmHead]));
-  // Warm the concept-label closure cache too. `v2_closure` opens a fresh cold
-  // DuckReader per layer + reads each catalog (~2s across the full stack), and the
-  // entry loader awaits it alongside the hydrate - so without this the FIRST entry
-  // open blocks ~2s on it (cmdperf: v2_closure 2098ms). Cached after, keyed on the
-  // same currentV2HeadDirs() the loader uses. Fire-and-forget; getClosure de-dupes.
-  void perfStep('warmClosure (bg)', () => warmClosure(currentV2HeadDirs()));
+  // (The concept-label closure warm-up is gone: hydrate_layers resolves
+  // reference/concept labels inline now, so there is no separate closure read to
+  // prime - one fewer ~2s cold DuckReader pass off the startup path.)
   void refreshLayerTrust();
   // Populate the catalogue so the tray shows layer-v2 names/swatches instead of the
   // family.ts fallback - but DON'T block bootstrap on it: it's cosmetic (the tray

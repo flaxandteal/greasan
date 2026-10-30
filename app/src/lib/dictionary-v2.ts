@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 /**
  * v2 entry loader - produces the SAME `EntryDetail` the UI consumes, but from
- * the v2 cross-layer hydrate (`v2_hydrate_layers`) + closure label resolution,
- * instead of the v1 SparqlStore → populate → alizarin-proxy path.
+ * the v2 cross-layer hydrate (`v2_hydrate_layers`), instead of the v1 SparqlStore
+ * → populate → alizarin-proxy path.
  *
  * The v2 hydrate returns a schema-aware JSON tree keyed by nodegroup ALIAS. Two
  * shape facts drive the flattener (both confirmed against the real merged
@@ -11,15 +11,15 @@
  *  1. Every text value is a *localized string* object, not a bare string:
  *       { "en": { "value": "fear", "direction": "ltr" } }
  *     - so `localStr()` unwraps `.<lang>.value` (preferring `en`).
- *  2. Only part_of_speech, dialect and forms[].gram_features are RAW concept
- *     UUIDs needing closure resolution. source_label / etymology_source are
- *     PLAIN localized strings ("WK" / "MB"), NOT uuids - matching v1, which read
- *     them with `String(...)` rather than `getDisplay()`.
+ *  2. Concept/reference values (part_of_speech, dialect, gram_features, gender,
+ *     sense_dialect) arrive ALREADY RESOLVED to their label string ("noun",
+ *     "Irish") - hydrate_layers inlines them via the catalog value_ids bridge, so
+ *     no closure pass is needed; `refStr()` just reads them. source_label /
+ *     etymology_source are plain localized strings ("WK" / "MB").
  *
  * This is the entry-detail path. Requires src-tauri built with `--features v2`
  * (the `v2_*` invokes reject otherwise).
  */
-import { invoke } from '@tauri-apps/api/core';
 import { hydrateLayers, citedBy, descriptors } from './v2';
 import type { EntryDetail } from './dictionary';
 
@@ -29,39 +29,13 @@ import type { EntryDetail } from './dictionary';
  * graph (graph_<gid>.json) wherever its tiles are - no concept-primary head needed. */
 const LEXICAL_CONCEPT_GRAPH_ID = 'c5d452c6-5ab6-53e6-a7e8-b2e9f2495c90';
 
-/** Cache the closure map per headDirs stack (keyed by the ordered join). */
-const closureCache = new Map<string, Promise<Record<string, string>>>();
-
-function getClosure(headDirs: string[]): Promise<Record<string, string>> {
-  const key = headDirs.join(' ');
-  let p = closureCache.get(key);
-  if (!p) {
-    p = invoke<Record<string, string>>('v2_closure', { headDirs }).catch((err) => {
-      console.warn('[dictionary-v2] closure load failed:', err);
-      return {} as Record<string, string>;
-    });
-    closureCache.set(key, p);
-  }
-  return p;
-}
-
-/** Reset the module-level closure cache (e.g. on family switch). */
-export function resetV2Closure(): void {
-  closureCache.clear();
-}
-
-/**
- * Warm the closure cache for a head-dir stack in the background, so the FIRST
- * entry open does not pay for it on the critical path. `v2_closure` opens a fresh
- * cold DuckReader per layer dir and reads each concept catalog (~260ms/dir cold,
- * ~2s across the full stack) - and `loadEntryV2` awaits it in a `Promise.all`
- * alongside the hydrate, so until it is cached the visible entry is blocked on it.
- * Fire-and-forget from bootstrap (idempotent; getClosure de-dupes by key). This is
- * the closure-side sibling of the duck reader-pool prewarm.
- */
-export function warmClosure(headDirs: string[]): void {
-  void getClosure(headDirs);
-}
+// Concept/reference label resolution used to happen here: a `v2_closure`
+// round-trip built a UUID→label map and `makeLabel` applied it. That is now dead
+// weight - `ros_madair_duck::hydrate_layers` resolves every reference/concept node
+// to its label (via the catalog `value_ids` bridge, FORMAT_VERSION 5) BEFORE the
+// tree reaches us, so part_of_speech/dialect/gram_features/gender/sense_dialect
+// already arrive as label strings ("noun", "Irish"), not UUIDs. We just read them
+// (`refStr`). Verified against the real wiktionary + macbain heads.
 
 /** Unwrap a localized-string value `{<lang>:{value}}` (or a bare string) to text. */
 function localStr(v: unknown): string {
@@ -96,20 +70,20 @@ export function normHead(s: string): string {
   return Array.from(s.normalize('NFC').toLowerCase(), (ch) => _MACRON[ch] ?? ch).join('');
 }
 
-/** Resolve a raw concept/reference value to its label via the closure map. */
-function makeLabel(map: Record<string, string>) {
-  return (v: unknown): string => {
-    if (v == null) return '';
-    // Reference fields hydrate as a raw uuid string.
-    if (typeof v === 'string') return map[v] ?? v;
-    // Defensive: card-1 reference could arrive as an object wrapping a uuid.
-    if (typeof v === 'object') {
-      const obj = v as Record<string, any>;
-      const id = obj.resourceId ?? obj.id ?? obj.value ?? obj.concept_id;
-      if (typeof id === 'string') return map[id] ?? id;
-    }
-    return '';
-  };
+/** Read an already-resolved concept/reference label off the hydrated tree.
+ *  hydrate_layers resolves references to label strings before we see them, so
+ *  this just unwraps a bare/localized string. The object fallback is defensive:
+ *  if a reference ever arrives unresolved we surface whatever id it carries,
+ *  matching the old `?? v` behaviour (rather than blanking the field). */
+function refStr(v: unknown): string {
+  const s = localStr(v);
+  if (s) return s;
+  if (v && typeof v === 'object') {
+    const obj = v as Record<string, any>;
+    const id = obj.resourceId ?? obj.id ?? obj.value ?? obj.concept_id;
+    if (typeof id === 'string') return id;
+  }
+  return '';
 }
 
 /** Normalise a nodegroup value that may be card-1 (object) or card-n (array). */
@@ -171,21 +145,21 @@ function mergeCognates(target: EntryDetail['cognates'], incoming: EntryDetail['c
 /**
  * Pull the sense rows out of a hydrated tree, stamping each with the DIALECT of
  * the entry it came from. Dialect is an entry-level property (all senses in one
- * resource share it), so it is resolved once at the call site (`label(tree.dialect)`)
- * and passed in. This is what lets a lexeme card show senses from multiple dialects
- * each tagged with its own - the main entry's, plus each cognate citer's.
+ * resource share it). This is what lets a lexeme card show senses from multiple
+ * dialects each tagged with its own - the main entry's, plus each cognate citer's.
  */
-function extractSenses(tree: Record<string, any>, label: (v: unknown) => string): EntryDetail['senses'] {
+function extractSenses(tree: Record<string, any>): EntryDetail['senses'] {
   const out: EntryDetail['senses'] = [];
   for (const s of asArray(tree.senses)) {
     const gloss = localStr(s?.gloss);
     const example = localStr(s?.example);
     const sourceLabel = localStr(s?.source_label);
     // Per-tile dialect: the `sense_dialect` concept node (goi dialect-on-tiles),
-    // resolved via the closure map. On a merged goi resource each sense carries the
-    // dialect of the entry it came from - so one card shows Irish + Scottish senses.
-    // Strip the "(General)" qualifier so Téarma's "Irish (General)" folds onto "Irish".
-    const dialect = label(s?.sense_dialect).replace(/\s*\(General\)$/, '');
+    // already resolved to a label by hydrate_layers. On a merged goi resource each
+    // sense carries the dialect of the entry it came from - so one card shows Irish
+    // + Scottish senses. Strip the "(General)" qualifier so Téarma's "Irish
+    // (General)" folds onto "Irish".
+    const dialect = refStr(s?.sense_dialect).replace(/\s*\(General\)$/, '');
     if (gloss) {
       out.push({
         gloss,
@@ -228,15 +202,13 @@ function mergeSenses(target: EntryDetail['senses'], incoming: EntryDetail['sense
  */
 export async function loadEntryV2(uri: string, headDirs: string[]): Promise<EntryDetail | null> {
   try {
-    const [treeRaw, map] = await Promise.all([hydrateLayers(headDirs, uri), getClosure(headDirs)]);
+    const treeRaw = await hydrateLayers(headDirs, uri);
     const tree = treeRaw as Record<string, any> | null;
     if (!tree || typeof tree !== 'object' || !tree.resourceinstanceid) return null;
 
-    const label = makeLabel(map);
-
     const headword = localStr(tree.headword);
-    const pos = label(tree.part_of_speech);
-    const dialect = label(tree.dialect);
+    const pos = refStr(tree.part_of_speech);
+    const dialect = refStr(tree.dialect);
     // Grammatical class (BuNaMo): noun declension / verb conjugation / adjective
     // declension - a plain localized string on the composed tree ('1'..'5', 'irr', '').
     // grammar_class + its confidence live NESTED under the `grammar_class_group`
@@ -260,15 +232,15 @@ export async function loadEntryV2(uri: string, headDirs: string[]): Promise<Entr
     // Senses - cardinality n, deduplicated across layers (merge identical
     // gloss+examples, combine source labels with '+').
     const senses: EntryDetail['senses'] = [];
-    mergeSenses(senses, extractSenses(tree, label));
+    mergeSenses(senses, extractSenses(tree));
 
-    // Forms - cardinality n. gram_features are raw concept uuids → closure.
+    // Forms - cardinality n. gram_features arrive as resolved concept labels.
     const forms: EntryDetail['forms'] = [];
     for (const f of asArray(tree.forms)) {
       const writtenRep = localStr(f?.written_rep);
       const tags: string[] = [];
       for (const feat of asArray(f?.gram_features)) {
-        const tag = label(feat);
+        const tag = refStr(feat);
         if (tag && tag !== '(pending)' && tag !== '(unresolved)') tags.push(tag);
       }
       // Source code of the layer that supplied this form (e.g. 'gf' computed,
@@ -278,10 +250,10 @@ export async function loadEntryV2(uri: string, headDirs: string[]): Promise<Entr
     }
 
     // Gender (lexinfo:gender) is an inherent entry-level property - a concept
-    // reference resolved to its label via the closure, exactly like part_of_speech.
+    // reference arriving as a resolved label, exactly like part_of_speech.
     // Fall back to scanning BuNaMo form tiles for a masculine/feminine tag when the
     // entry node is empty (older heads predating the gender node).
-    let gender: string | undefined = label(tree.gender) || undefined;
+    let gender: string | undefined = refStr(tree.gender) || undefined;
     if (!gender) {
       for (const f of forms) {
         const g = f.tags.find((t) => t === 'masculine' || t === 'feminine');

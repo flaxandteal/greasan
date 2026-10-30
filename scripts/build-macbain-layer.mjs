@@ -25,7 +25,7 @@ import {
   setNapiModule,
 } from '../app/node_modules/alizarin/dist/alizarin.js';
 import * as pagefind from './lib/pagefind-fork.mjs';
-import { emitConceptsIntoPrebuild, conceptResourceId } from './lib/concept-emit.mjs';
+import { emitConceptsIntoPrebuild, conceptResourceId, normalizeHead } from './lib/concept-emit.mjs';
 import { readFileSync, writeFileSync, mkdirSync, existsSync } from 'fs';
 import { execSync } from 'child_process';
 import { fileURLToPath } from 'url';
@@ -77,12 +77,8 @@ function slugify(text) {
 // a macron (length PRESERVED, not stripped), matching docs/goidelic-slug-identity.md
 // §3 / the pipeline's normalize_head - so macbain cognate/headword matches align with
 // the goi slug identity (fear ≠ fēar; mór = mòr = mōr). Distinct from stripDiacritics,
-// which stays for accent-insensitive SEARCH recall.
-const _MACRON = { 'à': 'ā', 'á': 'ā', 'è': 'ē', 'é': 'ē', 'ì': 'ī', 'í': 'ī', 'ò': 'ō', 'ó': 'ō', 'ù': 'ū', 'ú': 'ū' };
-function normalizeHead(text) {
-  const s = text.normalize('NFC').toLowerCase();
-  return Array.from(s, (ch) => _MACRON[ch] || ch).join('');
-}
+// which stays for accent-insensitive SEARCH recall. `normalizeHead` is imported from
+// the shared slug-identity module (via concept-emit) - one copy, golden-tested.
 
 function decodeEntities(html) {
   return html
