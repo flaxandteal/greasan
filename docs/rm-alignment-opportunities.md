@@ -10,7 +10,8 @@ Each opportunity is tagged: **[value]** user-visible, **[reduce]** deletes custo
 
 ## Tier 1 — clear wins, low effort, high confidence
 
-### 1.1 Emit POS/dialect as `render_fields` → delete the facet re-hydrate  **[reduce][value]**
+### 1.1 Emit POS/dialect as `render_fields` → delete the facet re-hydrate  **[reduce][value]** — ⛔ BLOCKED UPSTREAM (2026-10-30)
+> **Verified not doable app-side.** `render_fields` (and the whole grid row `render_summaries` reads) is written ONLY inside the `geo_bbox` branch of `emit_parquet` — a non-geo dictionary entry gets no grid row, so `render_summaries` returns an empty map (`0/5`, confirmed via `examples/hydrate-probe.rs` on rebuilt heads). See `HANDOFF-rosmadair-nonspatial-render-row.md`. `v2_concept_values` stays as the working fallback until RM emits a non-geo render row.
 `render_summaries` returns a 4-tuple `(descriptor, geo_descriptor, render_summary, render_fields)` since alpha.32 (`ros-madair-duck/src/lib.rs:589-623`). `render_fields` is a `{alias: display_value}` JSON of domain-declared promoted node values, emitted via `ClusterConfig.render_fields` / `ROS_MADAIR_RENDER_FIELDS` (`ros-madair-emit/src/parquet.rs:1436`).
 
 Today the FTS sidecar carries no POS/dialect, so `dictionary.ts:507-537` fires a per-query `conceptValues(ftsDirs, uris, ['part_of_speech','dialect'])` to re-attach facets, backed by `v2_concept_values` (`v2.rs:867-942`) — a hand-built SQL string that globs `concepts_*.parquet` and interpolates URI/node-id IN-lists directly into SQL (injection-adjacent, `v2.rs:909-914`).
@@ -27,7 +28,8 @@ Confirmed: **nothing** in `app/src-tauri/src` sets the emit memory limit (grep f
 
 The lever shipped in alpha.24: `ROS_MADAIR_EMIT_MEMORY_LIMIT` (any DuckDB size literal, e.g. `6GB`), consumed at `parquet.rs:1074-1090`; `ROS_MADAIR_EMIT_THREADS` caps sort threads. Set it (device-RAM-aware) before the `emit_parquet_with_progress` call. Also consider `--no-render-cache` / `ROS_MADAIR_EMIT_RENDER_CACHE=0` (tile `data` is ~49% larger with it on) and `partition_by_nodegroup` for the big model. This is the single blocker on Téarma being usable on-device, and it's a one-line env set.
 
-### 1.3 Populate FTS `gloss` on the catalogue-install path → English search actually works  **[value][quality]**
+### 1.3 Populate FTS `gloss` on the catalogue-install path → English search actually works  **[value][quality]** — ⛔ BLOCKED UPSTREAM (2026-10-30)
+> Same root cause as 1.1: the tile `stage` row promotes only `descriptor_name`, not `descriptor_description`, so there's no gloss column for `build_for_head` to read. Needs RM to promote `descriptors.description` to the tile row (see the handoff). The install path keeps feeding an empty gloss until then — headword search works, English/gloss search doesn't.
 `fts.rs:22-27` declares `fts5(uri UNINDEXED, headword, gloss, …)`, but `build_for_head:153` calls `fts.add(&rid, &name, "")` — **empty gloss** — because the install path promotes `descriptor_name` but not `description` (`fts.rs:124-125`). Net effect: **English/Gluais search silently returns nothing for catalogue-installed (non-TBX) layers.** That's a user-visible bug hiding as a "half-built facet." Promote `description` onto the install head (or feed gloss from `render_fields` per 1.1) so the second search index isn't dead.
 
 ### 1.4 Group homographs with one `Backlink` query → no content-shift, faster open  **[reduce][value]**
