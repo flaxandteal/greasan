@@ -55,6 +55,37 @@ fn main() {
     let ids = duck.resolve_ids(&q, &graph, &hreg).expect("ids");
     println!("[probe] {} ids from {dir}", ids.len());
 
+    // alpha.33: render_summaries reads the entry table (ungated by geo), so a
+    // non-spatial dictionary resource carries render_fields too. 4th tuple element.
+    let probe_ids: Vec<String> = ids.iter().take(5).cloned().collect();
+    match duck.render_summaries(&probe_ids) {
+        Ok(sm) => {
+            println!("[render_summaries] map has {} / {} ids", sm.len(), probe_ids.len());
+            for id in &probe_ids {
+                match sm.get(id) {
+                    Some(t) => println!(
+                        "    {id}: descriptor={:?} geo={:?} render_fields={:?}",
+                        t.0.as_deref(), t.1.as_deref(), t.3.as_deref()
+                    ),
+                    None => println!("    {id}: <no entry row>"),
+                }
+            }
+        }
+        Err(e) => println!("[render_summaries] err: {e}"),
+    }
+    // alpha.33 resource_entries 4-tuple: (graph_id, legacyid, descriptor, descriptor_description).
+    // descriptor_description is the gloss (<Gloss> template) - the 1.3 FTS source.
+    match duck.resource_entries(&probe_ids) {
+        Ok(re) => {
+            println!("[resource_entries] descriptor_description (gloss):");
+            for id in &probe_ids {
+                let gloss = re.get(id).and_then(|t| t.3.as_deref()).unwrap_or("<none>");
+                println!("    {id}: {gloss:?}");
+            }
+        }
+        Err(e) => println!("[resource_entries] err: {e}"),
+    }
+
     let langs = ["ga", "gd", "en"];
     for id in ids.iter().take(8) {
         let tree = match ros_madair_duck::hydrate_layers(&[Path::new(&dir)], id, &layered, &langs, None, &registry) {

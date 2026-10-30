@@ -4065,9 +4065,9 @@ dependencies = [
 
 [[package]]
 name = "ros-madair-compile"
-version = "0.1.0-alpha.32"
+version = "0.1.0-alpha.33"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7e4909ddaf0302d16b70d2e3982588a653e980b71dabce8029916b80608cc912"
+checksum = "466c7cdd6d3f6df86e898d201f5f96434d8bc21d5ca0a230cbf034bc9f4a41fb"
 dependencies = [
  "alizarin-core",
  "getrandom 0.2.17",
@@ -4078,9 +4078,9 @@ dependencies = [
 
 [[package]]
 name = "ros-madair-duck"
-version = "0.1.0-alpha.32"
+version = "0.1.0-alpha.33"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "637675c7849bffe7af50f9e772c63b8eb8f688ed71421aa598b3292b212aff0f"
+checksum = "9963ca9469692cb769e0092fb7c982caea7359323209b2d262c43a5851b5f74f"
 dependencies = [
  "alizarin-core",
  "duckdb",
@@ -4093,9 +4093,9 @@ dependencies = [
 
 [[package]]
 name = "ros-madair-emit"
-version = "0.1.0-alpha.32"
+version = "0.1.0-alpha.33"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3c782664f7a1adbad5e0a087ea5a36fb39b3a19d8e9471cd69db28418c9fbc2f"
+checksum = "b1bf74cfcc0e62bf799d6322321aa83cca0db3dbbdaf09bcd012b42278cc4a23"
 dependencies = [
  "alizarin-core",
  "arrow",
@@ -4114,9 +4114,9 @@ dependencies = [
 
 [[package]]
 name = "ros-madair-format"
-version = "0.1.0-alpha.32"
+version = "0.1.0-alpha.33"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "45e68b2a87ac172f43d24b8722235521129d4394a1282c0f4c75cf7b17fb5421"
+checksum = "9b8a775c9010b225077e3a799e2859507caaf53016af9dd423487c9a15d857b0"
 dependencies = [
  "base64 0.22.1",
  "bs58",
@@ -4130,9 +4130,9 @@ dependencies = [
 
 [[package]]
 name = "ros-madair-handlers"
-version = "0.1.0-alpha.32"
+version = "0.1.0-alpha.33"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "efcd25f54e7bf345f8004842e1436540e40cd386f0b315bffa33eeb536e4a288"
+checksum = "a9cf2d46bc91a5f29af29897e7de1abdac4b97b47bea6673af7baea75ff296f2"
 dependencies = [
  "alizarin-clm-core",
  "alizarin-core",
@@ -4143,9 +4143,9 @@ dependencies = [
 
 [[package]]
 name = "ros-madair-query"
-version = "0.1.0-alpha.32"
+version = "0.1.0-alpha.33"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d63d5c770484bda9a2e2b32d0e8b98bd9a36e5dd9ec30d8186f4dfccbfa2bb11"
+checksum = "f0124cef7c82b31b4d04c3ec11a6fba61e876405242dacdc3de8499642e3214f"
 dependencies = [
  "alizarin-core",
  "getrandom 0.2.17",

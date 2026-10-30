@@ -2,6 +2,32 @@
 
 _Raised 2026-10-30 from Gréasán, while trying to land opportunities 1.1 + 1.3 of `docs/rm-alignment-opportunities.md`. Verified cold against alpha.32 (`crates/ros-madair-emit/src/parquet.rs`) + the real wiktionary/macbain heads via `app/src-tauri/examples/hydrate-probe.rs`._
 
+---
+
+## ✅ RESOLVED in alpha.33 — with one follow-up (a34)
+
+alpha.33 (`0.1.0-alpha.33`, FORMAT_VERSION 5→6) implemented the ask: the render row
+(`descriptor`/`geo_descriptor`/`render_summary`/`render_fields`) now rides the
+`resources` entry table per-resource, ungated by geo, and `descriptor_description`
+(gloss) is promoted there too. Re-verified on rebuilt v6 heads:
+- `render_summaries` returns **5/5** for a non-geo dictionary head (was 0/5); 1.1's row now exists. ✓
+- `resource_entries` 4th tuple carries the gloss **text** ("great-grandfather", "how are you?"); **1.3 is landed** (FTS `build_for_head` now reads it). ✓
+
+**Remaining a34 ask — resolve `render_fields` concept values to their LABEL at emit.**
+`render_fields` currently bakes the raw concept **value-id**, not the label:
+```
+render_fields = {"dialect":"a0805fe2-…uuid…","part_of_speech":"0caceaea-…uuid…"}
+```
+`descriptor` (same row) IS a label ("garathair") because it goes through the
+descriptor template; `build_render_fields` instead reads the raw tile value through
+`render_display_value`, and these tiles store a bare value-id (no inline `{labels}`
+wrapper), so the UUID passes through. The emit already has `concept_catalog`
+(`concept_labels()` resolves exactly these at hydrate), so `build_render_fields`
+could resolve too. Until it does, a consumer still needs a UUID→label pass for
+DISPLAY, so Gréasán keeps `v2_concept_values` for the facet labels and does NOT yet
+read `render_fields`. One line of resolution at emit makes 1.1 a clean win (drop the
+per-query facet SQL entirely). Repro: `hydrate-probe` on any v6 lexical head.
+
 ## The ask in one line
 
 Emit a **per-resource render row for NON-geo resources too** — carrying `descriptor`, `render_summary`, and the domain `render_fields` with a null `geo_descriptor` — so `render_summaries()` (and thus a hydrate-free list/facet read) works for a corpus that has no geometry. Today all of that is gated behind the resource having a `geo_bbox`.

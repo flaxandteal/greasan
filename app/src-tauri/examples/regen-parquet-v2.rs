@@ -29,8 +29,17 @@ fn main() {
     std::fs::create_dir_all(&out_dir).expect("create out dir");
 
     let registry = default_registry();
-    // Empty map: every graph gets ClusterConfig::default() (see emit_parquet).
-    let cfg_by_graph: HashMap<String, ClusterConfig> = HashMap::new();
+    // Promote POS + dialect onto the entry render row as render_fields for the
+    // lexical_entry graph (alpha.33 carries this non-spatially), so render_summaries
+    // returns them for a dictionary without a hydrate.
+    let mut cfg_by_graph: HashMap<String, ClusterConfig> = HashMap::new();
+    cfg_by_graph.insert(
+        "449c8695-253e-521b-8994-27701ce22305".to_string(),
+        ClusterConfig {
+            render_fields: vec!["part_of_speech".to_string(), "dialect".to_string()],
+            ..Default::default()
+        },
+    );
 
     let summaries = emit_parquet(
         data_dir.to_str().expect("utf-8 data dir"),

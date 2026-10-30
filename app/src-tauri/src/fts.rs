@@ -89,7 +89,7 @@ impl FtsBuilder {
 /// indexed row count.
 pub fn build_for_head(head_dir: &Path) -> Result<usize, String> {
     use alizarin_core::graph::StaticGraph;
-    use std::collections::HashSet;
+    use std::collections::{HashMap, HashSet};
 
     // The PRIMARY (graph.json) model's nodegroups. A head may carry a second
     // model's tiles in the same dir - notably the baked `layer-<slug>` catalogue
@@ -119,10 +119,12 @@ pub fn build_for_head(head_dir: &Path) -> Result<usize, String> {
     // and complete. One scan over the app's own duckdb dep; first non-empty value
     // per resource wins.
     //
-    // Gloss is NOT promoted to a column, so the Gluais/English search over an
-    // installed layer awaits a follow-up (an emit-side `description` descriptor,
-    // which would also benefit bundled heads). The Ceannfhocail/headword path -
-    // the primary search, and the one a catalogue install needs most - works fully.
+    // Gloss comes from the entry (resources) table's `descriptor_description`
+    // column, which alpha.33 promotes from the model's `<Gloss>` descriptor (the
+    // sibling of descriptor_name, resolved at build with full enrichment). Read it
+    // below into a rid->gloss map so the Gluais/English search works on installed
+    // layers too. A pre-alpha.33 head has no such column -> empty map -> the
+    // headword (Ceannfhocail) path still works, just no gloss subtitle.
     let glob = head_dir.join("tiles_*.parquet");
     let conn = duckdb::Connection::open_in_memory().map_err(|e| format!("duckdb open: {e}"))?;
     // Elide unresolved descriptor templates: a build whose descriptor couldn't
@@ -140,6 +142,30 @@ pub fn build_for_head(head_dir: &Path) -> Result<usize, String> {
     let mut stmt = conn.prepare(&sql).map_err(|e| format!("duckdb prepare: {e}"))?;
     let mut rows = stmt.query([]).map_err(|e| format!("duckdb query: {e}"))?;
 
+    // rid -> gloss (descriptor_description) from the entry table. Best-effort: a
+    // head without a resources table / column just yields an empty map.
+    let gloss_by_rid: HashMap<String, String> = {
+        let rglob = head_dir.join("resources_*.parquet");
+        let sql = format!(
+            "SELECT resource_id, descriptor_description FROM read_parquet('{}') \
+             WHERE descriptor_description IS NOT NULL AND descriptor_description <> ''",
+            rglob.to_string_lossy().replace('\'', "''"),
+        );
+        let mut m = HashMap::new();
+        if let Ok(mut s) = conn.prepare(&sql) {
+            if let Ok(mut rs) = s.query([]) {
+                while let Ok(Some(r)) = rs.next() {
+                    if let (Ok(rid), Ok(g)) =
+                        (r.get::<_, String>(0), r.get::<_, String>(1))
+                    {
+                        m.insert(rid, g);
+                    }
+                }
+            }
+        }
+        m
+    };
+
     let mut fts = FtsBuilder::create(head_dir)?;
     let mut seen: HashSet<String> = HashSet::new();
     while let Some(row) = rows.next().map_err(|e| format!("duckdb row: {e}"))? {
@@ -150,7 +176,8 @@ pub fn build_for_head(head_dir: &Path) -> Result<usize, String> {
             continue;
         }
         if seen.insert(rid.clone()) {
-            fts.add(&rid, &name, "")?;
+            let gloss = gloss_by_rid.get(&rid).map(|s| s.as_str()).unwrap_or("");
+            fts.add(&rid, &name, gloss)?;
         }
     }
     fts.finish()
