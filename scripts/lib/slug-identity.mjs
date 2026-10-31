@@ -16,15 +16,18 @@
 
 // Irish acute + Scottish grave fold to a macron (dialect-neutral length marker);
 // length is preserved, never ASCII-stripped.
+/** @type {Record<string, string>} */
 const MACRON = { 'à': 'ā', 'á': 'ā', 'è': 'ē', 'é': 'ē', 'ì': 'ī', 'í': 'ī', 'ò': 'ō', 'ó': 'ō', 'ù': 'ū', 'ú': 'ū' };
 
-/** Concept-level headword identity: NFC + lowercase + macron fold. */
+/** Concept-level headword identity: NFC + lowercase + macron fold.
+ * @param {string} text @returns {string} */
 export function normalizeHead(text) {
   const s = (text || '').normalize('NFC').toLowerCase();
   return Array.from(s, (ch) => MACRON[ch] || ch).join('');
 }
 
-/** The concept ResourceID for a headword (POS-independent). */
+/** The concept ResourceID for a headword (POS-independent).
+ * @param {string} headword @returns {string} */
 export function conceptResourceId(headword) {
   return `goi-${normalizeHead(headword)}-concept`;
 }

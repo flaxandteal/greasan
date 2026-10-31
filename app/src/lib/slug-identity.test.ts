@@ -4,15 +4,8 @@
 // silently diverge. The ENTRY family is guarded by tests/test_slug_identity.py +
 // the Rust tbx_parser tests.
 import { describe, it, expect } from 'vitest';
-import { readFileSync } from 'node:fs';
-import { fileURLToPath } from 'node:url';
-import { dirname, resolve } from 'node:path';
+import golden from '../../../tests/fixtures/slug-golden.json';
 import { normalizeHead, conceptResourceId } from '../../../scripts/lib/slug-identity.mjs';
-
-const here = dirname(fileURLToPath(import.meta.url));
-const golden = JSON.parse(
-  readFileSync(resolve(here, '../../../tests/fixtures/slug-golden.json'), 'utf8'),
-);
 
 describe('goi concept slug identity (golden)', () => {
   it('normalizeHead matches golden', () => {

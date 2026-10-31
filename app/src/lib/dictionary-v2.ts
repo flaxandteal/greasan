@@ -20,7 +20,7 @@
  * This is the entry-detail path. Requires src-tauri built with `--features v2`
  * (the `v2_*` invokes reject otherwise).
  */
-import { hydrateLayers, citedBy, descriptors } from './v2';
+import { hydrateLayers, hydrateLayersBatch, citedBy, descriptors } from './v2';
 import type { EntryDetail } from './dictionary';
 
 /** The LexicalConcept model graph id (models/lexical_concept). A corpus head
@@ -205,7 +205,20 @@ export async function loadEntryV2(uri: string, headDirs: string[]): Promise<Entr
     const treeRaw = await hydrateLayers(headDirs, uri);
     const tree = treeRaw as Record<string, any> | null;
     if (!tree || typeof tree !== 'object' || !tree.resourceinstanceid) return null;
+    return flattenEntryTree(tree, uri);
+  } catch (err) {
+    console.warn('[dictionary-v2] loadEntryV2 failed:', err);
+    return null;
+  }
+}
 
+/**
+ * Flatten an already-hydrated v2 JSON tree into an `EntryDetail`. Split out of
+ * loadEntryV2 (which is just hydrate + this) so a set of sibling homographs can be
+ * flattened from ONE `hydrateLayersBatch` call instead of N `loadEntryV2`
+ * round-trips (the concept fold in enrichEntryV2).
+ */
+function flattenEntryTree(tree: Record<string, any>, uri: string): EntryDetail {
     const headword = localStr(tree.headword);
     const pos = refStr(tree.part_of_speech);
     const dialect = refStr(tree.dialect);
@@ -290,10 +303,6 @@ export async function loadEntryV2(uri: string, headDirs: string[]): Promise<Entr
       externalExamples: [],
       placenames: undefined,
     };
-  } catch (err) {
-    console.warn('[dictionary-v2] loadEntryV2 failed:', err);
-    return null;
-  }
 }
 
 /**
@@ -335,10 +344,21 @@ export async function enrichEntryV2(
               .filter(Boolean),
           ),
         ].filter((id) => id !== uri);
-        const loaded = await Promise.all(
-          sibIds.map((id) => loadEntryV2(id, headDirs).catch(() => null)),
-        );
-        siblings = loaded.filter((e): e is EntryDetail => !!e);
+        // One batched hydrate for all homographs, then flatten each - the backlink
+        // (citedBy) already found the concept; this replaces N per-sibling
+        // loadEntryV2 round-trips with a single hydrateLayersBatch, shrinking the
+        // enrichment window (and the first-render -> grouped-card reflow with it).
+        if (sibIds.length) {
+          const trees = await hydrateLayersBatch(headDirs, sibIds);
+          siblings = sibIds
+            .map((id) => {
+              const t = trees[id] as Record<string, any> | null;
+              return t && typeof t === 'object' && t.resourceinstanceid
+                ? flattenEntryTree(t, id)
+                : null;
+            })
+            .filter((e): e is EntryDetail => !!e);
+        }
       }
     }
   } catch (err) {
