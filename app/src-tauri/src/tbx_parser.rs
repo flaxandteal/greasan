@@ -670,6 +670,13 @@ pub fn enrich_records(records: &mut [TbxRecord]) {
         if rec.pos != "noun" && rec.pos != "verb" {
             continue;
         }
+        // Don't infer a class for a multi-word term (phrasal verb, multi-word noun
+        // phrase): gramadan would treat the whole phrase as one lemma. Leaving it
+        // classless means no fabricated paradigm downstream (the frontend declines
+        // only attested-class single words).
+        if rec.word.split_whitespace().count() > 1 {
+            continue;
+        }
         // Gender rides the first form's gram_features (see `extract_gender`).
         let gender = rec
             .forms
@@ -799,5 +806,36 @@ mod slug_identity_tests {
         // Not in the golden (it is a Rust-only guarantee): an unmapped/empty POS
         // stays empty rather than defaulting to "noun" - matching Wiktionary.
         assert_eq!(slugify("fear", "", "ga"), "goi-fear-");
+    }
+}
+
+#[cfg(test)]
+mod enrich_tests {
+    use super::*;
+
+    fn rec(word: &str, pos: &str) -> TbxRecord {
+        TbxRecord {
+            word: word.into(),
+            pos: pos.into(),
+            grammar_class: String::new(),
+            grammar_class_confidence: String::new(),
+            dialect: String::new(),
+            senses: vec![],
+            forms: vec![],
+            categories: vec![],
+        }
+    }
+
+    #[test]
+    fn enrich_skips_multiword_terms() {
+        // A phrasal verb and a multi-word noun must NOT get a guessed class: gramadan
+        // would treat the whole phrase as one lemma and fabricate a paradigm.
+        let mut recs = vec![
+            rec("tabhair i ngníomh", "verb"),
+            rec("córas bainistíochta", "noun"),
+        ];
+        enrich_records(&mut recs);
+        assert!(recs[0].grammar_class.is_empty(), "phrasal verb must stay classless");
+        assert!(recs[1].grammar_class.is_empty(), "multi-word noun must stay classless");
     }
 }

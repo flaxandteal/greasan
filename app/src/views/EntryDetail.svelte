@@ -45,7 +45,25 @@
     generated = null;
     showDependent = false;
     const kind = e ? posKind(e.pos) : 'other';
-    if (e && (kind === 'noun' || kind === 'verb' || kind === 'adjective') && (e.grammarClass ?? '') !== '') {
+    // Don't inflect multi-word terms: gramadán would conjugate/decline the whole
+    // string as one lemma (phrasal verbs like "tabhair i ngníomh", multi-word noun
+    // phrases). A single lemma is one token. (~53% of Téarma verbs, ~70% of common
+    // nouns are multi-word.)
+    const multiWord = /\s/.test((e?.headword ?? '').trim());
+    // Nouns: decline ONLY when Téarma stated the declension class (attested). A
+    // GUESSED class on a classless noun is usually a foreign/scientific term that
+    // shouldn't be declined (e.g. "Glossopteris"); Téarma's own class-assignment is
+    // the trustworthy signal (no BuNaMo lookup needed). Verbs are exempt - Téarma
+    // states no verb class, so all verb classes are inferred, and gramadán's
+    // conjugation guesser is reliable for single-word verbs.
+    const nounOk = kind !== 'noun' || e?.grammarClassConfidence === 'attested';
+    if (
+      e &&
+      !multiWord &&
+      nounOk &&
+      (kind === 'noun' || kind === 'verb' || kind === 'adjective') &&
+      (e.grammarClass ?? '') !== ''
+    ) {
       const key = e.uri;
       generateForms(e.headword, kind, e.gender ?? '', e.grammarClass ?? '').then((g) => {
         if (entry?.uri === key && g.supported && g.forms.length) generated = g.forms;
