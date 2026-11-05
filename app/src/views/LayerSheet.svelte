@@ -9,7 +9,7 @@
   // borrow anything spatial - opacity and blending mean nothing when layers
   // merge into one entry rather than tiling a plane, and the app's genuinely
   // geographic axis is dialect, not source.
-  import { layerStack, toggleLayerVisibility, layerSheetOpen, currentEntry, activeTab, currentLayer, layerCatalogue } from '../lib/store';
+  import { layerStack, toggleLayerVisibility, layerSheetOpen, currentEntry, activeTab, openLayerDetail, layerCatalogue } from '../lib/store';
   import { layerCoverage } from '../lib/dictionary';
   import { loadLayerBySlug } from '../lib/layers-catalogue';
   import { t } from '../lib/i18n';
@@ -29,7 +29,7 @@
   /** Tap a layer's label → its full description page (from the catalogue). */
   async function openDetail(name: string) {
     const l = await loadLayerBySlug(name);
-    if (l) { layerSheetOpen.set(false); currentLayer.set(l); }
+    if (l) { layerSheetOpen.set(false); openLayerDetail(l); }
   }
 
   // Coverage-at-cursor: which layers actually carry the open entry. Null when

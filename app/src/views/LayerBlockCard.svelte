@@ -5,7 +5,7 @@
   // layer is browsed / installed (Settings), between the single-line toggle row
   // (LayerSheet) and the full description page (LayerDetail). Tapping it opens
   // the description page; an optional trailing action (e.g. remove) is separate.
-  import { currentLayer } from '../lib/store';
+  import { openLayerDetail } from '../lib/store';
   import type { LayerEntry } from '../lib/layers-catalogue';
   import type { LayerVerification } from '../lib/v2';
   import TrustShield from './TrustShield.svelte';
@@ -29,7 +29,7 @@
     removeLabel?: string;
   } = $props();
 
-  function openDetail() { currentLayer.set(layer); }
+  function openDetail() { openLayerDetail(layer); }
   function num(s: string): string { const n = Number(s); return Number.isFinite(n) && s ? n.toLocaleString() : ''; }
 </script>
 

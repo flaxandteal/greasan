@@ -15,7 +15,7 @@
 //   greasan://faq                open the FAQ overlay
 import { get } from 'svelte/store';
 import { listen } from '@tauri-apps/api/event';
-import { currentEntry, currentExample, currentLayer, overlayView, layerSheetOpen, openMap, loading, dismissLicenseToast } from './store';
+import { currentEntry, currentExample, openLayerDetail, overlayView, layerSheetOpen, openMap, loading, dismissLicenseToast } from './store';
 import { search, loadEntryFlagged, loadExample, placeHeadDir } from './dictionary';
 import { loadLayerBySlug } from './layers-catalogue';
 import { tourActive, endTour } from './tour';
@@ -57,7 +57,7 @@ async function openExample(id: string): Promise<void> {
 
 async function openLayer(slug: string): Promise<void> {
   loading.set(true);
-  try { const l = await loadLayerBySlug(slug); if (l) currentLayer.set(l); }
+  try { const l = await loadLayerBySlug(slug); if (l) openLayerDetail(l); }
   finally { loading.set(false); }
 }
 

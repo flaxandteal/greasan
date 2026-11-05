@@ -20,9 +20,23 @@
   import FlagsPage from './views/FlagsPage.svelte';
   import Tour from './views/Tour.svelte';
   import { maybeStartFirstRun, tourActive, endTour } from './lib/tour';
+  import { resolveMainView } from './lib/routing';
 
   let navigatingBack = false;
   let showLicenseInSettings = $state(false);
+
+  // Single source of truth for the top-level view (precedence lives in
+  // lib/routing.resolveMainView, so it is testable and can't silently diverge).
+  const mainView = $derived(
+    resolveMainView({
+      mapState: $mapState,
+      overlayView: $overlayView,
+      currentLayer: $currentLayer,
+      currentExample: $currentExample,
+      currentEntry: $currentEntry,
+      activeTab: $activeTab,
+    }),
+  );
 
   // First-run tour: fire once the app is usable (wasm up, bundled dictionary
   // unpacked) AND the launch toast flow (no-warranty disclaimer, then Open Data
@@ -104,27 +118,28 @@
 
 <App theme="ios" darkMode={$darkMode === 'dark'}>
   <div class="ge-app" data-mode={$darkMode} data-density={$density} data-list={$listStyle}>
-    {#if $mapState}
-      <MapView layer={$mapState.layer} filter={$mapState.filter} selected={$mapState.selected} />
-    {:else if $overlayView === 'faq'}
+    {#if mainView === 'map'}
+      <!-- mainView==='map' ⇒ $mapState non-null (resolveMainView) -->
+      <MapView layer={$mapState!.layer} filter={$mapState!.filter} selected={$mapState!.selected} />
+    {:else if mainView === 'faq'}
       <Faq />
-    {:else if $overlayView === 'flags'}
+    {:else if mainView === 'flags'}
       <FlagsPage />
-    {:else if $overlayView === 'layers'}
+    {:else if mainView === 'layers'}
       <LayerManager />
-    {:else if $currentLayer}
-      <LayerDetail layer={$currentLayer} />
-    {:else if $currentExample}
+    {:else if mainView === 'layerDetail'}
+      <LayerDetail layer={$currentLayer!} />
+    {:else if mainView === 'example'}
       <ExampleDetailView />
-    {:else if $currentEntry}
+    {:else if mainView === 'entry'}
       <EntryDetail />
-    {:else if $activeTab === 'search'}
+    {:else if mainView === 'search'}
       <div class="ge-page">
         <Search />
       </div>
-    {:else if $activeTab === 'starred'}
+    {:else if mainView === 'starred'}
       <Starred />
-    {:else if $activeTab === 'settings'}
+    {:else if mainView === 'settings'}
       <Settings showLicenseSection={showLicenseInSettings} />
     {/if}
 

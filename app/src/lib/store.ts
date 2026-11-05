@@ -62,6 +62,15 @@ export const wasmReady = readable(false, (set) => {
 export const activeTab = writable<'search' | 'starred' | 'settings'>('search');
 export const overlayView = writable<'faq' | 'flags' | 'layers' | null>(null);
 
+/** Open a layer's detail page. MUST clear overlayView: App.svelte resolves the
+ *  'layers' overlay (the Layer Manager list) BEFORE currentLayer, so merely
+ *  setting currentLayer from inside the manager leaves the list on screen and the
+ *  detail page never shows (see lib/routing.resolveMainView). */
+export function openLayerDetail(layer: import('./layers-catalogue').LayerEntry): void {
+  overlayView.set(null);
+  currentLayer.set(layer);
+}
+
 /** Name of the layer currently being installed/built, or null. Lets the Layer
  *  Manager attribute `buildProgress` to a specific card (the layer isn't in
  *  `layers` until the build completes). Set by importLayer/installPackage. */
