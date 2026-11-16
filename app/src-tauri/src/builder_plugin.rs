@@ -585,6 +585,7 @@ fn stream_tbx_v2_build(
                 &cfg_by_graph,
                 None, // no tier filter (alpha.31 default-deny tier) - emit the full head
                 None, // no owner-declared provenance manifest (alpha.32)
+                None, // no split-layers LayerPairing (alpha.34)
                 &mut on_progress,
             )
             .map_err(|e| format!("emit_parquet: {e}"))?;

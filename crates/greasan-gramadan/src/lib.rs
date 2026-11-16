@@ -13,7 +13,7 @@
 //!   concept ids + `form_dialect`). The concept ids come from a [`GramadanVocab`]
 //!   the app builds from the loaded vocabulary at registration.
 
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 use std::sync::Arc;
 
 use alizarin_core::{
@@ -230,7 +230,8 @@ impl DeriveProvider for GramadanForms {
 
         let mut out = Vec::new();
         for (i, form) in noun_forms(&lemma, gender, class).into_iter().enumerate() {
-            let mut data: HashMap<String, serde_json::Value> = HashMap::new();
+            // alizarin a143+ made StaticTile.data a BTreeMap (deterministic key order).
+            let mut data: BTreeMap<String, serde_json::Value> = BTreeMap::new();
             data.insert(wr_id.clone(), serde_json::json!({ "und": { "value": form.written_rep } }));
             // gram_features: the tags mapped to concept ids (skip tags with no
             // concept in the vocab rather than emit dangling ids).

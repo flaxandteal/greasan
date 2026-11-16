@@ -1276,6 +1276,7 @@ pub fn maybe_run_emit_measurement(app: tauri::AppHandle) {
             &cfg_by_graph,
             None, // no tier filter (alpha.31 default-deny tier) - emit the full head
             None, // no owner-declared provenance manifest (alpha.32)
+            None, // no split-layers LayerPairing (alpha.34)
             &mut on_progress,
         ) {
             Ok(s) => serde_json::to_string(&s)
