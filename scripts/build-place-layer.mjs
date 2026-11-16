@@ -597,12 +597,12 @@ const outDir = resolve(root, 'data/place-v2');
 // build-parquet-layers.mjs (regen-parquet-v2) from these prebuilds. Keep the call
 // as a best-effort legacy step but DO NOT let its absence abort the build - the
 // concept prebuild below must still be written.
-console.log('[build-place] Running regen-layer-v2 (cargo, v2-emit)...');
+console.log('[build-place] Running regen-parquet-v2 (cargo)...');
 const srcTauri = resolve(root, 'app/src-tauri');
 ensureResourceStubs();
 try {
   execFileSync('cargo', [
-    'run', '--release', '--example', 'regen-layer-v2', '--features', 'v2-emit',
+    'run', '--release', '--example', 'regen-parquet-v2',
     '--manifest-path', resolve(srcTauri, 'Cargo.toml'),
     '--', 'data/prebuild-place', 'data/place-v2', graphId,
   ], { stdio: 'inherit' });
@@ -625,11 +625,11 @@ writeFileSync(resolve(conceptPrebuildDir, 'manifest.json'), JSON.stringify({
   base_uri: namespace, source: 'logainm-glossary-concept', source_tag: 'LGC',
   built: new Date().toISOString(), license: 'CC-BY-4.0',
 }));
-console.log('[build-place] Running regen-layer-v2 for concepts -> data/concept-v2...');
+console.log('[build-place] Running regen-parquet-v2 for concepts -> data/concept-v2...');
 ensureResourceStubs(); // place emit above deleted data/place-v2/pagefind-ga.zip
 try {
   execFileSync('cargo', [
-    'run', '--release', '--example', 'regen-layer-v2', '--features', 'v2-emit',
+    'run', '--release', '--example', 'regen-parquet-v2',
     '--manifest-path', resolve(srcTauri, 'Cargo.toml'),
     '--', 'data/prebuild-concept', 'data/concept-v2', conceptGraphId,
   ], { stdio: 'inherit' });

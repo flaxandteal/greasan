@@ -243,10 +243,10 @@ console.log(`[gramadan-forms] Prebuild written to ${prebuildDir}`);
 
 // --- Run regen-layer-v2 (Rust emit) -> data/gramadan-forms-v2 ---
 const outDir = resolve(root, 'data/gramadan-forms-v2');
-console.log('[gramadan-forms] Running regen-layer-v2 (cargo, v2-emit)...');
+console.log('[gramadan-forms] Running regen-parquet-v2 (cargo)...');
 const srcTauri = resolve(root, 'app/src-tauri');
 execFileSync('cargo', [
-  'run', '--release', '--example', 'regen-layer-v2', '--features', 'v2-emit',
+  'run', '--release', '--example', 'regen-parquet-v2',
   '--manifest-path', resolve(srcTauri, 'Cargo.toml'),
   '--', 'data/prebuild-gramadan-forms', 'data/gramadan-forms-v2', GRAPH_ID,
 ], { stdio: 'inherit' });

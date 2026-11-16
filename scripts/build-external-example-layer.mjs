@@ -242,10 +242,10 @@ console.log(`[build-example] Prebuild written to ${prebuildDir}`);
 
 // --- Run regen-layer-v2 -> data/external_example-v2 ---
 const outDir = resolve(root, `data/example-${SOURCE}-v2`);
-console.log('[build-example] Running regen-layer-v2 (cargo, v2-emit)...');
+console.log('[build-example] Running regen-parquet-v2 (cargo)...');
 const srcTauri = resolve(root, 'app/src-tauri');
 execFileSync('cargo', [
-  'run', '--release', '--example', 'regen-layer-v2', '--features', 'v2-emit',
+  'run', '--release', '--example', 'regen-parquet-v2',
   '--manifest-path', resolve(srcTauri, 'Cargo.toml'),
   '--', `data/prebuild-example-${SOURCE}`, `data/example-${SOURCE}-v2`, graphId,
 ], { stdio: 'inherit' });

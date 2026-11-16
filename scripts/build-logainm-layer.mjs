@@ -481,10 +481,10 @@ console.log(`[build-logainm] Prebuild written to ${prebuildDir}`);
 
 // --- Run regen-layer-v2 (Rust emit) -> data/logainm-v2 ---
 const outDir = resolve(root, 'data/logainm-v2');
-console.log('[build-logainm] Running regen-layer-v2 (cargo, v2-emit)...');
+console.log('[build-logainm] Running regen-parquet-v2 (cargo)...');
 const srcTauri = resolve(root, 'app/src-tauri');
 execFileSync('cargo', [
-  'run', '--release', '--example', 'regen-layer-v2', '--features', 'v2-emit',
+  'run', '--release', '--example', 'regen-parquet-v2',
   '--manifest-path', resolve(srcTauri, 'Cargo.toml'),
   '--', 'data/prebuild-logainm', 'data/logainm-v2', GRAPH_ID,
 ], { stdio: 'inherit' });

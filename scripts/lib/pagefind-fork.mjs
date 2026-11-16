@@ -24,11 +24,14 @@ export async function createIndex(options) {
     index.writeFiles = async (args) => {
       const r = await origWriteFiles(args);
       const cat = await index.getIndexCatalogue();
-      if (!cat || !cat.entries) {
-        throw new Error(
-          'getIndexCatalogue returned no entries - is the flaxandteal fork binary in use? ' +
-            '(run `npm install` in app/ so scripts/install-pagefind.js fetches pagefind_extended)'
-        );
+      if (!cat || !cat.entries || cat.entries.length === 0) {
+        // Empty index - a legitimate case: some build scripts create a per-language
+        // index (e.g. ga/en) but add records only to one of them. Write an empty
+        // catalogue and carry on rather than failing the whole build. (A missing/
+        // wrong fork binary surfaces earlier as `getIndexCatalogue is not a function`,
+        // not as an empty result here.)
+        await writeFile(join(args.outputPath, 'catalogue.json'), '{}');
+        return r;
       }
       // Each entry is [pagefindHash, recordJson]; the resource id is record.url
       // (build scripts add records with `url: <resource uuid>`). Store the lean
