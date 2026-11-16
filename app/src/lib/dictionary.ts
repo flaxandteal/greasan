@@ -636,6 +636,21 @@ export async function search(
     }
     merged = [...bestByKey.values()];
 
+    // Suppress POS-less homograph shadows. A MacBain (etymology) lexical entry
+    // carries the headword with NO part-of-speech, so its slug (goi-<head>-) and
+    // uuid differ from Wiktionary's goi-<head>-noun/-verb and it keys distinctly
+    // in the (headword,pos) collapse above - surfacing as a bare duplicate row
+    // ("fear" above "fear noun"/"fear verb"). When a POS-bearing entry exists for
+    // the same headword, drop the POS-less one: its content composes onto the
+    // grouped entry via the shared LexicalConcept, so it adds no searchable value.
+    // A headword with ONLY a POS-less entry (MacBain-unique) is kept.
+    {
+      const headKey = (r: EntrySummary) => r.headword.normalize('NFC').toLowerCase();
+      const posHeads = new Set<string>();
+      for (const r of merged) if ((r.pos || '').trim()) posHeads.add(headKey(r));
+      merged = merged.filter((r) => (r.pos || '').trim() || !posHeads.has(headKey(r)));
+    }
+
     // Facet filters (drawer), applied BEFORE the 50-cap so hidden rows don't eat
     // slots. Phrase-hide is headword-search only (the user browses phrases via
     // Samplaí); POS applies to entry results (ga/en), never example sentences.
